@@ -63,7 +63,7 @@ export const envValidationSchema = z.object({
     "MS_GRAPH_SENDER_MAILBOX",
   ] as const;
   const hasAnyGraphConfig = graphKeys.some((key) => Boolean(config[key]));
-  if (!hasAnyGraphConfig && config.NODE_ENV !== "production") return;
+  if (!hasAnyGraphConfig) return;
 
   for (const key of graphKeys) {
     if (!config[key]) {
