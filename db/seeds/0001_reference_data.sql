@@ -48,16 +48,34 @@ set
   description = excluded.description,
   is_system_role = true;
 
-insert into catalog.reference_categories (code, name, is_system_category)
-values
-  ('pr_receiving_medium', 'PR Receiving Medium', true),
-  ('budget_type', 'Budget Type', true),
-  ('nature_of_work', 'Nature Of Work', true),
-  ('cpc_involved', 'CPC Involved', true)
-on conflict (code) do update
-set
-  name = excluded.name,
-  is_system_category = true;
+with seed_categories(code, name) as (
+  values
+    ('pr_receiving_medium', 'PR Receiving Medium'),
+    ('budget_type', 'Budget Type'),
+    ('nature_of_work', 'Nature Of Work'),
+    ('cpc_involved', 'CPC Involved')
+),
+updated_categories as (
+  update catalog.reference_categories rc
+  set
+    name = sc.name,
+    is_system_category = true,
+    is_active = true,
+    updated_at = now()
+  from seed_categories sc
+  where rc.tenant_id is null
+    and rc.deleted_at is null
+    and lower(rc.code::text) = lower(sc.code)
+  returning rc.code
+)
+insert into catalog.reference_categories (code, name, is_system_category, is_active)
+select sc.code, sc.name, true, true
+from seed_categories sc
+where not exists (
+  select 1
+  from updated_categories uc
+  where lower(uc.code::text) = lower(sc.code)
+);
 
 insert into iam.role_permissions (role_id, permission_code)
 select r.id, p.code
