@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+const emptyStringToUndefined = (value: unknown) => value === "" ? undefined : value;
+const optionalEnvString = z.preprocess(emptyStringToUndefined, z.string().optional());
+const optionalEnvEmail = z.preprocess(emptyStringToUndefined, z.string().email().optional());
+
 export const envValidationSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "staging", "production"])
@@ -24,13 +28,13 @@ export const envValidationSchema = z.object({
   BOOTSTRAP_TENANT_CODE: z.string().min(1),
   BOOTSTRAP_TENANT_ADMIN_EMAIL: z.string().email(),
   BOOTSTRAP_PLATFORM_ADMIN_EMAIL: z.string().email(),
-  MS_GRAPH_TENANT_ID: z.string().optional(),
-  MS_GRAPH_CLIENT_ID: z.string().optional(),
-  MS_GRAPH_CLIENT_SECRET: z.string().optional(),
-  MS_GRAPH_SENDER_MAILBOX: z.string().email().optional(),
+  MS_GRAPH_TENANT_ID: optionalEnvString,
+  MS_GRAPH_CLIENT_ID: optionalEnvString,
+  MS_GRAPH_CLIENT_SECRET: optionalEnvString,
+  MS_GRAPH_SENDER_MAILBOX: optionalEnvEmail,
   PRIVATE_STORAGE_DRIVER: z.enum(["local", "azure_blob"]).default("local"),
   PRIVATE_STORAGE_ROOT: z.string().default("/var/lib/procuredesk/private"),
-  AZURE_BLOB_CONNECTION_STRING: z.string().optional(),
+  AZURE_BLOB_CONNECTION_STRING: optionalEnvString,
   AZURE_BLOB_CONTAINER_NAME: z.string().default("procuredesk-private"),
   IMPORT_MAX_FILE_BYTES: z.coerce.number().int().positive().default(26214400),
   OUTBOX_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
