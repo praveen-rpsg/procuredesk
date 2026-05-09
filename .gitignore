@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+.turbo/
+.cache/
+.DS_Store
+.env
+.env.*
+!.env.example
+!config/env/.env.production.example
+!config/env/.env.staging.example
+coverage/
+*.log
+/uploads/
+/exports/

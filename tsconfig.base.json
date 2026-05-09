@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@procuredesk/contracts": ["packages/contracts/src/index.ts"],
+      "@procuredesk/domain-types": ["packages/domain-types/src/index.ts"],
+      "@procuredesk/ui": ["packages/ui/src/index.ts"],
+      "@procuredesk/config": ["packages/config/src/index.ts"]
+    }
+  }
+}
+

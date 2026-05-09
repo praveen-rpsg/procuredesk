@@ -1,0 +1,14 @@
+{
+  "name": "@procuredesk/eslint-config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "dependencies": {
+    "@typescript-eslint/parser": "^8.59.2"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.59.2",
+    "eslint-plugin-import": "^2.32.0"
+  }
+}

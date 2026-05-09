@@ -1,0 +1,68 @@
+name: Rollback Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_sha:
+        description: "API image SHA to roll back to (e.g. abc1234def5678...)"
+        required: true
+        type: string
+      web_sha:
+        description: "Web image SHA to roll back to"
+        required: true
+        type: string
+      worker_sha:
+        description: "Worker image SHA to roll back to"
+        required: true
+        type: string
+      reason:
+        description: "Brief reason for rollback (shown in deployment log)"
+        required: true
+        type: string
+
+jobs:
+  rollback:
+    name: Rollback Staging Deployment
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log rollback intent
+        run: |
+          echo "=== ROLLBACK INITIATED ==="
+          echo "Reason   : ${{ inputs.reason }}"
+          echo "API      : ghcr.io/${{ github.repository }}/procuredesk-api:${{ inputs.api_sha }}"
+          echo "Web      : ghcr.io/${{ github.repository }}/procuredesk-web:${{ inputs.web_sha }}"
+          echo "Worker   : ghcr.io/${{ github.repository }}/procuredesk-worker:${{ inputs.worker_sha }}"
+          echo "Triggered: ${{ github.actor }} @ $(date -u)"
+
+      - name: Deploy rollback images
+        env:
+          PROCUREDESK_API_IMAGE: ghcr.io/${{ github.repository }}/procuredesk-api:${{ inputs.api_sha }}
+          PROCUREDESK_WEB_IMAGE: ghcr.io/${{ github.repository }}/procuredesk-web:${{ inputs.web_sha }}
+          PROCUREDESK_WORKER_IMAGE: ghcr.io/${{ github.repository }}/procuredesk-worker:${{ inputs.worker_sha }}
+        run: |
+          # Replace this with your actual deployment target command, e.g.:
+          # docker compose -f infra/deploy/staging-compose.yml pull && \
+          # docker compose -f infra/deploy/staging-compose.yml up -d --force-recreate api web worker
+          echo "Deploy rollback images to staging environment"
+          echo "API    : $PROCUREDESK_API_IMAGE"
+          echo "Web    : $PROCUREDESK_WEB_IMAGE"
+          echo "Worker : $PROCUREDESK_WORKER_IMAGE"
+
+      - name: Verify health after rollback
+        run: |
+          # Poll /ready until healthy or timeout (90 s)
+          for i in $(seq 1 18); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://staging.procuredesk.example.com/api/v1/ready || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "Staging healthy after rollback (attempt $i)"
+              exit 0
+            fi
+            echo "Attempt $i: status=$STATUS — waiting 5s..."
+            sleep 5
+          done
+          echo "ERROR: Staging did not become healthy after 90s"
+          exit 1

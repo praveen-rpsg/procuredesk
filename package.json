@@ -1,0 +1,27 @@
+{
+  "name": "procuredesk-platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @procuredesk/api --filter @procuredesk/web --filter @procuredesk/worker dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "format": "prettier --write .",
+    "db:migrate": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f db/migrations/0001_foundation.sql",
+    "db:seed": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f db/seeds/0001_reference_data.sql",
+    "db:bootstrap:local": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f db/seeds/0002_local_bootstrap.sql && psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f db/seeds/0003_procurement_catalog_defaults.sql",
+    "db:seed:catalog": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f db/seeds/0003_procurement_catalog_defaults.sql",
+    "docker:up": "docker compose -p procuredesk-platform-local -f infra/docker/docker-compose.yml up -d",
+    "docker:down": "docker compose -p procuredesk-platform-local -f infra/docker/docker-compose.yml down"
+  },
+  "devDependencies": {
+    "@procuredesk/eslint-config": "workspace:*",
+    "@procuredesk/tsconfig": "workspace:*",
+    "@typescript-eslint/parser": "^8.59.2",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,645 @@
+import { Readable as ReadableStream, type Readable } from "node:stream";
+
+import { BadRequestException, ForbiddenException, Injectable, StreamableFile } from "@nestjs/common";
+import ExcelJS from "exceljs";
+
+import { PrivateFileStorageService } from "../../../common/storage/private-file-storage.service.js";
+import { DatabaseService } from "../../../database/database.service.js";
+import { AuditWriterService } from "../../audit/application/audit-writer.service.js";
+import type { AuthenticatedUser } from "../../identity-access/domain/authenticated-user.js";
+import { OutboxWriterService } from "../../outbox/application/outbox-writer.service.js";
+import { ImportExportRepository, type CreateFileAssetInput } from "../infrastructure/import-export.repository.js";
+import type { ImportType } from "../interfaces/http/import-export.schemas.js";
+
+@Injectable()
+export class ImportExportService {
+  constructor(
+    private readonly repository: ImportExportRepository,
+    private readonly audit: AuditWriterService,
+    private readonly db: DatabaseService,
+    private readonly outbox: OutboxWriterService,
+    private readonly storage: PrivateFileStorageService,
+  ) {}
+
+  async uploadImportFile(
+    actor: AuthenticatedUser,
+    input: {
+      contentType?: string | null;
+      importType: ImportType;
+      originalFilename?: string | null;
+      stream: Readable;
+    },
+  ) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "import.manage");
+    this.assertAllowedImportFile(input.importType, input.originalFilename, input.contentType);
+
+    const stored = await this.storage.writeImportFile({
+      filename: input.originalFilename ?? null,
+      stream: input.stream,
+      tenantId,
+    });
+    return this.db.transaction(async () => {
+      const result = await this.repository.createUploadedImportJob({
+        byteSize: stored.byteSize,
+        checksumSha256: stored.checksumSha256,
+        contentType: input.contentType ?? null,
+        createdBy: actor.id,
+        importType: input.importType,
+        originalFilename: input.originalFilename ?? null,
+        purpose: "import",
+        storageKey: stored.storageKey,
+        tenantId,
+      });
+      await this.outbox.write({
+        aggregateId: result.id,
+        aggregateType: "import_job",
+        eventType: "import_job.created",
+        payload: { actorUserId: actor.id, importType: input.importType },
+        tenantId,
+      });
+      await this.audit.write({
+        action: "import_job.upload",
+        actorUserId: actor.id,
+        details: {
+          byteSize: stored.byteSize,
+          contentType: input.contentType ?? null,
+          filename: input.originalFilename ?? null,
+          importType: input.importType,
+        },
+        summary: "Uploaded import file and created import job",
+        targetId: result.id,
+        targetType: "import_job",
+        tenantId,
+      });
+      return {
+        fileAssetId: result.fileAssetId,
+        id: result.id,
+      };
+    });
+  }
+
+  async createFileAsset(actor: AuthenticatedUser, input: Omit<CreateFileAssetInput, "createdBy" | "tenantId">) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "import.manage");
+    return this.db.transaction(async () => {
+      const result = await this.repository.createFileAsset({
+        ...input,
+        createdBy: actor.id,
+        tenantId,
+      });
+      await this.audit.write({
+        action: "file_asset.create",
+        actorUserId: actor.id,
+        summary: "Registered import file asset",
+        targetId: result.id,
+        targetType: "file_asset",
+        tenantId,
+      });
+      return result;
+    });
+  }
+
+  async createImportJob(actor: AuthenticatedUser, input: { fileAssetId: string; importType: string }) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "import.manage");
+    return this.db.transaction(async () => {
+      const result = await this.repository.createImportJob({
+        ...input,
+        createdBy: actor.id,
+        tenantId,
+      });
+      await this.outbox.write({
+        aggregateId: result.id,
+        aggregateType: "import_job",
+        eventType: "import_job.created",
+        payload: { actorUserId: actor.id, importType: input.importType },
+        tenantId,
+      });
+      await this.audit.write({
+        action: "import_job.create",
+        actorUserId: actor.id,
+        summary: "Created import job",
+        targetId: result.id,
+        targetType: "import_job",
+        tenantId,
+      });
+      return result;
+    });
+  }
+
+  listImportJobs(actor: AuthenticatedUser) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "import.manage");
+    return this.repository.listImportJobs(tenantId);
+  }
+
+  listImportRows(actor: AuthenticatedUser, importJobId: string) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "import.manage");
+    return this.repository.listImportRows(tenantId, importJobId);
+  }
+
+  async downloadTenderCasesTemplate(actor: AuthenticatedUser) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "import.manage");
+    const workbook = await this.buildTenderCasesTemplate(tenantId);
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+    return new StreamableFile(ReadableStream.from([buffer]), {
+      disposition: 'attachment; filename="procuredesk-tender-cases-template.xlsx"',
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+  }
+
+  async downloadPortalUserMappingTemplate(actor: AuthenticatedUser) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "import.manage");
+    return await this.templateFile(
+      await this.buildImportTemplate({
+        columns: portalUserTemplateColumns(),
+        filename: "procuredesk-portal-user-mapping-template.xlsx",
+        instructions: [
+          "Select Entity and Access Level Required from dropdowns.",
+          "Access Level Definition is derived from the role master lookup.",
+          "Mail ID must be a valid unique email address.",
+          "Contact No. should include country code where applicable.",
+        ],
+        metadataName: "ProcureDesk Entity - Portal User Mapping",
+        sheetName: "Portal User Mapping",
+        tenantId,
+      }),
+      "procuredesk-portal-user-mapping-template.xlsx",
+    );
+  }
+
+  async downloadUserDepartmentMappingTemplate(actor: AuthenticatedUser) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "import.manage");
+    return await this.templateFile(
+      await this.buildImportTemplate({
+        columns: userDepartmentTemplateColumns(),
+        filename: "procuredesk-user-department-mapping-template.xlsx",
+        instructions: [
+          "Select Entity from dropdown.",
+          "Fill one User Department per row.",
+          "Department names are checked case-insensitively within each entity.",
+        ],
+        metadataName: "ProcureDesk Entity - User Department Mapping",
+        sheetName: "User Department Mapping",
+        tenantId,
+      }),
+      "procuredesk-user-department-mapping-template.xlsx",
+    );
+  }
+
+  async downloadOldContractsTemplate(actor: AuthenticatedUser) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "import.manage");
+    return await this.templateFile(
+      await this.buildImportTemplate({
+        columns: oldContractTemplateColumns(),
+        filename: "procuredesk-old-contracts-template.xlsx",
+        instructions: [
+          "All contracts expiring on or after the configured migration date should be updated here.",
+          "All Dates shall be in DD-MM-YYYY format.",
+          "Awarded Vendors should be comma separated.",
+          "Values should be all-inclusive and in Rupees.",
+        ],
+        metadataName: "ProcureDesk Bulk Upload - Old Contract",
+        sheetName: "Old Contracts",
+        tenantId,
+      }),
+      "procuredesk-old-contracts-template.xlsx",
+    );
+  }
+
+  async downloadProblemRows(actor: AuthenticatedUser, importJobId: string) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "import.manage");
+    const rows = await this.repository.listProblemRows(tenantId, importJobId);
+    const csv = this.problemRowsCsv(rows);
+    return new StreamableFile(ReadableStream.from([csv]), {
+      disposition: `attachment; filename="import-${importJobId}-problem-rows.csv"`,
+      type: "text/csv; charset=utf-8",
+    });
+  }
+
+  async dryRun(
+    actor: AuthenticatedUser,
+    input: {
+      importJobId: string;
+      rows: Array<{
+        normalizedPayload?: Record<string, unknown> | null;
+        sourcePayload: Record<string, unknown>;
+        status?: "accepted" | "rejected" | "staged";
+      }>;
+    },
+  ) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "import.manage");
+    await this.db.transaction(async () => {
+      await this.repository.stageDryRunRows({
+        importJobId: input.importJobId,
+        rows: input.rows.map((row) => ({
+          errors: row.status === "rejected" ? ["Row rejected during dry run."] : [],
+          normalizedPayload: row.normalizedPayload ?? row.sourcePayload,
+          sourcePayload: row.sourcePayload,
+          status: row.status ?? "staged",
+        })),
+        tenantId,
+      });
+      await this.audit.write({
+        action: "import_job.dry_run",
+        actorUserId: actor.id,
+        details: { rowCount: input.rows.length },
+        summary: "Staged import dry-run rows",
+        targetId: input.importJobId,
+        targetType: "import_job",
+        tenantId,
+      });
+    });
+    return { stagedRows: input.rows.length };
+  }
+
+  async commit(actor: AuthenticatedUser, importJobId: string) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "import.manage");
+    await this.db.transaction(async () => {
+      const committed = await this.repository.commitImportJob({
+        committedBy: actor.id,
+        importJobId,
+        tenantId,
+      });
+      if (!committed) {
+        throw new BadRequestException(
+          "Import job must be parsed with zero rejected or staged unknown rows before commit.",
+        );
+      }
+      await this.audit.write({
+        action: "import_job.commit",
+        actorUserId: actor.id,
+        summary: "Committed import job",
+        targetId: importJobId,
+        targetType: "import_job",
+        tenantId,
+      });
+    });
+    return { committed: true };
+  }
+
+  private requirePermission(actor: AuthenticatedUser, permission: string) {
+    if (!actor.isPlatformSuperAdmin && !actor.permissions.includes(permission)) {
+      throw new ForbiddenException("Missing required permission.");
+    }
+  }
+
+  private requireTenant(actor: AuthenticatedUser): string {
+    if (!actor.tenantId) {
+      throw new BadRequestException("Tenant context is required.");
+    }
+    return actor.tenantId;
+  }
+
+  private assertAllowedImportFile(
+    importType: ImportType,
+    filename?: string | null,
+    contentType?: string | null,
+  ): void {
+    const extension = filename?.toLowerCase().split(".").pop() ?? "";
+    const normalizedContentType = contentType?.toLowerCase() ?? "";
+    const spreadsheetExtensions = new Set(["csv", "xlsx"]);
+    const spreadsheetContentTypes = new Set([
+      "application/octet-stream",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "text/csv",
+    ]);
+
+    if (
+      spreadsheetExtensions.has(extension) ||
+      spreadsheetContentTypes.has(normalizedContentType)
+    ) {
+      return;
+    }
+
+    throw new BadRequestException("Spreadsheet imports must use a CSV or XLSX file.");
+  }
+
+  private problemRowsCsv(
+    rows: Array<{
+      errors: unknown[];
+      normalizedPayload: Record<string, unknown> | null;
+      rowNumber: number;
+      sourcePayload: Record<string, unknown>;
+      status: string;
+    }>,
+  ): string {
+    const header = ["row_number", "status", "errors", "normalized_payload", "source_payload"];
+    const lines = [
+      header.join(","),
+      ...rows.map((row) =>
+        [
+          row.rowNumber,
+          row.status,
+          JSON.stringify(row.errors),
+          JSON.stringify(row.normalizedPayload ?? {}),
+          JSON.stringify(row.sourcePayload),
+        ]
+          .map((value) => this.csvCell(value))
+          .join(","),
+      ),
+    ];
+    return `${lines.join("\n")}\n`;
+  }
+
+  private csvCell(value: unknown): string {
+    const text = String(value ?? "");
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+
+  private async templateFile(workbook: ExcelJS.Workbook, filename: string): Promise<StreamableFile> {
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+    return new StreamableFile(ReadableStream.from([buffer]), {
+      disposition: `attachment; filename="${filename}"`,
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+  }
+
+  private async buildTenderCasesTemplate(tenantId: string): Promise<ExcelJS.Workbook> {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "ProcureDesk";
+    workbook.created = new Date();
+    const template = workbook.addWorksheet("Tender Import", {
+      views: [{ state: "frozen", xSplit: 0, ySplit: 8 }],
+    });
+    const lookups = workbook.addWorksheet("Master Lookups");
+    const metadata = workbook.addWorksheet("_metadata");
+    metadata.state = "veryHidden";
+
+    const columns = tenderTemplateColumns();
+    template.getCell("A1").value = "Instructions to fill the table:";
+    template.getCell("A1").font = { bold: true, color: { argb: "FFFF0000" }, italic: true };
+    [
+      "All applicable fields need to be filled based on the current status of tender.",
+      "All Dates shall be in DD-MM-YYYY format.",
+      "Chronology of dates need to be checked as per tender milestones.",
+      "Values should be all-inclusive and in Rupees.",
+      "Use dropdown values from the generated Master Lookups sheet.",
+    ].forEach((line, index) => {
+      const cell = template.getCell(index + 2, 1);
+      cell.value = line;
+      cell.font = { color: { argb: "FFFF0000" } };
+    });
+
+    template.getRow(7).values = columns.map((column) => column.type);
+    template.getRow(8).values = columns.map((column) => column.label);
+    template.getRow(7).font = { bold: true, color: { argb: "FFFFB26B" } };
+    template.getRow(8).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    template.getRow(8).fill = { fgColor: { argb: "FF0070C0" }, pattern: "solid", type: "pattern" };
+    template.getRow(8).alignment = { vertical: "middle", wrapText: true };
+    template.autoFilter = { from: "A8", to: `${template.getColumn(columns.length).letter}8` };
+
+    columns.forEach((column, index) => {
+      const worksheetColumn = template.getColumn(index + 1);
+      worksheetColumn.width = column.width;
+      if (column.type === "DD-MM-YYYY") worksheetColumn.numFmt = "dd-mm-yyyy";
+    });
+
+    const lookupData = await this.loadTemplateLookups(tenantId);
+    this.populateLookupSheet(lookups, lookupData);
+    this.populateMetadataSheet(metadata, columns);
+    this.applyTemplateValidations(template, columns, lookupData);
+    return workbook;
+  }
+
+  private async buildImportTemplate(input: {
+    columns: TenderTemplateColumn[];
+    filename: string;
+    instructions: string[];
+    metadataName: string;
+    sheetName: string;
+    tenantId: string;
+  }): Promise<ExcelJS.Workbook> {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "ProcureDesk";
+    workbook.created = new Date();
+    const template = workbook.addWorksheet(input.sheetName, {
+      views: [{ state: "frozen", xSplit: 0, ySplit: 3 }],
+    });
+    const lookups = workbook.addWorksheet("Master Lookups");
+    const metadata = workbook.addWorksheet("_metadata");
+    metadata.state = "veryHidden";
+
+    template.getCell("A1").value = "Instructions to fill the table:";
+    template.getCell("A1").font = { bold: true, color: { argb: "FFFF0000" }, italic: true };
+    input.instructions.forEach((line, index) => {
+      const cell = template.getCell(index + 2, 1);
+      cell.value = line;
+      cell.font = { color: { argb: "FFFF0000" } };
+    });
+
+    const headerRow = Math.max(4, input.instructions.length + 3);
+    template.getRow(headerRow - 1).values = input.columns.map((column) => column.type);
+    template.getRow(headerRow).values = input.columns.map((column) => column.label);
+    template.getRow(headerRow - 1).font = { bold: true, color: { argb: "FFFFB26B" } };
+    template.getRow(headerRow).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    template.getRow(headerRow).fill = { fgColor: { argb: "FF0070C0" }, pattern: "solid", type: "pattern" };
+    template.getRow(headerRow).alignment = { vertical: "middle", wrapText: true };
+    template.views = [{ state: "frozen", xSplit: 0, ySplit: headerRow }];
+    template.autoFilter = { from: `A${headerRow}`, to: `${template.getColumn(input.columns.length).letter}${headerRow}` };
+
+    input.columns.forEach((column, index) => {
+      const worksheetColumn = template.getColumn(index + 1);
+      worksheetColumn.width = column.width;
+      if (column.type === "DD-MM-YYYY") worksheetColumn.numFmt = "dd-mm-yyyy";
+    });
+
+    const lookupData = await this.loadTemplateLookups(input.tenantId);
+    this.populateLookupSheet(lookups, lookupData);
+    this.populateMetadataSheet(metadata, input.columns, input.metadataName, headerRow);
+    this.applyTemplateValidations(template, input.columns, lookupData, headerRow + 1);
+    return workbook;
+  }
+
+  private async loadTemplateLookups(tenantId: string): Promise<Record<string, string[]>> {
+    const [entities, departments, users, roles, references, tenderTypes] = await Promise.all([
+      this.db.query<{ code: string }>(
+        "select code::text from org.entities where tenant_id = $1 and deleted_at is null and is_active = true order by code",
+        [tenantId],
+      ),
+      this.db.query<{ key: string }>(
+        `
+          select distinct d.name as key
+          from org.departments d
+          join org.entities e on e.id = d.entity_id
+          where d.tenant_id = $1 and d.deleted_at is null and d.is_active = true
+            and e.deleted_at is null and e.is_active = true
+          order by d.name
+        `,
+        [tenantId],
+      ),
+      this.db.query<{ key: string }>(
+        "select username as key from iam.users where tenant_id = $1 and deleted_at is null and status = 'active' order by username",
+        [tenantId],
+      ),
+      this.db.query<{ definition: string | null; key: string }>(
+        `
+          select name as key, description as definition
+          from iam.roles
+          where (tenant_id = $1 or tenant_id is null)
+            and deleted_at is null
+          order by name
+        `,
+        [tenantId],
+      ),
+      this.db.query<{ category_code: string; label: string }>(
+        `
+          select c.code as category_code, v.label
+          from catalog.reference_values v
+          join catalog.reference_categories c on c.id = v.category_id
+          where v.tenant_id = $1 and v.deleted_at is null and v.is_active = true
+          order by c.code, v.display_order, v.label
+        `,
+        [tenantId],
+      ),
+      this.db.query<{ name: string }>(
+        "select name from catalog.tender_types where tenant_id = $1 and deleted_at is null and is_active = true order by name",
+        [tenantId],
+      ),
+    ]);
+    const byCategory = (category: string) => references.rows.filter((row) => row.category_code === category).map((row) => row.label);
+    return {
+      "CPC Involved?": ["Yes", "No"],
+      Entity: entities.rows.map((row) => row.code),
+      "Access Level Definition": roles.rows.map((row) => row.definition ?? ""),
+      "Access Level Required": roles.rows.map((row) => row.key),
+      "LOI Awarded?": ["Yes", "No"],
+      "Nature of Work": byCategory("nature_of_work"),
+      "PR Receiving Medium": byCategory("pr_receiving_medium"),
+      "Priority?": ["Low", "Medium", "High", "Critical"],
+      "Tender Owner": users.rows.map((row) => row.key),
+      "Tender Type": tenderTypes.rows.map((row) => row.name),
+      "User Department": departments.rows.map((row) => row.key),
+    };
+  }
+
+  private populateLookupSheet(worksheet: ExcelJS.Worksheet, lookupData: Record<string, string[]>): void {
+    const entries = Object.entries(lookupData);
+    entries.forEach(([label, values], index) => {
+      const column = index + 1;
+      worksheet.getCell(1, column).value = label;
+      worksheet.getCell(1, column).font = { bold: true };
+      values.forEach((value, rowIndex) => {
+        worksheet.getCell(rowIndex + 2, column).value = value;
+      });
+      worksheet.getColumn(column).width = Math.max(18, label.length + 2);
+    });
+  }
+
+  private populateMetadataSheet(
+    worksheet: ExcelJS.Worksheet,
+    columns: TenderTemplateColumn[],
+    templateName = "ProcureDesk Tender Cases",
+    headerRow = 8,
+  ): void {
+    worksheet.addRow(["Template", templateName]);
+    worksheet.addRow(["Version", "2026.05"]);
+    worksheet.addRow(["Header Row", headerRow]);
+    worksheet.addRow([]);
+    worksheet.addRow(["Column", "Type"]);
+    columns.forEach((column) => worksheet.addRow([column.label, column.type]));
+  }
+
+  private applyTemplateValidations(
+    worksheet: ExcelJS.Worksheet,
+    columns: TenderTemplateColumn[],
+    lookupData: Record<string, string[]>,
+    startRow = 9,
+  ): void {
+    columns.forEach((column, index) => {
+      if (column.type !== "Dropdown") return;
+      const values = lookupData[column.label] ?? [];
+      if (!values.length) return;
+      const formula = `"${values.slice(0, 40).join(",")}"`;
+      for (let row = startRow; row < startRow + 500; row += 1) {
+        worksheet.getCell(row, index + 1).dataValidation = {
+          allowBlank: true,
+          formulae: [formula],
+          type: "list",
+        };
+      }
+    });
+  }
+}
+
+type TenderTemplateColumn = {
+  label: string;
+  type: "Alphanumeric" | "Auto-fetched / Readonly" | "DD-MM-YYYY" | "Dropdown" | "Email" | "Number" | "Text";
+  width: number;
+};
+
+function portalUserTemplateColumns(): TenderTemplateColumn[] {
+  return [
+    { label: "Entity", type: "Dropdown", width: 18 },
+    { label: "Full Name", type: "Text", width: 28 },
+    { label: "Access Level Required", type: "Dropdown", width: 24 },
+    { label: "Access Level Definition", type: "Auto-fetched / Readonly", width: 34 },
+    { label: "Mail ID", type: "Email", width: 30 },
+    { label: "Contact No.", type: "Text", width: 18 },
+  ];
+}
+
+function userDepartmentTemplateColumns(): TenderTemplateColumn[] {
+  return [
+    { label: "Entity", type: "Dropdown", width: 18 },
+    { label: "User Department", type: "Text", width: 30 },
+  ];
+}
+
+function oldContractTemplateColumns(): TenderTemplateColumn[] {
+  return [
+    { label: "Entity", type: "Dropdown", width: 18 },
+    { label: "User Department", type: "Dropdown", width: 24 },
+    { label: "Tender Owner", type: "Dropdown", width: 24 },
+    { label: "Tender Description", type: "Text", width: 38 },
+    { label: "Awarded Vendors (comma separated)", type: "Text", width: 36 },
+    { label: "RC/PO Amount (Rs.)", type: "Number", width: 20 },
+    { label: "RC/PO Award Date", type: "DD-MM-YYYY", width: 18 },
+    { label: "RC/PO Validity Date", type: "DD-MM-YYYY", width: 20 },
+  ];
+}
+
+function tenderTemplateColumns(): TenderTemplateColumn[] {
+  return [
+    { label: "Entity", type: "Dropdown", width: 18 },
+    { label: "PR Receiving Medium", type: "Dropdown", width: 22 },
+    { label: "Tender Owner", type: "Dropdown", width: 24 },
+    { label: "PR/Scheme No", type: "Alphanumeric", width: 20 },
+    { label: "PR/Scheme Receipt Date", type: "DD-MM-YYYY", width: 22 },
+    { label: "PR Description", type: "Text", width: 34 },
+    { label: "PR Value / Approved Budget (Rs.) [All Inclusive]", type: "Number", width: 26 },
+    { label: "CPC Involved?", type: "Dropdown", width: 16 },
+    { label: "Nature of Work", type: "Dropdown", width: 20 },
+    { label: "User Department", type: "Dropdown", width: 22 },
+    { label: "Tender Type", type: "Dropdown", width: 20 },
+    { label: "Priority?", type: "Dropdown", width: 16 },
+    { label: "PR Remarks", type: "Text", width: 28 },
+    { label: "Tender Name", type: "Text", width: 32 },
+    { label: "Tender No.", type: "Alphanumeric", width: 20 },
+    { label: "NIT Initiation", type: "DD-MM-YYYY", width: 16 },
+    { label: "NIT Approval", type: "DD-MM-YYYY", width: 16 },
+    { label: "NIT Publish", type: "DD-MM-YYYY", width: 16 },
+    { label: "Bid Receipt", type: "DD-MM-YYYY", width: 16 },
+    { label: "Bidder Participated Count", type: "Number", width: 20 },
+    { label: "Commercial Evaluation", type: "DD-MM-YYYY", width: 20 },
+    { label: "Technical Evaluation", type: "DD-MM-YYYY", width: 20 },
+    { label: "Qualified Bidders Count", type: "Number", width: 20 },
+    { label: "Estimate / Benchmark (Rs.) [All Inclusive]", type: "Number", width: 26 },
+    { label: "NFA Submission", type: "DD-MM-YYYY", width: 16 },
+    { label: "NFA Approval", type: "DD-MM-YYYY", width: 16 },
+    { label: "NFA Approved Amount (Rs.) [All Inclusive]", type: "Number", width: 26 },
+    { label: "LOI Awarded?", type: "Dropdown", width: 16 },
+    { label: "LOI Award Date", type: "DD-MM-YYYY", width: 16 },
+    { label: "RC/PO Award Date", type: "DD-MM-YYYY", width: 18 },
+    { label: "RC/PO Validity", type: "DD-MM-YYYY", width: 18 },
+  ];
+}

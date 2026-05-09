@@ -1,0 +1,7 @@
+{
+  "connectionString": "$(DATABASE_URL)",
+  "migrationsFolder": "db/migrations",
+  "placeholders": {
+    ":DB_SCHEMA": "procuredesk"
+  }
+}

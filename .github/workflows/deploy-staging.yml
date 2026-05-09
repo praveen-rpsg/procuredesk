@@ -1,0 +1,36 @@
+name: ProcureDesk Staging Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_image:
+        required: true
+        type: string
+      web_image:
+        required: true
+        type: string
+      worker_image:
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run database migration
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/0001_foundation.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/seeds/0001_reference_data.sql
+
+      - name: Deploy images
+        run: |
+          echo "Deploy API image: ${{ inputs.api_image }}"
+          echo "Deploy Web image: ${{ inputs.web_image }}"
+          echo "Deploy Worker image: ${{ inputs.worker_image }}"
+          echo "Replace this step with the target platform rollout command."

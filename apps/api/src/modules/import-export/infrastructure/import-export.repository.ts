@@ -1,0 +1,745 @@
+import { Injectable } from "@nestjs/common";
+import type { PoolClient, QueryResultRow } from "pg";
+
+import { DatabaseService } from "../../../database/database.service.js";
+import type { FileAsset, ImportJob, ImportJobRow } from "../domain/import-export-models.js";
+
+export type CreateFileAssetInput = {
+  byteSize?: number | null;
+  checksumSha256?: string | null;
+  contentType?: string | null;
+  createdBy: string;
+  originalFilename?: string | null;
+  purpose: string;
+  storageKey: string;
+  tenantId: string;
+};
+
+export type CreateUploadedImportJobInput = CreateFileAssetInput & {
+  importType: string;
+};
+
+@Injectable()
+export class ImportExportRepository {
+  constructor(private readonly db: DatabaseService) {}
+
+  async createFileAsset(input: CreateFileAssetInput): Promise<{ id: string }> {
+    return this.insertFileAsset(input);
+  }
+
+  async createUploadedImportJob(
+    input: CreateUploadedImportJobInput,
+  ): Promise<{ fileAssetId: string; id: string }> {
+    return this.db.transaction(async (client) => {
+      const fileAsset = await this.insertFileAsset(input, client);
+      const row = await this.db.one<QueryResultRow & { id: string }>(
+        `
+          insert into ops.import_jobs (
+            tenant_id, file_asset_id, import_type, created_by, progress_percent, progress_message
+          )
+          values ($1, $2, $3, $4, 0, 'Queued')
+          returning id
+        `,
+        [input.tenantId, fileAsset.id, input.importType, input.createdBy],
+        client,
+      );
+      if (!row) throw new Error("Failed to create import job.");
+      return { fileAssetId: fileAsset.id, id: row.id };
+    });
+  }
+
+  private async insertFileAsset(
+    input: CreateFileAssetInput,
+    client?: PoolClient,
+  ): Promise<{ id: string }> {
+    const row = await this.db.one<QueryResultRow & { id: string }>(
+      `
+        insert into ops.file_assets (
+          tenant_id, storage_key, original_filename, content_type,
+          byte_size, checksum_sha256, purpose, created_by
+        )
+        values ($1, $2, $3, $4, $5, $6, $7, $8)
+        returning id
+      `,
+      [
+        input.tenantId,
+        input.storageKey,
+        input.originalFilename ?? null,
+        input.contentType ?? null,
+        input.byteSize ?? null,
+        input.checksumSha256 ?? null,
+        input.purpose,
+        input.createdBy,
+      ],
+      client,
+    );
+    if (!row) throw new Error("Failed to create file asset.");
+    return { id: row.id };
+  }
+
+  async createImportJob(input: {
+    createdBy: string;
+    fileAssetId: string;
+    importType: string;
+    tenantId: string;
+  }): Promise<{ id: string }> {
+    const row = await this.db.one<QueryResultRow & { id: string }>(
+      `
+        insert into ops.import_jobs (
+          tenant_id, file_asset_id, import_type, created_by, progress_percent, progress_message
+        )
+        values ($1, $2, $3, $4, 0, 'Queued')
+        returning id
+      `,
+      [input.tenantId, input.fileAssetId, input.importType, input.createdBy],
+    );
+    if (!row) throw new Error("Failed to create import job.");
+    return { id: row.id };
+  }
+
+  async listImportJobs(tenantId: string): Promise<ImportJob[]> {
+    const result = await this.db.query<QueryResultRow & ImportJobRowSql>(
+      `
+        select
+          id, import_type, status, progress_percent, progress_message,
+          total_rows, accepted_rows, rejected_rows,
+          staged_unknown_users, staged_unknown_entities, created_at
+        from ops.import_jobs
+        where tenant_id = $1
+        order by created_at desc
+        limit 50
+      `,
+      [tenantId],
+    );
+    return result.rows.map((row) => this.mapImportJob(row));
+  }
+
+  async listImportRows(tenantId: string, importJobId: string): Promise<ImportJobRow[]> {
+    const result = await this.db.query<QueryResultRow & ImportJobRowRowSql>(
+      `
+        select r.id, r.row_number, r.status, r.source_payload, r.normalized_payload, r.errors
+        from ops.import_job_rows r
+        join ops.import_jobs j on j.id = r.import_job_id
+        where j.tenant_id = $1
+          and j.id = $2
+        order by r.row_number asc
+        limit 500
+      `,
+      [tenantId, importJobId],
+    );
+    return result.rows.map((row) => ({
+      errors: row.errors,
+      id: row.id,
+      normalizedPayload: row.normalized_payload,
+      rowNumber: row.row_number,
+      sourcePayload: row.source_payload,
+      status: row.status,
+    }));
+  }
+
+  async listProblemRows(tenantId: string, importJobId: string): Promise<ImportJobRow[]> {
+    const result = await this.db.query<QueryResultRow & ImportJobRowRowSql>(
+      `
+        select r.id, r.row_number, r.status, r.source_payload, r.normalized_payload, r.errors
+        from ops.import_job_rows r
+        join ops.import_jobs j on j.id = r.import_job_id
+        where j.tenant_id = $1
+          and j.id = $2
+          and r.status in ('rejected', 'staged')
+        order by r.row_number asc
+      `,
+      [tenantId, importJobId],
+    );
+    return result.rows.map((row) => ({
+      errors: row.errors,
+      id: row.id,
+      normalizedPayload: row.normalized_payload,
+      rowNumber: row.row_number,
+      sourcePayload: row.source_payload,
+      status: row.status,
+    }));
+  }
+
+  async stageDryRunRows(input: {
+    importJobId: string;
+    rows: Array<{
+      errors?: unknown[];
+      normalizedPayload?: Record<string, unknown> | null;
+      sourcePayload: Record<string, unknown>;
+      status: "accepted" | "rejected" | "staged";
+    }>;
+    tenantId: string;
+  }): Promise<void> {
+    await this.db.transaction(async (client) => {
+      await this.db.query(
+        "delete from ops.import_job_rows where import_job_id = $1",
+        [input.importJobId],
+        client,
+      );
+
+      for (const [index, row] of input.rows.entries()) {
+        await this.insertImportRow(input.importJobId, index + 1, row, client);
+      }
+
+      const accepted = input.rows.filter((row) => row.status === "accepted").length;
+      const rejected = input.rows.filter((row) => row.status === "rejected").length;
+      const staged = input.rows.filter((row) => row.status === "staged").length;
+      await this.db.query(
+        `
+          update ops.import_jobs
+          set status = 'parsed',
+              total_rows = $3,
+              accepted_rows = $4,
+              rejected_rows = $5,
+              staged_unknown_entities = $6,
+              completed_at = now()
+          where tenant_id = $1
+            and id = $2
+        `,
+        [input.tenantId, input.importJobId, input.rows.length, accepted, rejected, staged],
+        client,
+      );
+    });
+  }
+
+  async commitImportJob(input: {
+    committedBy: string;
+    importJobId: string;
+    tenantId: string;
+  }): Promise<boolean> {
+    return this.db.transaction(async (client) => {
+      const job = await this.db.one<QueryResultRow & { import_type: string }>(
+        `
+          select import_type
+          from ops.import_jobs
+          where tenant_id = $1
+            and id = $2
+            and status = 'parsed'
+            and rejected_rows = 0
+            and staged_unknown_entities = 0
+            and staged_unknown_users = 0
+          for update
+        `,
+        [input.tenantId, input.importJobId],
+        client,
+      );
+      if (!job) return false;
+
+      if (job.import_type === "old_contracts") {
+        await this.commitOldContractRows(input, client);
+      } else if (job.import_type === "portal_user_mapping") {
+        await this.commitPortalUserRows(input, client);
+      } else if (job.import_type === "rc_po_plan") {
+        await this.commitRcPoPlanRows(input, client);
+      } else if (job.import_type === "tender_cases") {
+        await this.commitTenderCaseRows(input, client);
+      } else if (job.import_type === "user_department_mapping") {
+        await this.commitUserDepartmentRows(input, client);
+      }
+
+      const result = await this.db.query(
+        `
+          update ops.import_jobs
+          set status = 'committed',
+              progress_percent = 100,
+              progress_message = 'Committed',
+              committed_at = now(),
+              committed_by = $3
+          where tenant_id = $1
+            and id = $2
+        `,
+        [input.tenantId, input.importJobId, input.committedBy],
+        client,
+      );
+      return (result.rowCount ?? 0) > 0;
+    });
+  }
+
+  private async commitRcPoPlanRows(
+    input: { committedBy: string; importJobId: string; tenantId: string },
+    client: PoolClient,
+  ): Promise<void> {
+    await this.db.query(
+      `
+        insert into procurement.rc_po_plans (
+          tenant_id, entity_id, tender_description, awarded_vendors, rc_po_amount,
+          rc_po_award_date, rc_po_validity_date, tentative_tendering_date,
+          uploaded_by, uploaded_at, created_by, updated_by
+        )
+        select
+          $1,
+          e.id,
+          r.normalized_payload->>'tenderDescription',
+          r.normalized_payload->>'awardedVendors',
+          nullif(r.normalized_payload->>'rcPoAmount', '')::numeric,
+          nullif(r.normalized_payload->>'rcPoAwardDate', '')::date,
+          nullif(r.normalized_payload->>'rcPoValidityDate', '')::date,
+          nullif(r.normalized_payload->>'tentativeTenderingDate', '')::date,
+          $3,
+          now(),
+          $3,
+          $3
+        from ops.import_job_rows r
+        join org.entities e
+          on e.tenant_id = $1
+         and lower(e.code::text) = lower(r.normalized_payload->>'entityCode')
+         and e.deleted_at is null
+        where r.import_job_id = $2
+          and r.status = 'accepted'
+      `,
+      [input.tenantId, input.importJobId, input.committedBy],
+      client,
+    );
+  }
+
+  private async commitOldContractRows(
+    input: { committedBy: string; importJobId: string; tenantId: string },
+    client: PoolClient,
+  ): Promise<void> {
+    await this.db.query(
+      `
+        insert into procurement.rc_po_plans (
+          tenant_id, entity_id, department_id, owner_user_id, tender_description,
+          awarded_vendors, rc_po_amount, rc_po_award_date, rc_po_validity_date,
+          uploaded_by, uploaded_at, created_by, updated_by
+        )
+        select
+          $1,
+          e.id,
+          d.id,
+          u.id,
+          r.normalized_payload->>'tenderDescription',
+          r.normalized_payload->>'awardedVendors',
+          nullif(r.normalized_payload->>'rcPoAmount', '')::numeric,
+          nullif(r.normalized_payload->>'rcPoAwardDate', '')::date,
+          nullif(r.normalized_payload->>'rcPoValidityDate', '')::date,
+          $3,
+          now(),
+          $3,
+          $3
+        from ops.import_job_rows r
+        join org.entities e
+          on e.tenant_id = $1
+         and lower(e.code::text) = lower(r.normalized_payload->>'entityCode')
+         and e.deleted_at is null
+        left join org.departments d
+          on d.tenant_id = $1
+         and d.entity_id = e.id
+         and lower(d.name) = lower(r.normalized_payload->>'departmentName')
+         and d.deleted_at is null
+        left join iam.users u
+          on u.tenant_id = $1
+         and (lower(u.username) = lower(r.normalized_payload->>'ownerUsername') or lower(u.email) = lower(r.normalized_payload->>'ownerUsername'))
+         and u.deleted_at is null
+        where r.import_job_id = $2
+          and r.status = 'accepted'
+          and coalesce(r.normalized_payload->>'importAction', '') <> 'existing'
+      `,
+      [input.tenantId, input.importJobId, input.committedBy],
+      client,
+    );
+  }
+
+  private async commitUserDepartmentRows(
+    input: { committedBy: string; importJobId: string; tenantId: string },
+    client: PoolClient,
+  ): Promise<void> {
+    await this.db.query(
+      `
+        insert into org.departments (tenant_id, entity_id, name, created_by, updated_by)
+        select
+          $1,
+          e.id,
+          trim(r.normalized_payload->>'departmentName'),
+          $3,
+          $3
+        from ops.import_job_rows r
+        join org.entities e
+          on e.tenant_id = $1
+         and lower(e.code::text) = lower(r.normalized_payload->>'entityCode')
+         and e.deleted_at is null
+        where r.import_job_id = $2
+          and r.status = 'accepted'
+          and coalesce(r.normalized_payload->>'importAction', '') <> 'existing'
+        on conflict (tenant_id, entity_id, lower(name)) where deleted_at is null
+        do update set
+          is_active = true,
+          updated_at = now(),
+          updated_by = $3
+      `,
+      [input.tenantId, input.importJobId, input.committedBy],
+      client,
+    );
+  }
+
+  private async commitPortalUserRows(
+    input: { committedBy: string; importJobId: string; tenantId: string },
+    client: PoolClient,
+  ): Promise<void> {
+    await this.db.query(
+      `
+        with normalized as (
+          select
+            r.normalized_payload,
+            lower(r.normalized_payload->>'mailId') as email,
+            lower(r.normalized_payload->>'mailId') as username,
+            r.normalized_payload->>'fullName' as full_name,
+            r.normalized_payload->>'contactNo' as contact_no,
+            r.normalized_payload->>'entityCode' as entity_code,
+            r.normalized_payload->>'accessLevelRequired' as access_level
+          from ops.import_job_rows r
+          where r.import_job_id = $2
+            and r.status = 'accepted'
+        ),
+        upserted_users as (
+          insert into iam.users (
+            tenant_id, email, username, full_name, contact_no,
+            status, created_by, updated_by
+          )
+          select
+            $1,
+            n.email,
+            n.username,
+            n.full_name,
+            nullif(n.contact_no, ''),
+            'pending_password_setup',
+            $3,
+            $3
+          from normalized n
+          on conflict (tenant_id, email) where deleted_at is null
+          do update set
+            full_name = excluded.full_name,
+            contact_no = excluded.contact_no,
+            updated_at = now(),
+            updated_by = $3
+          returning id, email
+        ),
+        scoped as (
+          insert into iam.user_entity_scopes (user_id, entity_id, assigned_by)
+          select distinct u.id, e.id, $3
+          from normalized n
+          join upserted_users u on u.email = n.email
+          join org.entities e
+            on e.tenant_id = $1
+           and lower(e.code::text) = lower(n.entity_code)
+           and e.deleted_at is null
+          on conflict (user_id, entity_id) do nothing
+          returning user_id
+        )
+        insert into iam.user_roles (user_id, role_id, assigned_by)
+        select distinct u.id, role_match.id, $3
+        from normalized n
+        join upserted_users u on u.email = n.email
+        join lateral (
+          select r.id
+          from iam.roles r
+          where (r.tenant_id = $1 or r.tenant_id is null)
+            and r.deleted_at is null
+            and (lower(r.name) = lower(n.access_level) or lower(r.code::text) = lower(n.access_level))
+          order by case when r.tenant_id = $1 then 0 else 1 end
+          limit 1
+        ) role_match on true
+        on conflict (user_id, role_id) do nothing
+      `,
+      [input.tenantId, input.importJobId, input.committedBy],
+      client,
+    );
+  }
+
+  private async commitTenderCaseRows(
+    input: { committedBy: string; importJobId: string; tenantId: string },
+    client: PoolClient,
+  ): Promise<void> {
+    await this.db.query(
+      `
+        with normalized as (
+          select
+            r.normalized_payload,
+            r.normalized_payload->>'prId' as pr_id,
+            r.normalized_payload->>'prSchemeNo' as pr_scheme_no,
+            r.normalized_payload->>'entityCode' as entity_code,
+            r.normalized_payload->>'departmentName' as department_name,
+            r.normalized_payload->>'tenderType' as tender_type,
+            r.normalized_payload->>'prReceivingMedium' as pr_receiving_medium,
+            r.normalized_payload->>'natureOfWork' as nature_of_work,
+            r.normalized_payload->>'ownerUsername' as owner_username,
+            r.normalized_payload->>'prDescription' as pr_description,
+            r.normalized_payload->>'prRemarks' as pr_remarks,
+            r.normalized_payload->>'tenderName' as tender_name,
+            r.normalized_payload->>'tenderNo' as tender_no,
+            nullif(r.normalized_payload->>'prReceiptDate', '')::date as pr_receipt_date,
+            nullif(r.normalized_payload->>'tentativeCompletionDate', '')::date as tentative_completion_date,
+            coalesce((r.normalized_payload->>'priorityCase')::boolean, false) as priority_case,
+            case when r.normalized_payload ? 'cpcInvolved' then (r.normalized_payload->>'cpcInvolved')::boolean else null end as cpc_involved,
+            nullif(r.normalized_payload->>'prValue', '')::numeric as pr_value,
+            nullif(r.normalized_payload->>'estimateBenchmark', '')::numeric as estimate_benchmark,
+            nullif(r.normalized_payload->>'approvedAmount', '')::numeric as approved_amount,
+            nullif(r.normalized_payload->>'nitInitiationDate', '')::date as nit_initiation_date,
+            nullif(r.normalized_payload->>'nitApprovalDate', '')::date as nit_approval_date,
+            nullif(r.normalized_payload->>'nitPublishDate', '')::date as nit_publish_date,
+            nullif(r.normalized_payload->>'bidReceiptDate', '')::date as bid_receipt_date,
+            nullif(r.normalized_payload->>'biddersParticipated', '')::integer as bidders_participated,
+            nullif(r.normalized_payload->>'commercialEvaluationDate', '')::date as commercial_evaluation_date,
+            nullif(r.normalized_payload->>'technicalEvaluationDate', '')::date as technical_evaluation_date,
+            nullif(r.normalized_payload->>'qualifiedBidders', '')::integer as qualified_bidders,
+            coalesce((r.normalized_payload->>'loiIssued')::boolean, false) as loi_issued,
+            nullif(r.normalized_payload->>'loiIssuedDate', '')::date as loi_issued_date,
+            nullif(r.normalized_payload->>'rcPoAwardDate', '')::date as rc_po_award_date,
+            nullif(r.normalized_payload->>'rcPoValidityDate', '')::date as rc_po_validity
+          from ops.import_job_rows r
+          where r.import_job_id = $2
+            and r.status = 'accepted'
+        ),
+        resolved as (
+          select
+            n.*,
+            e.id as entity_id,
+            d.id as department_id,
+            tt.id as tender_type_id,
+            prm.id as pr_receiving_medium_id,
+            nowv.id as nature_of_work_id,
+            u.id as owner_user_id,
+            case
+              when n.rc_po_award_date is not null then 8
+              when n.nfa_approval_date is not null then 7
+              when n.nfa_submission_date is not null then 6
+              when n.commercial_evaluation_date is not null and n.technical_evaluation_date is not null then 5
+              when n.bid_receipt_date is not null then 4
+              when n.nit_publish_date is not null then 3
+              when n.nit_approval_date is not null then 2
+              when n.nit_initiation_date is not null then 1
+              else 0
+            end as stage_code
+          from normalized n
+          join org.entities e
+            on e.tenant_id = $1
+           and lower(e.code::text) = lower(n.entity_code)
+           and e.deleted_at is null
+          left join org.departments d
+            on d.tenant_id = $1
+           and d.entity_id = e.id
+           and lower(d.name) = lower(n.department_name)
+           and d.deleted_at is null
+          left join catalog.tender_types tt
+            on tt.tenant_id = $1
+           and lower(tt.name) = lower(n.tender_type)
+           and tt.deleted_at is null
+          left join catalog.reference_values prm
+            on prm.tenant_id = $1
+           and lower(prm.label) = lower(n.pr_receiving_medium)
+           and prm.deleted_at is null
+           and prm.category_id = (select id from catalog.reference_categories where code = 'pr_receiving_medium')
+          left join catalog.reference_values nowv
+            on nowv.tenant_id = $1
+           and lower(nowv.label) = lower(n.nature_of_work)
+           and nowv.deleted_at is null
+           and nowv.category_id = (select id from catalog.reference_categories where code = 'nature_of_work')
+          left join iam.users u
+            on u.tenant_id = $1
+           and (lower(u.username) = lower(n.owner_username) or lower(u.email) = lower(n.owner_username))
+           and u.deleted_at is null
+        ),
+        upserted as (
+          insert into procurement.cases (
+            tenant_id, pr_id, entity_id, department_id, tender_type_id,
+            pr_receiving_medium_id, nature_of_work_id, owner_user_id,
+            created_by, updated_by, status, stage_code, desired_stage_code,
+            is_delayed, priority_case, cpc_involved, pr_scheme_no,
+            pr_receipt_date, pr_description, pr_remarks, tender_name, tender_no,
+            tentative_completion_date
+          )
+          select
+            $1, r.pr_id, r.entity_id, r.department_id, r.tender_type_id,
+            r.pr_receiving_medium_id, r.nature_of_work_id, r.owner_user_id,
+            $3, $3,
+            case when r.rc_po_award_date is not null then 'completed' else 'running' end,
+            r.stage_code,
+            null,
+            false,
+            r.priority_case,
+            r.cpc_involved,
+            r.pr_scheme_no,
+            r.pr_receipt_date,
+            r.pr_description,
+            r.pr_remarks,
+            r.tender_name,
+            r.tender_no,
+            r.tentative_completion_date
+          from resolved r
+          on conflict (tenant_id, pr_id) where deleted_at is null
+          do update set
+            entity_id = excluded.entity_id,
+            department_id = excluded.department_id,
+            tender_type_id = excluded.tender_type_id,
+            pr_receiving_medium_id = excluded.pr_receiving_medium_id,
+            nature_of_work_id = excluded.nature_of_work_id,
+            owner_user_id = excluded.owner_user_id,
+            status = excluded.status,
+            stage_code = excluded.stage_code,
+            desired_stage_code = excluded.desired_stage_code,
+            is_delayed = excluded.is_delayed,
+            priority_case = excluded.priority_case,
+            cpc_involved = excluded.cpc_involved,
+            pr_scheme_no = excluded.pr_scheme_no,
+            pr_receipt_date = excluded.pr_receipt_date,
+            pr_description = excluded.pr_description,
+            pr_remarks = excluded.pr_remarks,
+            tender_name = excluded.tender_name,
+            tender_no = excluded.tender_no,
+            tentative_completion_date = excluded.tentative_completion_date,
+            version = procurement.cases.version + 1,
+            updated_at = now(),
+            updated_by = $3
+          returning id, pr_id
+        )
+        insert into procurement.case_financials (
+          case_id, tenant_id, pr_value, estimate_benchmark, approved_amount, updated_at
+        )
+        select
+          u.id,
+          $1,
+          r.pr_value,
+          r.estimate_benchmark,
+          r.approved_amount,
+          now()
+        from upserted u
+        join resolved r on r.pr_id = u.pr_id
+        on conflict (case_id) do update set
+          pr_value = excluded.pr_value,
+          estimate_benchmark = excluded.estimate_benchmark,
+          approved_amount = excluded.approved_amount,
+          updated_at = now()
+      `,
+      [input.tenantId, input.importJobId, input.committedBy],
+      client,
+    );
+
+    await this.db.query(
+      `
+        with normalized as (
+          select
+            r.normalized_payload->>'prId' as pr_id,
+            nullif(r.normalized_payload->>'nitInitiationDate', '')::date as nit_initiation_date,
+            nullif(r.normalized_payload->>'nitApprovalDate', '')::date as nit_approval_date,
+            nullif(r.normalized_payload->>'nitPublishDate', '')::date as nit_publish_date,
+            nullif(r.normalized_payload->>'bidReceiptDate', '')::date as bid_receipt_date,
+            nullif(r.normalized_payload->>'biddersParticipated', '')::integer as bidders_participated,
+            nullif(r.normalized_payload->>'commercialEvaluationDate', '')::date as commercial_evaluation_date,
+            nullif(r.normalized_payload->>'technicalEvaluationDate', '')::date as technical_evaluation_date,
+            nullif(r.normalized_payload->>'qualifiedBidders', '')::integer as qualified_bidders,
+            coalesce((r.normalized_payload->>'loiIssued')::boolean, false) as loi_issued,
+            nullif(r.normalized_payload->>'loiIssuedDate', '')::date as loi_issued_date,
+            nullif(r.normalized_payload->>'rcPoAwardDate', '')::date as rc_po_award_date,
+            nullif(r.normalized_payload->>'rcPoValidityDate', '')::date as rc_po_validity
+          from ops.import_job_rows r
+          where r.import_job_id = $2
+            and r.status = 'accepted'
+        )
+        insert into procurement.case_milestones (
+          case_id, tenant_id, nit_initiation_date, nit_approval_date, nit_publish_date,
+          bid_receipt_date, bidders_participated, commercial_evaluation_date,
+          technical_evaluation_date, qualified_bidders, nfa_submission_date,
+          nfa_approval_date, loi_issued, loi_issued_date, rc_po_award_date,
+          rc_po_validity, updated_at
+        )
+        select
+          c.id, $1, n.nit_initiation_date, n.nit_approval_date, n.nit_publish_date,
+          n.bid_receipt_date, n.bidders_participated, n.commercial_evaluation_date,
+          n.technical_evaluation_date, n.qualified_bidders,
+          nullif(r.normalized_payload->>'nfaSubmissionDate', '')::date,
+          nullif(r.normalized_payload->>'nfaApprovalDate', '')::date,
+          n.loi_issued, n.loi_issued_date, n.rc_po_award_date, n.rc_po_validity, now()
+        from normalized n
+        join ops.import_job_rows r on r.import_job_id = $2 and r.normalized_payload->>'prId' = n.pr_id
+        join procurement.cases c on c.tenant_id = $1 and c.pr_id = n.pr_id and c.deleted_at is null
+        on conflict (case_id) do update set
+          nit_initiation_date = excluded.nit_initiation_date,
+          nit_approval_date = excluded.nit_approval_date,
+          nit_publish_date = excluded.nit_publish_date,
+          bid_receipt_date = excluded.bid_receipt_date,
+          bidders_participated = excluded.bidders_participated,
+          commercial_evaluation_date = excluded.commercial_evaluation_date,
+          technical_evaluation_date = excluded.technical_evaluation_date,
+          qualified_bidders = excluded.qualified_bidders,
+          nfa_submission_date = excluded.nfa_submission_date,
+          nfa_approval_date = excluded.nfa_approval_date,
+          loi_issued = excluded.loi_issued,
+          loi_issued_date = excluded.loi_issued_date,
+          rc_po_award_date = excluded.rc_po_award_date,
+          rc_po_validity = excluded.rc_po_validity,
+          updated_at = now()
+      `,
+      [input.tenantId, input.importJobId],
+      client,
+    );
+  }
+
+  private async insertImportRow(
+    importJobId: string,
+    rowNumber: number,
+    row: {
+      errors?: unknown[];
+      normalizedPayload?: Record<string, unknown> | null;
+      sourcePayload: Record<string, unknown>;
+      status: "accepted" | "rejected" | "staged";
+    },
+    client: PoolClient,
+  ): Promise<void> {
+    await this.db.query(
+      `
+        insert into ops.import_job_rows (
+          import_job_id, row_number, status, source_payload, normalized_payload, errors
+        )
+        values ($1, $2, $3, $4, $5, $6)
+      `,
+      [
+        importJobId,
+        rowNumber,
+        row.status,
+        JSON.stringify(row.sourcePayload),
+        row.normalizedPayload ? JSON.stringify(row.normalizedPayload) : null,
+        JSON.stringify(row.errors ?? []),
+      ],
+      client,
+    );
+  }
+
+  private mapImportJob(row: ImportJobRowSql): ImportJob {
+    return {
+      acceptedRows: row.accepted_rows,
+      createdAt: row.created_at.toISOString(),
+      id: row.id,
+      importType: row.import_type,
+      progressMessage: row.progress_message,
+      progressPercent: row.progress_percent,
+      rejectedRows: row.rejected_rows,
+      stagedUnknownEntities: row.staged_unknown_entities,
+      stagedUnknownUsers: row.staged_unknown_users,
+      status: row.status,
+      totalRows: row.total_rows,
+    };
+  }
+}
+
+type ImportJobRowSql = {
+  accepted_rows: number;
+  created_at: Date;
+  id: string;
+  import_type: string;
+  progress_message: string | null;
+  progress_percent: number;
+  rejected_rows: number;
+  staged_unknown_entities: number;
+  staged_unknown_users: number;
+  status: string;
+  total_rows: number;
+};
+
+type ImportJobRowRowSql = {
+  errors: unknown[];
+  id: string;
+  normalized_payload: Record<string, unknown> | null;
+  row_number: number;
+  source_payload: Record<string, unknown>;
+  status: "accepted" | "rejected" | "staged";
+};
