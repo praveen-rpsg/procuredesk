@@ -1,6 +1,6 @@
 # ProcureDesk Platform Handover Documentation
 
-This folder contains the complete project handover pack for the ProcureDesk enterprise procurement platform. It is intentionally compact: only six detailed documents are maintained so a new team can read end-to-end without jumping through many small files.
+This folder contains the complete project handover pack for the ProcureDesk enterprise procurement platform. It is intentionally compact: a small set of detailed documents is maintained so a new team can read end-to-end without jumping through many small files.
 
 ## Documentation Map
 
@@ -12,6 +12,7 @@ This folder contains the complete project handover pack for the ProcureDesk ente
 | [04-api-database-and-data-model.md](04-api-database-and-data-model.md) | API catalog, database schemas, migrations, ERD, reporting/import data model |
 | [05-security-operations-and-deployment.md](05-security-operations-and-deployment.md) | RBAC, sessions, audit, secrets, deployment, rollback, monitoring, support |
 | [06-imports-reports-and-roadmap.md](06-imports-reports-and-roadmap.md) | Import ecosystem, reporting engine, exports, known issues, technical debt, roadmap |
+| [07-procuredesk-production-deployment-on-clm-server.md](07-procuredesk-production-deployment-on-clm-server.md) | Step-by-step deployment runbook for existing CLM server with isolation and commands |
 
 ## Project Summary
 
@@ -53,8 +54,7 @@ Local URLs:
 
 ## Documentation Governance
 
-- Keep these six files detailed and current.
+- Keep these detailed handover files current.
 - Do not create many small docs unless the team explicitly changes documentation strategy.
 - Update docs in the same change as code, schema, deployment, permission, workflow, or user-facing behavior changes.
 - Never commit real secrets, private production data, screenshots with sensitive values, or customer credentials.
-
