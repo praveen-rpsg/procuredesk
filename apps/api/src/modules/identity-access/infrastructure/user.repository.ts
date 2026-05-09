@@ -84,8 +84,16 @@ export class UserRepository {
         left join iam.tenants t on t.id = u.tenant_id
         where u.deleted_at is null
           and (
-            ($2::text is not null and t.code = $2 and (u.email = $1 or u.username = $1))
-            or ($2::text is null and u.is_platform_super_admin = true and u.email = $1)
+            (
+              $2::text is not null
+              and lower(t.code::text) = lower($2::text)
+              and (lower(u.email::text) = lower($1::text) or lower(u.username::text) = lower($1::text))
+            )
+            or (
+              $2::text is null
+              and u.is_platform_super_admin = true
+              and lower(u.email::text) = lower($1::text)
+            )
           )
         limit 1
       `,
