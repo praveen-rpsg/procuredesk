@@ -1,4 +1,5 @@
-const defaultApiBaseUrl = "http://localhost:3100/api/v1";
+const localApiBaseUrl = "http://localhost:3100/api/v1";
+const productionApiBaseUrl = "/api/v1";
 
 export const apiBaseUrl = readApiBaseUrl(import.meta.env as unknown);
 
@@ -55,9 +56,15 @@ export async function apiRequest<TResponse>(
 }
 
 function readApiBaseUrl(env: unknown): string {
-  if (!env || typeof env !== "object") return defaultApiBaseUrl;
-  const value = (env as Record<string, unknown>).VITE_API_URL;
-  return typeof value === "string" && value ? value : defaultApiBaseUrl;
+  if (!env || typeof env !== "object") return productionApiBaseUrl;
+  const envRecord = env as Record<string, unknown>;
+  const value = envRecord.VITE_API_URL;
+  if (typeof value === "string" && value.trim()) {
+    return value.trim().replace(/\/+$/, "");
+  }
+
+  const isDev = envRecord.DEV === true || envRecord.MODE === "development";
+  return isDev ? localApiBaseUrl : productionApiBaseUrl;
 }
 
 function problemDetailMessage(payload: unknown): string {
