@@ -80,6 +80,7 @@ export function ReportsWorkspace() {
   const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
   const [isSavedViewsOpen, setIsSavedViewsOpen] = useState(false);
   const [selectedRowsByReport, setSelectedRowsByReport] = useState<Record<string, string[]>>({});
+  const initialExportJobId = useMemo(() => new URLSearchParams(location.search).get("jobId") ?? "", [location.search]);
 
   const filters = useReportFilters(reportCode);
   const selectedExportIds = selectedRowsByReport[activeReport] ?? [];
@@ -91,6 +92,10 @@ export function ReportsWorkspace() {
     selectedExportIds,
     savedViewName,
     setSavedViewName,
+    {
+      initialExportJobId,
+      onExportCreated: (job) => navigateToAppPath(`/reports/export-jobs?jobId=${job.id}`),
+    },
   );
 
   const refreshMutation = useMutation({
@@ -1036,6 +1041,17 @@ function ReportExportStatusPanel({
               <dd>{exportStatus.expiresAt ? new Date(exportStatus.expiresAt).toLocaleDateString() : "-"}</dd>
             </div>
           </dl>
+          {exportStatus.status === "queued" || exportStatus.status === "running" ? (
+            <p className="report-export-help">
+              This page refreshes automatically while the worker prepares the file. The download button appears after
+              the export reaches Completed.
+            </p>
+          ) : null}
+          {exportStatus.status === "failed" ? (
+            <p className="inline-error">
+              Export failed. Check the worker logs, then run the export again after the issue is resolved.
+            </p>
+          ) : null}
           {canDownloadExport ? (
             <Button className="report-download-link" href={getExportDownloadUrl(exportJobId)} variant="secondary">
               <Download size={16} />

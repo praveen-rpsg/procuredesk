@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   createExportJob,
@@ -10,6 +10,8 @@ import {
 } from "../api/reportingApi";
 import { useToast } from "../../../shared/ui/toast/ToastProvider";
 
+const lastExportJobStorageKey = "procuredesk:last-report-export-job-id";
+
 export function useReportExport(
   reportCode: ReportCode,
   exportFilters: Record<string, unknown>,
@@ -17,11 +19,31 @@ export function useReportExport(
   selectedIds: string[],
   savedViewName: string,
   setSavedViewName: (name: string) => void,
+  options: {
+    initialExportJobId?: string;
+    onExportCreated?: (job: { id: string }) => void;
+  } = {},
 ) {
   const queryClient = useQueryClient();
   const { notify } = useToast();
-  const [exportJobId, setExportJobId] = useState("");
+  const [exportJobId, setExportJobIdState] = useState(() => options.initialExportJobId ?? readLastExportJobId());
   const [exportFormat, setExportFormat] = useState<ExportFormat>("xlsx");
+
+  const setExportJobId = useCallback((jobId: string) => {
+    setExportJobIdState(jobId.trim());
+  }, []);
+
+  useEffect(() => {
+    if (options.initialExportJobId) {
+      setExportJobId(options.initialExportJobId);
+    }
+  }, [options.initialExportJobId, setExportJobId]);
+
+  useEffect(() => {
+    if (exportJobId) {
+      window.localStorage.setItem(lastExportJobStorageKey, exportJobId);
+    }
+  }, [exportJobId]);
 
   const exportStatus = useQuery({
     enabled: Boolean(exportJobId),
@@ -43,6 +65,7 @@ export function useReportExport(
     },
     onSuccess: (result) => {
       setExportJobId(result.id);
+      options.onExportCreated?.(result);
       notify({
         message: selectedIds.length
           ? `Export queued for ${selectedIds.length} selected rows.`
@@ -83,4 +106,9 @@ export function useReportExport(
     setExportFormat,
     setExportJobId,
   };
+}
+
+function readLastExportJobId(): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(lastExportJobStorageKey) ?? "";
 }

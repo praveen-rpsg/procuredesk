@@ -4474,6 +4474,17 @@ textarea:focus:not(:focus-visible) {
   inline-size: 100%;
 }
 
+.report-export-help {
+  border: 1px solid var(--color-info-200);
+  border-radius: var(--radius-md);
+  background: var(--color-info-50);
+  color: var(--color-info-800);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  margin: 0;
+  padding: var(--space-2-5);
+}
+
 .report-export-meta {
   display: grid;
   gap: var(--space-2);
