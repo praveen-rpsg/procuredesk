@@ -128,9 +128,9 @@ function optionalGraphConfig():
     "MS_GRAPH_SENDER_MAILBOX",
     "MS_GRAPH_TENANT_ID",
   ] as const;
-  const values = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const values = Object.fromEntries(keys.map((key) => [key, process.env[key]?.trim()]));
   const hasAnyValue = keys.some((key) => Boolean(values[key]));
-  if (!hasAnyValue && process.env.NODE_ENV !== "production") {
+  if (!hasAnyValue) {
     return null;
   }
 
