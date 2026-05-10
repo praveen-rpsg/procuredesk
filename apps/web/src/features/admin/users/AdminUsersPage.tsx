@@ -18,6 +18,8 @@ import {
   type AdminUser,
   type PasswordPolicy,
 } from "../api/adminApi";
+import { useAuth } from "../../../shared/auth/AuthProvider";
+import { canManageRoles, canManageUsers, canReadEntities } from "../../../shared/auth/permissions";
 import { Button } from "../../../shared/ui/button/Button";
 import { FormField, TextInput } from "../../../shared/ui/form/FormField";
 import { IconButton } from "../../../shared/ui/icon-button/IconButton";
@@ -69,6 +71,7 @@ const defaultPolicy: Omit<PasswordPolicy, "tenantId"> = {
 const userColumns = (
   onEdit: (user: AdminUser) => void,
   onToggleStatus: (user: AdminUser) => void,
+  canManage: boolean,
 ): DataTableColumn<AdminUser>[] => [
   { key: "username", header: "Username", render: (row) => row.username },
   { key: "name", header: "Full Name", render: (row) => row.fullName },
@@ -101,7 +104,8 @@ const userColumns = (
   {
     key: "action",
     header: "Actions",
-    render: (row) => (
+    render: (row) =>
+      canManage ? (
       <div className="row-actions">
         <IconButton aria-label={`Edit ${row.fullName}`} onClick={() => onEdit(row)} tooltip="Edit user">
           <Pencil size={17} />
@@ -114,13 +118,18 @@ const userColumns = (
           {row.status === "active" ? <Pause size={17} /> : <Power size={17} />}
         </IconButton>
       </div>
-    ),
+      ) : (
+        "-"
+      ),
   },
 ];
 
 export function AdminUsersPage() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const { notify } = useToast();
+  const canManageUserRecords = canManageUsers(user);
+  const canEditUserAccess = canManageUserRecords && canManageRoles(user) && canReadEntities(user);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [userToEdit, setUserToEdit] = useState<AdminUser | null>(null);
   const [newUser, setNewUser] = useState<EditUserForm>({ ...emptyEditUserForm, isActive: true });
@@ -128,9 +137,9 @@ export function AdminUsersPage() {
   const [policy, setPolicy] = useState<Omit<PasswordPolicy, "tenantId">>(defaultPolicy);
 
   const users = useQuery({ queryFn: listAdminUsers, queryKey: ["admin-users"] });
-  const roles = useQuery({ queryFn: listAdminRoles, queryKey: ["admin-roles"] });
-  const entities = useQuery({ queryFn: listAdminEntities, queryKey: ["admin-entities"] });
-  const passwordPolicy = useQuery({ queryFn: getPasswordPolicy, queryKey: ["password-policy"] });
+  const roles = useQuery({ enabled: canEditUserAccess, queryFn: listAdminRoles, queryKey: ["admin-roles"] });
+  const entities = useQuery({ enabled: canEditUserAccess, queryFn: listAdminEntities, queryKey: ["admin-entities"] });
+  const passwordPolicy = useQuery({ enabled: canManageUserRecords, queryFn: getPasswordPolicy, queryKey: ["password-policy"] });
 
   useEffect(() => {
     if (passwordPolicy.data) {
@@ -215,11 +224,13 @@ export function AdminUsersPage() {
 
   const onCreateUser = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!canEditUserAccess) return;
     createUserMutation.mutate();
   };
 
   const onSaveUser = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!canEditUserAccess) return;
     saveUserMutation.mutate();
   };
 
@@ -244,10 +255,12 @@ export function AdminUsersPage() {
     <section className="admin-section admin-grid-wide">
       <PageHeader
         actions={
+          canEditUserAccess ? (
           <Button onClick={() => setIsCreateOpen(true)}>
             <Plus size={16} />
             New User
           </Button>
+          ) : null
         }
         eyebrow="Admin"
         title="Users & Roles"
@@ -282,11 +295,14 @@ export function AdminUsersPage() {
             <p className="inline-error">{users.error.message}</p>
           ) : (
             <DataTable
-              columns={userColumns(openEdit, (user) =>
-                quickStatusMutation.mutate({
-                  status: user.status === "active" ? "inactive" : "active",
-                  userId: user.id,
-                }),
+              columns={userColumns(
+                openEdit,
+                (row) =>
+                  quickStatusMutation.mutate({
+                    status: row.status === "active" ? "inactive" : "active",
+                    userId: row.id,
+                  }),
+                canEditUserAccess,
               )}
               emptyMessage="No users found."
               getRowKey={(row) => row.id}
@@ -299,6 +315,7 @@ export function AdminUsersPage() {
           </p>
         </section>
 
+        {canManageUserRecords ? (
         <section className="state-panel admin-grid-wide">
           <div className="detail-header">
             <div>
@@ -395,6 +412,7 @@ export function AdminUsersPage() {
           </div>
           {policyMutation.error ? <p className="inline-error">{policyMutation.error.message}</p> : null}
         </section>
+        ) : null}
       </section>
 
       <Modal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} size="wide" title="New User">

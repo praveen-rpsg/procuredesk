@@ -10,6 +10,8 @@ import {
   updateAdminDepartment,
   type AdminDepartment,
 } from "../api/adminApi";
+import { useAuth } from "../../../shared/auth/AuthProvider";
+import { canManageEntities } from "../../../shared/auth/permissions";
 import { Button } from "../../../shared/ui/button/Button";
 import { ConfirmationDialog } from "../../../shared/ui/confirmation-dialog/ConfirmationDialog";
 import { EmptyState } from "../../../shared/ui/empty-state/EmptyState";
@@ -26,6 +28,7 @@ const departmentColumns = (
   onDelete: (department: AdminDepartment) => void,
   onSelect: (department: AdminDepartment) => void,
   selectedDepartmentId: string,
+  canManage: boolean,
 ): DataTableColumn<AdminDepartment>[] => [
   { key: "name", header: "Department", render: (row) => row.name },
   { key: "tenders", header: "Tenders", render: (row) => row.tenderCount },
@@ -37,7 +40,8 @@ const departmentColumns = (
   {
     key: "action",
     header: "Actions",
-    render: (row) => (
+    render: (row) =>
+      canManage ? (
       <div className="row-actions">
         <IconButton
           aria-label={`Edit ${row.name}`}
@@ -57,7 +61,9 @@ const departmentColumns = (
           <Trash2 size={17} />
         </IconButton>
       </div>
-    ),
+      ) : (
+        "-"
+      ),
   },
 ];
 
@@ -68,7 +74,9 @@ type DepartmentsAdminPageProps = {
 
 export function DepartmentsAdminPage({ focusEntityId = "", onEntityScopeChange }: DepartmentsAdminPageProps) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const { notify } = useToast();
+  const canManage = canManageEntities(user);
   const entities = useQuery({ queryFn: listAdminEntities, queryKey: ["admin-entities"] });
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -161,11 +169,13 @@ export function DepartmentsAdminPage({ focusEntityId = "", onEntityScopeChange }
 
   const onCreate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!canManage) return;
     createMutation.mutate();
   };
 
   const onUpdate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!canManage) return;
     updateMutation.mutate();
   };
 
@@ -182,10 +192,12 @@ export function DepartmentsAdminPage({ focusEntityId = "", onEntityScopeChange }
     <section className="admin-section">
       <PageHeader
         actions={
+          canManage ? (
           <Button disabled={!selectedEntityId} onClick={() => setIsCreateOpen(true)}>
             <Plus size={18} />
             New Department
           </Button>
+          ) : null
         }
         eyebrow="Admin"
         title="Departments"
@@ -266,6 +278,7 @@ export function DepartmentsAdminPage({ focusEntityId = "", onEntityScopeChange }
                 setDepartmentToDelete,
                 openEdit,
                 selectedDepartmentId,
+                canManage,
               )}
               emptyMessage="No departments found."
               getRowKey={(row) => row.id}

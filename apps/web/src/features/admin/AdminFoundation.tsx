@@ -11,6 +11,14 @@ import { RolesAdminPage } from "./roles/RolesAdminPage";
 import { TenderTypeDaysAdminPage } from "./tender-type-days/TenderTypeDaysAdminPage";
 import { AdminUsersPage } from "./users/AdminUsersPage";
 import { useAuth } from "../../shared/auth/AuthProvider";
+import {
+  canManageRoles,
+  canManageUsers,
+  canReadAudit,
+  canReadCatalog,
+  canReadEntities,
+  canReadUsers,
+} from "../../shared/auth/permissions";
 import { navigateToAppPath, useAppLocation } from "../../shared/routing/appLocation";
 import { AccessDeniedState, NotFoundState } from "../../shared/ui/app-states/AppStates";
 import { SecondaryNav } from "../../shared/ui/secondary-nav/SecondaryNav";
@@ -37,11 +45,11 @@ const adminSectionPaths: Record<AdminSectionKey, string> = {
 export function AdminFoundation() {
   const { user } = useAuth();
   const location = useAppLocation();
-  const canManageUsers = can(user, ["role.manage", "user.manage", "user.read"]);
-  const canManageRoles = can(user, ["role.manage"]);
-  const canManageEntities = can(user, ["entity.manage"]);
-  const canManageCatalog = can(user, ["catalog.manage"]);
-  const canReadAudit = can(user, ["audit.read"]);
+  const hasUserAccess = canReadUsers(user) || canManageUsers(user);
+  const hasRoleAccess = canManageRoles(user);
+  const hasEntityAccess = canReadEntities(user);
+  const hasCatalogAccess = canReadCatalog(user);
+  const hasAuditAccess = canReadAudit(user);
   const sections = useMemo<AdminSectionDefinition[]>(() => {
     const items: AdminSectionDefinition[] = [
       {
@@ -53,7 +61,7 @@ export function AdminFoundation() {
         path: adminSectionPaths.overview,
       },
     ];
-    if (canManageUsers) {
+    if (hasUserAccess) {
       items.push({
         group: "Access",
         description: "Manage users, roles, entity scope, and password policy.",
@@ -63,7 +71,7 @@ export function AdminFoundation() {
         path: adminSectionPaths.users,
       });
     }
-    if (canManageRoles) {
+    if (hasRoleAccess) {
       items.push({
         group: "Access",
         description: "Create tenant roles and manage permission bundles.",
@@ -73,7 +81,7 @@ export function AdminFoundation() {
         path: adminSectionPaths.roles,
       });
     }
-    if (canManageEntities) {
+    if (hasEntityAccess) {
       items.push(
         {
           group: "Organization",
@@ -93,7 +101,7 @@ export function AdminFoundation() {
         },
       );
     }
-    if (canManageCatalog) {
+    if (hasCatalogAccess) {
       items.push(
         {
           group: "Configuration",
@@ -113,7 +121,7 @@ export function AdminFoundation() {
         },
       );
     }
-    if (canReadAudit) {
+    if (hasAuditAccess) {
       items.push({
         group: "Governance",
         description: "Review tenant audit events, actors, IPs, and event details.",
@@ -124,7 +132,7 @@ export function AdminFoundation() {
       });
     }
     return items;
-  }, [canManageCatalog, canManageEntities, canManageRoles, canManageUsers, canReadAudit]);
+  }, [hasAuditAccess, hasCatalogAccess, hasEntityAccess, hasRoleAccess, hasUserAccess]);
 
   const requestedSection = adminSectionFromPath(location.pathname);
   const isRootAdminPath = location.pathname === "/admin";
@@ -139,7 +147,7 @@ export function AdminFoundation() {
     }
   }, [firstSection, isRootAdminPath]);
 
-  if (!canManageUsers && !canManageEntities && !canManageCatalog && !canReadAudit) {
+  if (!hasUserAccess && !hasEntityAccess && !hasCatalogAccess && !hasAuditAccess) {
     return <AccessDeniedState />;
   }
 
@@ -223,10 +231,6 @@ function renderAdminSection(
   if (section === "catalog") return <CatalogAdminPage />;
   if (section === "tender-rules") return <TenderTypeDaysAdminPage />;
   return <AdminAuditPage />;
-}
-
-function can(user: ReturnType<typeof useAuth>["user"], permissions: string[]) {
-  return Boolean(user?.isPlatformSuperAdmin || permissions.some((permission) => user?.permissions.includes(permission)));
 }
 
 function adminSectionFromPath(pathname: string): AdminSectionKey | null {

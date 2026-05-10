@@ -26,6 +26,7 @@ type ReportFilters = {
   ownerUserIds: string[];
   prReceiptMonths: string[];
   q?: string | undefined;
+  selectedIds: string[];
   stageCodes: number[];
   status?: "completed" | "running" | undefined;
   tenderTypeIds: string[];
@@ -198,6 +199,7 @@ async function queryExportRows(input: {
       "a.vendor_name",
       "a.po_number",
     ]);
+    applyUuidArrayFilter(where, values, input.filters.selectedIds, "a.id");
     values.push(input.filters.limit);
     const limitPosition = values.length;
     const result = await input.pool.query<ExportRow>(
@@ -232,6 +234,7 @@ async function queryExportRows(input: {
   const where = ["f.tenant_id = $1", "c.deleted_at is null"];
   applyScope(where, values, input.scope, "f.entity_id", "f.owner_user_id");
   applyCaseFactFilters(where, values, input.filters, ["c.pr_id", "c.tender_name", "c.pr_description"]);
+  applyUuidArrayFilter(where, values, input.filters.selectedIds, "f.case_id");
   values.push(input.filters.limit);
   const limitPosition = values.length;
   const result = await input.pool.query<ExportRow>(
@@ -268,6 +271,10 @@ async function queryStageTimeExport(input: {
   const where = ["f.tenant_id = $1", "c.deleted_at is null"];
   applyScope(where, values, input.scope, "f.entity_id", "f.owner_user_id");
   applyCaseFactFilters(where, values, input.filters, ["c.pr_id", "c.tender_name", "c.pr_description"]);
+  if (input.filters.selectedIds.length) {
+    values.push(input.filters.selectedIds.map(Number).filter((stageCode) => Number.isInteger(stageCode)));
+    where.push(`f.stage_code = any($${values.length}::int[])`);
+  }
   const result = await input.pool.query<ExportRow>(
     `
       select
@@ -300,6 +307,10 @@ async function queryRcPoExpiryExport(input: {
   applyDateFilters(where, values, input.filters, "e.rc_po_validity_date");
   if (input.filters.q) {
     applyTextSearch(where, values, input.filters.q, ["e.tender_description", "e.awarded_vendors"]);
+  }
+  if (input.filters.selectedIds.length) {
+    values.push(input.filters.selectedIds);
+    where.push(`coalesce(e.case_id, e.rc_po_plan_id, e.id)::text = any($${values.length}::text[])`);
   }
   values.push(input.filters.limit);
   const limitPosition = values.length;
@@ -380,6 +391,7 @@ function normalizeFilters(value: unknown): ReportFilters {
     ownerUserIds: stringArray(record.ownerUserIds, 200),
     prReceiptMonths: stringArray(record.prReceiptMonths, 60),
     q: optionalSearch(record.q),
+    selectedIds: stringArray(record.selectedIds, 500),
     stageCodes: intArray(record.stageCodes, 20).filter((stageCode) => stageCode >= 0 && stageCode <= 8),
     status: record.status === "completed" || record.status === "running" ? record.status : undefined,
     tenderTypeIds: stringArray(record.tenderTypeIds, 100),

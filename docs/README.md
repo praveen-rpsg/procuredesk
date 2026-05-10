@@ -13,6 +13,7 @@ This folder contains the complete project handover pack for the ProcureDesk ente
 | [05-security-operations-and-deployment.md](05-security-operations-and-deployment.md) | RBAC, sessions, audit, secrets, deployment, rollback, monitoring, support |
 | [06-imports-reports-and-roadmap.md](06-imports-reports-and-roadmap.md) | Import ecosystem, reporting engine, exports, known issues, technical debt, roadmap |
 | [07-procuredesk-production-deployment-on-clm-server.md](07-procuredesk-production-deployment-on-clm-server.md) | Step-by-step deployment runbook for existing CLM server with isolation and commands |
+| [08-feature-deployment-runbook.md](08-feature-deployment-runbook.md) | Repeatable step-by-step runbook for deploying future feature changes, migrations, restarts, smoke tests, and rollback |
 
 ## Project Summary
 

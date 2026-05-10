@@ -2,6 +2,18 @@ const defaultApiBaseUrl = "http://localhost:3100/api/v1";
 
 export const apiBaseUrl = readApiBaseUrl(import.meta.env as unknown);
 
+export class ApiError extends Error {
+  payload: unknown;
+  status: number;
+
+  constructor(message: string, status: number, payload: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.payload = payload;
+    this.status = status;
+  }
+}
+
 export async function apiRequest<TResponse>(
   path: string,
   options: RequestInit = {},
@@ -27,7 +39,7 @@ export async function apiRequest<TResponse>(
   if (!response.ok) {
     const payload: unknown = await response.json().catch((): null => null);
     const message = problemDetailMessage(payload);
-    throw new Error(message);
+    throw new ApiError(message, response.status, payload);
   }
 
   if (response.status === 204) {

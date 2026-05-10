@@ -120,13 +120,22 @@ export class ReportingService {
 
   async createExportJob(
     actor: AuthenticatedUser,
-    input: { filters: Record<string, unknown>; format: "csv" | "xlsx"; reportCode: ReportCode },
+    input: {
+      filters: Record<string, unknown>;
+      format: "csv" | "xlsx";
+      reportCode: ReportCode;
+      selectedIds?: string[] | undefined;
+    },
   ) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "report.export");
     return this.db.transaction(async () => {
+      const filters = input.selectedIds?.length
+        ? { ...input.filters, selectedIds: input.selectedIds }
+        : input.filters;
       const result = await this.repository.createExportJob({
         ...input,
+        filters,
         createdBy: actor.id,
         tenantId,
       });

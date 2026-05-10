@@ -201,6 +201,7 @@ export function createExportJob(payload: {
   filters?: Record<string, unknown>;
   format: ExportFormat;
   reportCode: ReportCode;
+  selectedIds?: string[];
 }) {
   return apiRequest<{ id: string }>("/reports/export-jobs", {
     body: JSON.stringify(payload),

@@ -19,6 +19,13 @@ import {
 import { getCaseSummary, listCases, type CaseListItem } from "../../procurement-cases/api/casesApi";
 import { listRcPoExpiry, type RcPoExpiryRow } from "../../planning/api/planningApi";
 import { useAuth } from "../../../shared/auth/AuthProvider";
+import {
+  canCreateCase,
+  canManageImports,
+  canManagePlanning,
+  canReadCases,
+  canReadReports,
+} from "../../../shared/auth/permissions";
 import { Button } from "../../../shared/ui/button/Button";
 import { ErrorState } from "../../../shared/ui/error-state/ErrorState";
 import { Skeleton } from "../../../shared/ui/skeleton/Skeleton";
@@ -110,30 +117,39 @@ function TableSkeleton({ rows = 4 }: { rows?: number }) {
 
 export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const { user } = useAuth();
-  const summary = useQuery({ queryFn: getCaseSummary, queryKey: ["case-summary"] });
+  const hasCaseAccess = canReadCases(user);
+  const hasCreateAccess = canCreateCase(user);
+  const hasPlanningAccess = canManagePlanning(user);
+  const hasReportAccess = canReadReports(user);
+  const hasImportAccess = canManageImports(user);
+  const summary = useQuery({ enabled: hasCaseAccess, queryFn: getCaseSummary, queryKey: ["case-summary"] });
   const recentCases = useQuery({
+    enabled: hasCaseAccess,
     queryFn: () => listCases({ limit: 6 }),
     queryKey: ["dashboard-recent-cases"],
   });
   const delayedCases = useQuery({
+    enabled: hasCaseAccess,
     queryFn: () => listCases({ isDelayed: true, limit: 5, status: "running" }),
     queryKey: ["dashboard-delayed-cases"],
   });
   const priorityCases = useQuery({
+    enabled: hasCaseAccess,
     queryFn: () => listCases({ limit: 5, priorityCase: true, status: "running" }),
     queryKey: ["dashboard-priority-cases"],
   });
   const assignedCases = useQuery({
-    enabled: Boolean(user?.id),
+    enabled: hasCaseAccess && Boolean(user?.id),
     queryFn: () => listCases({ limit: 5, ownerUserId: user?.id as string, status: "running" }),
     queryKey: ["dashboard-assigned-cases", user?.id],
   });
   const expiryRows = useQuery({
+    enabled: hasCaseAccess && hasPlanningAccess,
     queryFn: () => listRcPoExpiry({ days: 90, limit: 6 }),
     queryKey: ["dashboard-rc-po-expiry"],
   });
 
-  if (summary.error) {
+  if (hasCaseAccess && summary.error) {
     return <ErrorState message={summary.error.message} title="Could not load dashboard" />;
   }
 
@@ -203,15 +219,19 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             {greeting}, {firstName}
           </h1>
           <p>{todayFormatted} · Track cases, risks, expiry exposure, and import operations from one focused workspace.</p>
-          <div className="dashboard-hero-actions">
+        <div className="dashboard-hero-actions">
+            {hasCreateAccess ? (
             <Button onClick={() => onNavigate?.("new-case")}>
               <FilePlus2 size={16} />
               New Case
             </Button>
+            ) : null}
+            {hasReportAccess ? (
             <Button variant="secondary" onClick={() => onNavigate?.("reports")}>
               <BarChart3 size={16} />
               Open Reports
             </Button>
+            ) : null}
           </div>
         </div>
         <div className="dashboard-hero-card" aria-label="Procurement health summary">
@@ -270,31 +290,41 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           <ShieldCheck size={18} />
         </div>
         <div className="dashboard-quick-actions">
+          {hasCreateAccess ? (
           <button className="dashboard-action-card" type="button" onClick={() => onNavigate?.("new-case")}>
             <FilePlus2 size={16} />
             <span>New Case</span>
             <ArrowUpRight size={14} />
           </button>
+          ) : null}
+          {hasCaseAccess ? (
           <button className="dashboard-action-card" type="button" onClick={() => onNavigate?.("assigned-cases")}>
             <UserCheck size={16} />
             <span>Assigned To Me</span>
             <ArrowUpRight size={14} />
           </button>
+          ) : null}
+          {hasPlanningAccess ? (
           <button className="dashboard-action-card" type="button" onClick={() => onNavigate?.("planning")}>
             <Clock3 size={16} />
             <span>Expiry Plan</span>
             <ArrowUpRight size={14} />
           </button>
+          ) : null}
+          {hasImportAccess ? (
           <button className="dashboard-action-card" type="button" onClick={() => onNavigate?.("imports")}>
             <UploadCloud size={16} />
             <span>Import</span>
             <ArrowUpRight size={14} />
           </button>
+          ) : null}
+          {hasReportAccess ? (
           <button className="dashboard-action-card" type="button" onClick={() => onNavigate?.("reports")}>
             <TrendingUp size={16} />
             <span>Reports</span>
             <ArrowUpRight size={14} />
           </button>
+          ) : null}
         </div>
       </section>
 
@@ -322,13 +352,16 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             <span>Running workload</span>
             <strong>{summary.isLoading ? "-" : metrics.running}</strong>
           </div>
+          {hasReportAccess ? (
           <Button variant="secondary" onClick={() => onNavigate?.("reports")}>
             <BarChart3 size={16} />
             Reports
           </Button>
+          ) : null}
         </div>
       </section>
 
+      {hasCaseAccess ? (
       <section className="state-panel dashboard-recent-panel">
         <div className="detail-header">
           <div>
@@ -352,8 +385,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           />
         )}
       </section>
+      ) : null}
 
       {/* Assigned to me */}
+      {hasCaseAccess ? (
       <section className="state-panel dashboard-assigned-panel">
         <div className="detail-header">
           <div>
@@ -378,8 +413,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           />
         )}
       </section>
+      ) : null}
 
       {/* Delayed cases */}
+      {hasCaseAccess ? (
       <section className="state-panel dashboard-delayed-panel">
         <div className="detail-header">
           <div>
@@ -403,8 +440,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           />
         )}
       </section>
+      ) : null}
 
       {/* Priority cases */}
+      {hasCaseAccess ? (
       <section className="state-panel dashboard-priority-panel">
         <div className="detail-header">
           <div>
@@ -428,8 +467,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           />
         )}
       </section>
+      ) : null}
 
       {/* RC/PO expiry */}
+      {hasCaseAccess && hasPlanningAccess ? (
       <section className="state-panel dashboard-expiry-panel">
         <div className="detail-header">
           <div>
@@ -454,6 +495,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           />
         )}
       </section>
+      ) : null}
     </section>
   );
 }

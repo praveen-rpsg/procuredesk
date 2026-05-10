@@ -5,6 +5,7 @@ import { useState } from "react";
 import { listAuditEvents } from "../../operations/api/operationsApi";
 import { deleteCase, getCase, type CaseDetail } from "../api/casesApi";
 import { useAuth } from "../../../shared/auth/AuthProvider";
+import { canDeleteCase, canReadAudit, canUpdateCase } from "../../../shared/auth/permissions";
 import { ActivityFeed } from "../../../shared/ui/activity-feed/ActivityFeed";
 import { Button } from "../../../shared/ui/button/Button";
 import { ConfirmationDialog } from "../../../shared/ui/confirmation-dialog/ConfirmationDialog";
@@ -40,15 +41,15 @@ export function CaseDetailPanel({ caseId, onDeleted, onEdit }: CaseDetailPanelPr
   const { notify } = useToast();
   const [deleteReason, setDeleteReason] = useState("");
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-  const canDelete = Boolean(user?.isPlatformSuperAdmin || user?.permissions.includes("case.delete"));
-  const canReadAudit = Boolean(user?.isPlatformSuperAdmin || user?.permissions.includes("audit.read"));
+  const canDelete = canDeleteCase(user);
+  const hasAuditAccess = canReadAudit(user);
   const detail = useQuery({
     enabled: Boolean(caseId),
     queryFn: () => getCase(caseId as string),
     queryKey: ["case", caseId],
   });
   const activity = useQuery({
-    enabled: Boolean(caseId) && canReadAudit,
+    enabled: Boolean(caseId) && hasAuditAccess,
     queryFn: () =>
       listAuditEvents({
         limit: 8,
@@ -95,6 +96,7 @@ export function CaseDetailPanel({ caseId, onDeleted, onEdit }: CaseDetailPanelPr
   }
 
   const kase = detail.data;
+  const canEdit = canUpdateCase(user, kase);
   return (
     <section className="case-preview-panel">
       <div className="case-preview-hero">
@@ -108,7 +110,7 @@ export function CaseDetailPanel({ caseId, onDeleted, onEdit }: CaseDetailPanelPr
             {kase.isDelayed ? <StatusBadge tone="danger">Delayed</StatusBadge> : null}
             {kase.priorityCase ? <StatusBadge tone="warning">Priority</StatusBadge> : null}
           </div>
-          {onEdit ? (
+          {onEdit && canEdit ? (
             <Button onClick={onEdit} variant="secondary">
               <Pencil size={16} />
               Edit
@@ -170,7 +172,7 @@ export function CaseDetailPanel({ caseId, onDeleted, onEdit }: CaseDetailPanelPr
 
       <section className="case-preview-section">
         <p className="eyebrow">Activity</p>
-        {!canReadAudit ? (
+        {!hasAuditAccess ? (
           <p className="hero-copy">Activity is available to users with audit access.</p>
         ) : activity.isLoading ? (
           <Skeleton height={18} />

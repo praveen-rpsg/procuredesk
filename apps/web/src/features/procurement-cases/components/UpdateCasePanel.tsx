@@ -3,7 +3,9 @@ import { useEffect, useMemo, useState, type Dispatch, type FormEvent, type SetSt
 
 import { listAssignableOwners } from "../../admin/api/adminApi";
 import { assignCaseOwner, getCase, updateCase, updateDelay, updateMilestones, type CaseDetail } from "../api/casesApi";
+import { ApiError } from "../../../shared/api/client";
 import { useAuth } from "../../../shared/auth/AuthProvider";
+import { canAssignCaseOwner, canManageCaseDelay, canUpdateCase } from "../../../shared/auth/permissions";
 import { Button } from "../../../shared/ui/button/Button";
 import { FormField, TextInput } from "../../../shared/ui/form/FormField";
 import { Select } from "../../../shared/ui/form/Select";
@@ -73,17 +75,15 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
   const [showMilestoneErrors, setShowMilestoneErrors] = useState(false);
   const [delayExternalDays, setDelayExternalDays] = useState("");
   const [delayReason, setDelayReason] = useState("");
-  const canReassignOwner = Boolean(
-    user?.isPlatformSuperAdmin ||
-      user?.permissions.includes("case.update.all") ||
-      user?.permissions.includes("case.update.entity"),
-  );
 
   const detail = useQuery({
     enabled: Boolean(caseId),
     queryFn: () => getCase(caseId as string),
     queryKey: ["case", caseId],
   });
+  const canEditCase = Boolean(detail.data && canUpdateCase(user, detail.data));
+  const canEditDelay = Boolean(detail.data && canManageCaseDelay(user, detail.data));
+  const canReassignOwner = Boolean(detail.data && canAssignCaseOwner(user, detail.data));
   const assignableOwners = useQuery({
     enabled: Boolean(detail.data?.entityId) && canReassignOwner,
     queryFn: () => listAssignableOwners(detail.data?.entityId as string),
@@ -124,8 +124,10 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
     setShowMilestoneErrors(false);
   }, [detail.data]);
 
-  const milestoneErrors = useMemo(() => validateMilestones(milestones), [milestones]);
-  const visibleMilestoneErrors: MilestoneErrors = showMilestoneErrors ? milestoneErrors : {};
+  const milestoneErrors = useMemo(
+    () => validateMilestones(milestones, detail.data?.prReceiptDate),
+    [detail.data?.prReceiptDate, milestones],
+  );
   const caseErrors = useMemo(
     () =>
       validateCaseForm({
@@ -209,6 +211,18 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
       toast.notify({ message: "Milestones updated.", tone: "success" });
     },
   });
+  const serverChronologyErrors = useMemo(
+    () => extractChronologyErrors(updateMilestoneMutation.error),
+    [updateMilestoneMutation.error],
+  );
+  const serverMilestoneErrors = useMemo(
+    () => mapChronologyErrorsToFields(serverChronologyErrors),
+    [serverChronologyErrors],
+  );
+  const visibleMilestoneErrors: MilestoneErrors = {
+    ...(showMilestoneErrors ? milestoneErrors : {}),
+    ...serverMilestoneErrors,
+  };
 
   const delayMutation = useMutation({
     mutationFn: () =>
@@ -224,6 +238,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
 
   function handleCaseSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canEditCase) return;
     setShowCaseErrors(true);
     if (Object.keys(caseErrors).length > 0) return;
     if (caseId) updateCaseMutation.mutate();
@@ -231,6 +246,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
 
   function handleMilestoneSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canEditCase) return;
     setShowMilestoneErrors(true);
     if (requiresApprovedAmount(milestones) && !approvedAmount.trim()) {
       setShowCaseErrors(true);
@@ -242,6 +258,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
 
   function handleDelaySubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canEditDelay) return;
     setShowDelayErrors(true);
     if (Object.keys(delayErrors).length > 0) return;
     if (caseId) delayMutation.mutate();
@@ -267,6 +284,23 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
     );
   }
 
+  if (!canEditCase && !canEditDelay && !canReassignOwner) {
+    return (
+      <section className="state-panel case-detail-grid-wide case-edit-panel">
+        <div className="detail-header">
+          <div>
+            <p className="eyebrow">Update</p>
+            <h2>Read-only case</h2>
+          </div>
+        </div>
+        <p className="hero-copy">
+          Your role can view this case, but it cannot update details, milestones, delay information, or ownership for
+          this entity.
+        </p>
+      </section>
+    );
+  }
+
   return (
     <section className="state-panel case-detail-grid-wide case-edit-panel">
       <div className="detail-header">
@@ -277,6 +311,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
       </div>
 
       <div className="update-workspace-grid">
+        {canEditCase ? (
         <form className="stack-form case-edit-card case-edit-card-primary" onSubmit={handleCaseSubmit}>
           <p className="eyebrow">Basic Details</p>
           <FormField error={visibleCaseErrors.tenderName ?? ""} label="Tender Name">
@@ -323,7 +358,9 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
             Save Details
           </Button>
         </form>
+        ) : null}
 
+        {canReassignOwner ? (
         <form className="stack-form case-edit-card" onSubmit={handleOwnerSubmit}>
           <p className="eyebrow">Ownership And Target</p>
           <FormField
@@ -350,7 +387,9 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
             Save Owner
           </Button>
         </form>
+        ) : null}
 
+        {canEditDelay ? (
         <form className="stack-form case-edit-card" onSubmit={handleDelaySubmit}>
           <p className="eyebrow">Delay</p>
           <FormField error={visibleDelayErrors.delayExternalDays ?? ""} label="External Delay Days">
@@ -375,8 +414,10 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
             Save Delay
           </Button>
         </form>
+        ) : null}
       </div>
 
+      {canEditCase ? (
       <form className="stack-form case-edit-card case-edit-milestones" onSubmit={handleMilestoneSubmit}>
         <div className="case-edit-section-heading">
           <div>
@@ -385,6 +426,12 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
           </div>
         </div>
         <div className="milestone-form-grid">
+          <FormField
+            helperText="Milestones must start on or after this PR receipt date."
+            label="PR Receipt Date"
+          >
+            <TextInput disabled type="date" value={detail.data?.prReceiptDate ?? ""} />
+          </FormField>
           <DateField
             error={visibleMilestoneErrors.nitInitiationDate}
             label="NIT Initiation"
@@ -491,11 +538,25 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
           <div className="form-error">Fix the highlighted milestone fields before saving.</div>
         ) : null}
         <ChangedFields fields={milestoneChangedFields} />
-        {updateMilestoneMutation.error ? <div className="form-error">{updateMilestoneMutation.error.message}</div> : null}
+        {serverChronologyErrors.length > 0 ? (
+          <div className="form-error form-error-list">
+            <div>
+              <strong>Milestones could not be saved.</strong>
+              <ul>
+                {serverChronologyErrors.map((error) => (
+                  <li key={error}>{error}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        ) : updateMilestoneMutation.error ? (
+          <div className="form-error">{updateMilestoneMutation.error.message}</div>
+        ) : null}
         <Button disabled={updateMilestoneMutation.isPending} type="submit">
           Save Milestones
         </Button>
       </form>
+      ) : null}
     </section>
   );
 }
@@ -645,7 +706,7 @@ function validateDelayForm(input: { delayExternalDays: string; delayReason: stri
   return errors;
 }
 
-function validateMilestones(value: MilestoneFormState): MilestoneErrors {
+function validateMilestones(value: MilestoneFormState, prReceiptDate?: string | null): MilestoneErrors {
   const errors: MilestoneErrors = {};
   for (const key of dateMilestoneKeys) {
     if (value[key] && !isDateString(value[key])) {
@@ -653,6 +714,14 @@ function validateMilestones(value: MilestoneFormState): MilestoneErrors {
     }
   }
 
+  if (
+    prReceiptDate &&
+    isDateString(prReceiptDate) &&
+    isDateString(value.nitInitiationDate) &&
+    value.nitInitiationDate < prReceiptDate
+  ) {
+    errors.nitInitiationDate = "NIT Initiation cannot be before PR Receipt Date.";
+  }
   requireDateOrder(errors, value, "nitInitiationDate", "nitApprovalDate", "NIT Approval cannot be before NIT Initiation.");
   requireDateOrder(errors, value, "nitApprovalDate", "nitPublishDate", "NIT Publish cannot be before NIT Approval.");
   requireDateOrder(errors, value, "nitPublishDate", "bidReceiptDate", "Bid Receipt cannot be before NIT Publish.");
@@ -705,6 +774,43 @@ function validateMilestones(value: MilestoneFormState): MilestoneErrors {
   }
 
   return errors;
+}
+
+function extractChronologyErrors(error: Error | null): string[] {
+  if (!(error instanceof ApiError)) return [];
+  if (!error.payload || typeof error.payload !== "object") return [];
+  const chronologyErrors = (error.payload as Record<string, unknown>).chronologyErrors;
+  if (!Array.isArray(chronologyErrors)) return [];
+  return chronologyErrors.filter((value): value is string => typeof value === "string");
+}
+
+function mapChronologyErrorsToFields(errors: string[]): MilestoneErrors {
+  const fieldErrors: MilestoneErrors = {};
+  for (const error of errors) {
+    const field = fieldForChronologyError(error);
+    if (field && !fieldErrors[field]) {
+      fieldErrors[field] = error;
+    }
+  }
+  return fieldErrors;
+}
+
+function fieldForChronologyError(error: string): keyof MilestoneFormState | null {
+  if (error.startsWith("NIT Initiation")) return "nitInitiationDate";
+  if (error.startsWith("NIT Approval")) return "nitApprovalDate";
+  if (error.startsWith("NIT Publish")) return "nitPublishDate";
+  if (error.startsWith("Bid Receipt")) return "bidReceiptDate";
+  if (error.startsWith("Bidders participated")) return "biddersParticipated";
+  if (error.startsWith("Commercial Evaluation")) return "commercialEvaluationDate";
+  if (error.startsWith("Technical Evaluation")) return "technicalEvaluationDate";
+  if (error.startsWith("Commercial / Technical Evaluation")) return "technicalEvaluationDate";
+  if (error.startsWith("Qualified bidders")) return "qualifiedBidders";
+  if (error.startsWith("NFA Submission")) return "nfaSubmissionDate";
+  if (error.startsWith("NFA Approval")) return "nfaApprovalDate";
+  if (error.startsWith("LOI")) return "loiIssuedDate";
+  if (error.startsWith("RC/PO Validity")) return "rcPoValidity";
+  if (error.startsWith("RC/PO Award")) return "rcPoAwardDate";
+  return null;
 }
 
 function requiresApprovedAmount(value: MilestoneFormState) {

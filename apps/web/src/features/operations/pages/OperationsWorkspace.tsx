@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, ListChecks, MailPlus, ShieldCheck, TriangleAlert } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   createNotificationJob,
@@ -14,10 +14,13 @@ import {
   type NotificationRule,
   type NotificationPreviewRow,
 } from "../api/operationsApi";
+import { useAuth } from "../../../shared/auth/AuthProvider";
+import { canManageNotifications, canReadAudit } from "../../../shared/auth/permissions";
 import { Button } from "../../../shared/ui/button/Button";
 import { FormField, TextInput } from "../../../shared/ui/form/FormField";
 import { PageHeader } from "../../../shared/ui/page-header/PageHeader";
 import { navigateToAppPath, useAppLocation } from "../../../shared/routing/appLocation";
+import { AccessDeniedState, NotFoundState } from "../../../shared/ui/app-states/AppStates";
 import { SecondaryNav } from "../../../shared/ui/secondary-nav/SecondaryNav";
 import { Skeleton } from "../../../shared/ui/skeleton/Skeleton";
 import { StatusBadge } from "../../../shared/ui/status/StatusBadge";
@@ -76,9 +79,20 @@ const operationsSectionPaths: Record<OperationsSectionKey, string> = {
 
 export function OperationsWorkspace() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const { notify } = useToast();
   const location = useAppLocation();
-  const activeSection = operationsSectionFromPath(location.pathname) ?? "audit";
+  const requestedSection = operationsSectionFromPath(location.pathname);
+  const hasAuditAccess = canReadAudit(user);
+  const hasNotificationAccess = canManageNotifications(user);
+  const visibleSections = useMemo(
+    () =>
+      operationsSections.filter((section) =>
+        sectionRequiresAudit(section.key) ? hasAuditAccess : hasNotificationAccess,
+      ),
+    [hasAuditAccess, hasNotificationAccess],
+  );
+  const activeSection = requestedSection ?? visibleSections[0]?.key ?? "audit";
   const [previewType, setPreviewType] = useState<"entity_monthly_digest" | "rc_po_expiry" | "stale_tender">("stale_tender");
   const [recipientEmail, setRecipientEmail] = useState("");
   const [subject, setSubject] = useState("");
@@ -87,19 +101,44 @@ export function OperationsWorkspace() {
   const [ruleEnabled, setRuleEnabled] = useState(true);
   const [ruleThresholdDays, setRuleThresholdDays] = useState("14");
 
-  const audit = useQuery({ queryFn: () => listAuditEvents(), queryKey: ["audit-events"] });
-  const deadLetters = useQuery({ queryFn: listDeadLetterEvents, queryKey: ["dead-letter-events"] });
-  const rules = useQuery({ queryFn: listNotificationRules, queryKey: ["notification-rules"] });
+  const audit = useQuery({
+    enabled: activeSection === "audit" && hasAuditAccess,
+    queryFn: () => listAuditEvents(),
+    queryKey: ["audit-events"],
+  });
+  const deadLetters = useQuery({
+    enabled: activeSection === "dead-letters" && hasAuditAccess,
+    queryFn: listDeadLetterEvents,
+    queryKey: ["dead-letter-events"],
+  });
+  const rules = useQuery({
+    enabled: activeSection === "rules" && hasNotificationAccess,
+    queryFn: listNotificationRules,
+    queryKey: ["notification-rules"],
+  });
   const preview = useQuery({
+    enabled: activeSection === "preview" && hasNotificationAccess,
     queryFn: () => notificationPreview(previewType),
     queryKey: ["notification-preview", previewType],
   });
 
   useEffect(() => {
-    if (location.pathname === "/operations") {
-      navigateToAppPath(operationsSectionPaths.audit, { replace: true });
+    if (location.pathname === "/operations" && visibleSections[0]) {
+      navigateToAppPath(operationsSectionPaths[visibleSections[0].key], { replace: true });
     }
-  }, [location.pathname]);
+  }, [location.pathname, visibleSections]);
+
+  if (!visibleSections.length) {
+    return <AccessDeniedState />;
+  }
+
+  if (!requestedSection && location.pathname !== "/operations") {
+    return <NotFoundState />;
+  }
+
+  if (!visibleSections.some((section) => section.key === activeSection)) {
+    return <AccessDeniedState />;
+  }
 
   const notificationMutation = useMutation({
     mutationFn: () =>
@@ -138,7 +177,7 @@ export function OperationsWorkspace() {
         <SecondaryNav
           activeKey={activeSection}
           ariaLabel="Operations sections"
-          items={operationsSections}
+          items={visibleSections}
           onChange={(key) => navigateToAppPath(operationsSectionPaths[key])}
         />
       </section>
@@ -361,4 +400,8 @@ export function OperationsWorkspace() {
 function operationsSectionFromPath(pathname: string): OperationsSectionKey | null {
   const match = Object.entries(operationsSectionPaths).find(([, path]) => pathname === path);
   return match?.[0] as OperationsSectionKey | null;
+}
+
+function sectionRequiresAudit(section: OperationsSectionKey): boolean {
+  return section === "audit" || section === "dead-letters";
 }

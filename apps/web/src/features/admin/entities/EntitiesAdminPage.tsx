@@ -9,6 +9,8 @@ import {
   updateAdminEntity,
   type AdminEntity,
 } from "../api/adminApi";
+import { useAuth } from "../../../shared/auth/AuthProvider";
+import { canManageEntities } from "../../../shared/auth/permissions";
 import { Button } from "../../../shared/ui/button/Button";
 import { ConfirmationDialog } from "../../../shared/ui/confirmation-dialog/ConfirmationDialog";
 import { EmptyState } from "../../../shared/ui/empty-state/EmptyState";
@@ -32,6 +34,7 @@ const entityColumns = (
   onDelete: (entity: AdminEntity) => void,
   onEdit: (entity: AdminEntity) => void,
   onManageDepartments: ((entityId: string) => void) | undefined,
+  canManage: boolean,
 ): DataTableColumn<AdminEntity>[] => [
   { key: "code", header: "Code", render: (row) => row.code },
   { key: "name", header: "Entity Name", render: (row) => row.name },
@@ -58,6 +61,8 @@ const entityColumns = (
         >
           <FolderTree size={17} />
         </IconButton>
+        {canManage ? (
+        <>
         <IconButton aria-label={`Edit ${row.name}`} onClick={() => onEdit(row)} tooltip="Edit entity">
           <Pencil size={17} />
         </IconButton>
@@ -70,6 +75,8 @@ const entityColumns = (
         >
           <Trash2 size={17} />
         </IconButton>
+        </>
+        ) : null}
       </div>
     ),
   },
@@ -77,7 +84,9 @@ const entityColumns = (
 
 export function EntitiesAdminPage({ onManageDepartments }: EntitiesAdminPageProps) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const { notify } = useToast();
+  const canManage = canManageEntities(user);
   const entities = useQuery({ queryFn: listAdminEntities, queryKey: ["admin-entities"] });
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -156,11 +165,13 @@ export function EntitiesAdminPage({ onManageDepartments }: EntitiesAdminPageProp
 
   const onCreate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!canManage) return;
     createMutation.mutate();
   };
 
   const onUpdate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!canManage) return;
     updateMutation.mutate();
   };
 
@@ -178,10 +189,12 @@ export function EntitiesAdminPage({ onManageDepartments }: EntitiesAdminPageProp
     <section className="admin-section">
       <PageHeader
         actions={
+          canManage ? (
           <Button onClick={() => setIsCreateOpen(true)}>
             <Plus size={18} />
             New Entity
           </Button>
+          ) : null
         }
         eyebrow="Admin"
         title="Entities"
@@ -211,7 +224,7 @@ export function EntitiesAdminPage({ onManageDepartments }: EntitiesAdminPageProp
             <p className="inline-error">{entities.error.message}</p>
           ) : (entities.data ?? []).length > 0 ? (
             <DataTable
-              columns={entityColumns(setEntityToDelete, openEdit, onManageDepartments)}
+              columns={entityColumns(setEntityToDelete, openEdit, onManageDepartments, canManage)}
               getRowKey={(row) => row.id}
               rows={entities.data ?? []}
             />

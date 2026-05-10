@@ -14,6 +14,7 @@ export function useReportExport(
   reportCode: ReportCode,
   exportFilters: Record<string, unknown>,
   savedViewFilters: Record<string, unknown>,
+  selectedIds: string[],
   savedViewName: string,
   setSavedViewName: (name: string) => void,
 ) {
@@ -31,15 +32,23 @@ export function useReportExport(
   });
 
   const exportMutation = useMutation({
-    mutationFn: () =>
-      createExportJob({
+    mutationFn: () => {
+      const payload = {
         filters: exportFilters,
         format: exportFormat,
         reportCode,
-      }),
+        ...(selectedIds.length ? { selectedIds } : {}),
+      };
+      return createExportJob(payload);
+    },
     onSuccess: (result) => {
       setExportJobId(result.id);
-      notify({ message: `Export queued: ${result.id}`, tone: "success" });
+      notify({
+        message: selectedIds.length
+          ? `Export queued for ${selectedIds.length} selected rows.`
+          : `Export queued: ${result.id}`,
+        tone: "success",
+      });
     },
   });
 
@@ -69,6 +78,7 @@ export function useReportExport(
     exportJobId,
     exportMutation,
     exportStatus,
+    selectedExportCount: selectedIds.length,
     savedViewMutation,
     setExportFormat,
     setExportJobId,

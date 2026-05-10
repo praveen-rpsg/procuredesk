@@ -19,13 +19,20 @@ import {
   Trash2,
   TriangleAlert,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { listAuditEvents } from "../../operations/api/operationsApi";
 import { AwardsPanel } from "../../awards/components/AwardsPanel";
 import { UpdateCasePanel } from "../components/UpdateCasePanel";
 import { deleteCase, getCase, type CaseDetail } from "../api/casesApi";
 import { useAuth } from "../../../shared/auth/AuthProvider";
+import {
+  canAssignCaseOwner,
+  canDeleteCase,
+  canManageCaseDelay,
+  canReadAudit,
+  canUpdateCase,
+} from "../../../shared/auth/permissions";
 import { ActivityFeed } from "../../../shared/ui/activity-feed/ActivityFeed";
 import { Button } from "../../../shared/ui/button/Button";
 import { ConfirmationDialog } from "../../../shared/ui/confirmation-dialog/ConfirmationDialog";
@@ -78,8 +85,8 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<CaseDetailTabKey>("overview");
 
-  const canDelete = Boolean(user?.isPlatformSuperAdmin || user?.permissions.includes("case.delete"));
-  const canReadAudit = Boolean(user?.isPlatformSuperAdmin || user?.permissions.includes("audit.read"));
+  const canDelete = canDeleteCase(user);
+  const hasAuditAccess = canReadAudit(user);
 
   const detail = useQuery({
     enabled: Boolean(caseId),
@@ -88,11 +95,33 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
   });
 
   const activity = useQuery({
-    enabled: Boolean(caseId) && canReadAudit,
+    enabled: Boolean(caseId) && hasAuditAccess,
     queryFn: () =>
       listAuditEvents({ limit: 10, targetId: caseId, targetType: "procurement_case" }),
     queryKey: ["case-activity", caseId],
   });
+  const canOpenUpdate = Boolean(
+    detail.data &&
+      (canUpdateCase(user, detail.data) ||
+        canManageCaseDelay(user, detail.data) ||
+        canAssignCaseOwner(user, detail.data)),
+  );
+  const visibleTabs = useMemo(
+    () =>
+      caseDetailTabs.filter((tab) => {
+        if (tab.key === "activity") return hasAuditAccess;
+        if (tab.key === "update") return canOpenUpdate;
+        return true;
+      }),
+    [canOpenUpdate, hasAuditAccess],
+  );
+
+  useEffect(() => {
+    if (!detail.data) return;
+    if (!visibleTabs.some((tab) => tab.key === activeTab)) {
+      setActiveTab("overview");
+    }
+  }, [activeTab, detail.data, visibleTabs]);
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteCase(caseId, deleteReason.trim() || null),
@@ -309,7 +338,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
         <SecondaryNav
           activeKey={activeTab}
           ariaLabel="Case detail sections"
-          items={caseDetailTabs}
+          items={visibleTabs}
           onChange={setActiveTab}
         />
       </div>
@@ -427,7 +456,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
         {activeTab === "activity" ? (
           <div className="case-page-main case-page-main-contained">
             <SectionCard title="Activity">
-              {!canReadAudit ? (
+              {!hasAuditAccess ? (
                 <p className="hero-copy">Activity is available to users with audit access.</p>
               ) : activity.isLoading ? (
                 <Skeleton height={16} />

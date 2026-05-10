@@ -32,6 +32,7 @@ import {
 } from "../api/casesApi";
 import { CaseDetailPage } from "./CaseDetailPage";
 import { useAuth } from "../../../shared/auth/AuthProvider";
+import { canCreateCase, canPotentiallyUpdateCaseFromList, canRestoreCase } from "../../../shared/auth/permissions";
 import { useDebouncedValue } from "../../../shared/hooks/useDebouncedValue";
 import { navigateToAppPath, useAppLocation } from "../../../shared/routing/appLocation";
 import { Button } from "../../../shared/ui/button/Button";
@@ -169,7 +170,8 @@ function CasesWorkspaceList({ assignedToMeSignal = 0, createCaseSignal = 0 }: Ca
   const debouncedQ = useDebouncedValue(q, 350);
   const currentCursor = pageCursors[pageCursors.length - 1] || undefined;
   const currentPageIndex = pageCursors.length - 1;
-  const canRestore = Boolean(user?.isPlatformSuperAdmin || user?.permissions.includes("case.restore"));
+  const canCreate = canCreateCase(user);
+  const canRestore = canRestoreCase(user);
 
   const entities = useQuery({ queryFn: listAdminEntities, queryKey: ["case-filter-entities"] });
   const catalog = useQuery({ queryFn: getCatalogSnapshot, queryKey: ["case-filter-catalog"] });
@@ -242,10 +244,10 @@ function CasesWorkspaceList({ assignedToMeSignal = 0, createCaseSignal = 0 }: Ca
   ]);
 
   useEffect(() => {
-    if (createCaseSignal > 0) {
+    if (createCaseSignal > 0 && canCreate) {
       setIsCreateOpen(true);
     }
-  }, [createCaseSignal]);
+  }, [canCreate, createCaseSignal]);
 
   useEffect(() => {
     if (assignedToMeSignal > 0 && user?.id) {
@@ -412,10 +414,12 @@ function CasesWorkspaceList({ assignedToMeSignal = 0, createCaseSignal = 0 }: Ca
               <PanelRightOpen size={15} />
               Preview
             </Button>
+            {canPotentiallyUpdateCaseFromList(user, row) ? (
             <Button variant="secondary" size="sm" onClick={() => setEditCaseId(row.id)}>
               <Pencil size={15} />
               Edit
             </Button>
+            ) : null}
             <Button variant="secondary" size="sm" onClick={() => navigateToAppPath(`/cases/${row.id}`)}>
               <ExternalLink size={15} />
               Open
@@ -424,7 +428,7 @@ function CasesWorkspaceList({ assignedToMeSignal = 0, createCaseSignal = 0 }: Ca
         ),
       },
     ],
-    [entityNameById, selectedCaseIds],
+    [entityNameById, selectedCaseIds, user],
   );
   const columns = useMemo(
     () => allColumns.filter((column) => visibleColumnKeys.includes(column.key)),
@@ -480,7 +484,7 @@ function CasesWorkspaceList({ assignedToMeSignal = 0, createCaseSignal = 0 }: Ca
               <Download size={16} />
               Export Selected{selectedRows.length ? ` (${selectedRows.length})` : ""}
             </Button>
-            <Button onClick={() => setIsCreateOpen(true)}>New Case</Button>
+            {canCreate ? <Button onClick={() => setIsCreateOpen(true)}>New Case</Button> : null}
           </>
         }
         eyebrow="Procurement"

@@ -9,6 +9,8 @@ import {
   updateTenderType,
   type TenderTypeRule,
 } from "../api/adminApi";
+import { useAuth } from "../../../shared/auth/AuthProvider";
+import { canManageCatalog } from "../../../shared/auth/permissions";
 import { Badge } from "../../../shared/ui/badge/Badge";
 import { Button } from "../../../shared/ui/button/Button";
 import { ConfirmationDialog } from "../../../shared/ui/confirmation-dialog/ConfirmationDialog";
@@ -39,6 +41,7 @@ const emptyForm: TenderTypeFormState = {
 const tenderTypeColumns = (
   onDelete: (tenderType: TenderTypeRule) => void,
   onEdit: (rule: TenderTypeRule) => void,
+  canManage: boolean,
 ): DataTableColumn<TenderTypeRule>[] => [
   {
     key: "name",
@@ -78,7 +81,8 @@ const tenderTypeColumns = (
   {
     key: "action",
     header: "Actions",
-    render: (row) => (
+    render: (row) =>
+      canManage ? (
       <div className="row-actions">
         <IconButton
           aria-label={`Edit ${row.name}`}
@@ -101,13 +105,17 @@ const tenderTypeColumns = (
           <Trash2 size={17} />
         </IconButton>
       </div>
-    ),
+      ) : (
+        "-"
+      ),
   },
 ];
 
 export function TenderTypeDaysAdminPage() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const { notify } = useToast();
+  const canManage = canManageCatalog(user);
   const catalog = useQuery({ queryFn: getCatalogSnapshot, queryKey: ["catalog-snapshot"] });
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -183,11 +191,13 @@ export function TenderTypeDaysAdminPage() {
 
   const onCreate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!canManage) return;
     createMutation.mutate();
   };
 
   const onUpdate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!canManage) return;
     updateMutation.mutate();
   };
 
@@ -206,10 +216,12 @@ export function TenderTypeDaysAdminPage() {
     <section className="admin-section">
       <PageHeader
         actions={
+          canManage ? (
           <Button onClick={() => setIsCreateOpen(true)}>
             <Plus size={18} />
             New Tender Type
           </Button>
+          ) : null
         }
         eyebrow="Admin"
         title="Tender Types"
@@ -263,7 +275,7 @@ export function TenderTypeDaysAdminPage() {
             <p className="inline-error">{catalog.error.message}</p>
           ) : (catalog.data?.tenderTypes ?? []).length > 0 ? (
             <DataTable
-              columns={tenderTypeColumns(setTenderTypeToDelete, openEdit)}
+              columns={tenderTypeColumns(setTenderTypeToDelete, openEdit, canManage)}
               emptyMessage="No tender types found."
               getRowKey={(row) => row.id}
               rows={catalog.data?.tenderTypes ?? []}

@@ -13,6 +13,8 @@ import {
   type CatalogReferenceCategory,
   type CatalogReferenceValue,
 } from "../api/adminApi";
+import { useAuth } from "../../../shared/auth/AuthProvider";
+import { canManageCatalog } from "../../../shared/auth/permissions";
 import { Badge } from "../../../shared/ui/badge/Badge";
 import { Button } from "../../../shared/ui/button/Button";
 import { ConfirmationDialog } from "../../../shared/ui/confirmation-dialog/ConfirmationDialog";
@@ -36,7 +38,9 @@ function normalizeCategoryCode(value: string) {
 
 export function CatalogAdminPage() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const { notify } = useToast();
+  const canManage = canManageCatalog(user);
   const catalog = useQuery({ queryFn: getCatalogSnapshot, queryKey: ["catalog-snapshot"] });
   const [newValue, setNewValue] = useState({ categoryCode: "", label: "" });
   const [newCategory, setNewCategory] = useState({ code: "", name: "" });
@@ -174,21 +178,25 @@ export function CatalogAdminPage() {
 
   const onCreateCategory = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!canManage) return;
     createCategoryMutation.mutate();
   };
 
   const onUpdateCategory = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!canManage) return;
     updateCategoryMutation.mutate();
   };
 
   const onCreateValue = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!canManage) return;
     createValueMutation.mutate();
   };
 
   const onUpdateValue = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!canManage) return;
     updateValueMutation.mutate();
   };
 
@@ -225,12 +233,15 @@ export function CatalogAdminPage() {
               categories can be added, renamed, disabled, or removed when they are empty.
             </p>
           </div>
+          {canManage ? (
           <Button onClick={() => setIsCategoryOpen(true)}>
             <FolderPlus size={18} />
             New Category
           </Button>
+          ) : null}
         </section>
 
+        {canManage ? (
         <section className="state-panel">
           <div className="detail-header">
             <div>
@@ -287,6 +298,7 @@ export function CatalogAdminPage() {
             <p className="inline-error">{createValueMutation.error.message}</p>
           ) : null}
         </section>
+        ) : null}
 
         {catalog.isLoading ? (
           <section className="state-panel">
@@ -321,7 +333,7 @@ export function CatalogAdminPage() {
                     </StatusBadge>
                     {category.isSystemCategory ? (
                       <LockKeyhole className="choice-list-lock" size={17} />
-                    ) : (
+                    ) : canManage ? (
                       <div className="row-actions">
                         <IconButton
                           aria-label={`Edit ${category.name}`}
@@ -344,7 +356,7 @@ export function CatalogAdminPage() {
                           <Trash2 size={17} />
                         </IconButton>
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 </div>
                 {values.length > 0 ? (
@@ -359,6 +371,7 @@ export function CatalogAdminPage() {
                           <StatusBadge tone={value.isActive ? "success" : "neutral"}>
                             {value.isActive ? "Active" : "Inactive"}
                           </StatusBadge>
+                          {canManage ? (
                           <div className="row-actions">
                             <IconButton
                               aria-label={`Edit ${value.label}`}
@@ -381,6 +394,7 @@ export function CatalogAdminPage() {
                               <Trash2 size={17} />
                             </IconButton>
                           </div>
+                          ) : null}
                         </div>
                       </div>
                     ))}

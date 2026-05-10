@@ -56,6 +56,7 @@ export const CreateExportJobRequestSchema = z.object({
   filters: z.record(z.unknown()).default({}),
   format: z.enum(["xlsx", "csv"]),
   reportCode: ReportCodeSchema,
+  selectedIds: z.array(z.string().trim().min(1).max(100)).max(500).optional(),
 });
 
 export const SavedViewsQuerySchema = z.object({

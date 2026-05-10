@@ -15,6 +15,7 @@ import type { LucideIcon } from "lucide-react";
 import { lazy, Suspense, useEffect, useState, type MouseEvent, type ReactNode } from "react";
 
 import { useAuth, type CurrentUser } from "../../shared/auth/AuthProvider";
+import { canAccessWorkspace, type Permission, type WorkspaceKey } from "../../shared/auth/permissions";
 import { navigateToAppPath, useAppLocation } from "../../shared/routing/appLocation";
 import { AccessDeniedState, NotFoundState } from "../../shared/ui/app-states/AppStates";
 import { Drawer } from "../../shared/ui/drawer/Drawer";
@@ -32,30 +33,23 @@ const ReportsWorkspace = lazy(() =>
   import("../../features/reporting/pages/ReportsWorkspace").then((module) => ({ default: module.ReportsWorkspace })),
 );
 
-type WorkspaceKey = "dashboard" | "cases" | "planning" | "reports" | "imports" | "operations" | "admin";
 type RouteWorkspace = WorkspaceKey | "not-found";
 type DashboardTarget = "assigned-cases" | "imports" | "new-case" | "planning" | "reports";
 
 const navigation = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
-  { key: "cases", label: "Cases", icon: FileText, path: "/cases", permissions: ["case.read.assigned", "case.read.entity", "case.read.all"] },
-  { key: "planning", label: "Planning", icon: Activity, path: "/planning", permissions: ["planning.manage"] },
-  { key: "reports", label: "Reports", icon: BarChart3, path: "/reports", permissions: ["report.read"] },
-  { key: "imports", label: "Imports", icon: UploadCloud, path: "/imports", permissions: ["import.manage"] },
-  { key: "operations", label: "Operations", icon: ShieldCheck, path: "/operations", permissions: ["audit.read", "notification.manage"] },
-  {
-    key: "admin",
-    label: "Admin",
-    icon: Building2,
-    path: "/admin/overview",
-    permissions: ["audit.read", "catalog.manage", "entity.manage", "role.manage", "tenant.manage", "user.manage"],
-  },
+  { key: "cases", label: "Cases", icon: FileText, path: "/cases" },
+  { key: "planning", label: "Planning", icon: Activity, path: "/planning" },
+  { key: "reports", label: "Reports", icon: BarChart3, path: "/reports" },
+  { key: "imports", label: "Imports", icon: UploadCloud, path: "/imports" },
+  { key: "operations", label: "Operations", icon: ShieldCheck, path: "/operations" },
+  { key: "admin", label: "Admin", icon: Building2, path: "/admin/overview" },
 ] satisfies Array<{
   icon: LucideIcon;
   key: WorkspaceKey;
   label: string;
   path: string;
-  permissions?: string[];
+  permissions?: Permission[];
 }>;
 
 const workspaceTitles: Record<WorkspaceKey, string> = {
@@ -338,12 +332,4 @@ function workspaceFromPath(pathname: string): RouteWorkspace {
   if (pathname === "/operations" || pathname.startsWith("/operations/")) return "operations";
   if (pathname === "/admin" || pathname.startsWith("/admin/")) return "admin";
   return "not-found";
-}
-
-function canAccessWorkspace(user: CurrentUser | null, workspace: WorkspaceKey) {
-  if (workspace === "dashboard") return true;
-  if (user?.isPlatformSuperAdmin) return true;
-  const item = navigation.find((entry) => entry.key === workspace);
-  if (!item?.permissions?.length) return true;
-  return item.permissions.some((permission) => user?.permissions.includes(permission));
 }

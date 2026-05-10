@@ -9,6 +9,8 @@ import {
   updateAward,
   type CaseAward,
 } from "../api/awardsApi";
+import { useAuth } from "../../../shared/auth/AuthProvider";
+import { canManageAwards } from "../../../shared/auth/permissions";
 import { Button } from "../../../shared/ui/button/Button";
 import { FormField, TextInput } from "../../../shared/ui/form/FormField";
 import { Modal } from "../../../shared/ui/modal/Modal";
@@ -40,6 +42,7 @@ const columns = (
   onDelete: (award: CaseAward) => void,
   onEdit: (award: CaseAward) => void,
   isDeleting: boolean,
+  canManage: boolean,
 ): DataTableColumn<CaseAward>[] => [
   { key: "vendor", header: "Vendor", render: (row) => row.vendorName },
   { key: "code", header: "Vendor Code", render: (row) => row.vendorCode ?? "-" },
@@ -54,7 +57,8 @@ const columns = (
   {
     key: "actions",
     header: "",
-    render: (row) => (
+    render: (row) =>
+      canManage ? (
       <div className="row-actions">
         <Button variant="secondary" onClick={() => onEdit(row)} title="Edit award">
           <Pencil size={16} />
@@ -68,7 +72,9 @@ const columns = (
           <Trash2 size={16} />
         </Button>
       </div>
-    ),
+      ) : (
+        "-"
+      ),
   },
 ];
 
@@ -78,7 +84,9 @@ type AwardsPanelProps = {
 
 export function AwardsPanel({ caseId }: AwardsPanelProps) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const { notify } = useToast();
+  const canManage = canManageAwards(user);
   const [form, setForm] = useState<AwardFormState>(emptyAwardForm);
   const [editingAward, setEditingAward] = useState<CaseAward | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<CaseAward | null>(null);
@@ -143,6 +151,7 @@ export function AwardsPanel({ caseId }: AwardsPanelProps) {
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!canManage) return;
     if (!caseId || !form.vendorName.trim()) return;
     if (editingAward) {
       updateMutation.mutate();
@@ -169,6 +178,7 @@ export function AwardsPanel({ caseId }: AwardsPanelProps) {
         </div>
       </div>
 
+      {canManage ? (
       <form className="award-form award-form-expanded" onSubmit={onSubmit}>
         <FormField label="Vendor">
           <TextInput
@@ -233,6 +243,9 @@ export function AwardsPanel({ caseId }: AwardsPanelProps) {
           ) : null}
         </div>
       </form>
+      ) : (
+        <p className="hero-copy">Awards are read-only for your role.</p>
+      )}
 
       {createMutation.error ? <p className="inline-error">{createMutation.error.message}</p> : null}
       {updateMutation.error ? <p className="inline-error">{updateMutation.error.message}</p> : null}
@@ -247,7 +260,7 @@ export function AwardsPanel({ caseId }: AwardsPanelProps) {
         <p className="inline-error">{awards.error.message}</p>
       ) : (
         <DataTable
-          columns={columns(setDeleteCandidate, setEditingAward, deleteMutation.isPending)}
+          columns={columns(setDeleteCandidate, setEditingAward, deleteMutation.isPending, canManage)}
           emptyMessage="No awards added."
           getRowKey={(row) => row.id}
           rows={awards.data ?? []}

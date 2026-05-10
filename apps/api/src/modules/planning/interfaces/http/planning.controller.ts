@@ -85,7 +85,7 @@ export class PlanningController {
   }
 
   @Get("rc-po-expiry")
-  @RequirePermissions("case.read.assigned")
+  @RequirePermissions("planning.manage")
   listExpiryRows(
     @CurrentUser() user: AuthenticatedUser,
     @Query(new ZodValidationPipe(ExpiryQuerySchema)) query: ExpiryQuery,

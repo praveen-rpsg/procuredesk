@@ -42,6 +42,8 @@ import {
   type AmountUnit,
   type ReportViewKey,
 } from "../utils/reportUtils";
+import { useAuth } from "../../../shared/auth/AuthProvider";
+import { canExportReports } from "../../../shared/auth/permissions";
 import { Button } from "../../../shared/ui/button/Button";
 import { navigateToAppPath, useAppLocation } from "../../../shared/routing/appLocation";
 import { Drawer } from "../../../shared/ui/drawer/Drawer";
@@ -53,12 +55,13 @@ import { PageHeader } from "../../../shared/ui/page-header/PageHeader";
 import { SecondaryNav } from "../../../shared/ui/secondary-nav/SecondaryNav";
 import { Skeleton } from "../../../shared/ui/skeleton/Skeleton";
 import { StatusBadge } from "../../../shared/ui/status/StatusBadge";
-import { NotFoundState } from "../../../shared/ui/app-states/AppStates";
+import { AccessDeniedState, NotFoundState } from "../../../shared/ui/app-states/AppStates";
 import { type VirtualTableColumn, VirtualTable } from "../../../shared/ui/table/VirtualTable";
 import { useToast } from "../../../shared/ui/toast/ToastProvider";
 
 export function ReportsWorkspace() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const { notify } = useToast();
   const location = useAppLocation();
   const reportView = reportViewFromPath(location.pathname);
@@ -71,17 +74,21 @@ export function ReportsWorkspace() {
   const isExportJobsView = activeReport === "export_jobs";
   const isSavedViewsView = activeReport === "saved_views";
   const isInvalidReportPath = reportView === null && location.pathname !== "/reports";
+  const canExport = canExportReports(user);
 
   const [savedViewName, setSavedViewName] = useState("");
   const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
   const [isSavedViewsOpen, setIsSavedViewsOpen] = useState(false);
+  const [selectedRowsByReport, setSelectedRowsByReport] = useState<Record<string, string[]>>({});
 
   const filters = useReportFilters(reportCode);
+  const selectedExportIds = selectedRowsByReport[activeReport] ?? [];
   const data = useReportData(reportCode, filters.reportParams, filters.analyticsParams);
   const exportState = useReportExport(
     reportCode,
     filters.exportFilters,
     filters.savedViewFilters,
+    selectedExportIds,
     savedViewName,
     setSavedViewName,
   );
@@ -99,6 +106,10 @@ export function ReportsWorkspace() {
       navigateToAppPath("/reports/analytics", { replace: true });
     }
   }, [location.pathname]);
+
+  useEffect(() => {
+    setSelectedRowsByReport((current) => ({ ...current, [activeReport]: [] }));
+  }, [activeReport, filters.reportParams]);
 
   const metrics = data.analytics.data;
   const selectedReportLabel = getReportLabel(activeReport);
@@ -242,8 +253,16 @@ export function ReportsWorkspace() {
     notify({ message: `Applied view: ${view.name}`, tone: "success" });
   }
 
+  function setSelectedReportRows(rowIds: string[]) {
+    setSelectedRowsByReport((current) => ({ ...current, [activeReport]: rowIds }));
+  }
+
   if (isInvalidReportPath) {
     return <NotFoundState />;
+  }
+
+  if (isExportJobsView && !canExport) {
+    return <AccessDeniedState />;
   }
 
   return (
@@ -259,13 +278,15 @@ export function ReportsWorkspace() {
               <CalendarClock size={18} />
               Schedule
             </Button>
-            {!isAnalyticsView && !isExportJobsView && !isSavedViewsView ? (
+            {canExport && !isAnalyticsView && !isExportJobsView && !isSavedViewsView ? (
               <Button
                 disabled={exportState.exportMutation.isPending}
                 onClick={() => exportState.exportMutation.mutate()}
               >
                 <Download size={18} />
-                Export {exportState.exportFormat.toUpperCase()}
+                {exportState.selectedExportCount
+                  ? `Export ${exportState.selectedExportCount} selected`
+                  : `Export ${exportState.exportFormat.toUpperCase()}`}
               </Button>
             ) : null}
           </>
@@ -281,7 +302,7 @@ export function ReportsWorkspace() {
           <SecondaryNav
             activeKey={activeReport}
             ariaLabel="Report type"
-            items={REPORT_OPTIONS.map((option) => ({
+            items={REPORT_OPTIONS.filter((option) => canExport || option.code !== "export_jobs").map((option) => ({
               icon: option.icon,
               key: option.code,
               label: option.label,
@@ -304,17 +325,22 @@ export function ReportsWorkspace() {
               value={filters.searchTerm}
             />
           </div>
-          <select
-            aria-label="Status"
-            className="text-input report-compact-select"
-            disabled={!statusFilterApplies}
-            onChange={(event) => filters.setStatusFilter(event.target.value as "all" | "running" | "completed")}
-            value={filters.statusFilter}
-          >
-            <option value="all">All Status</option>
-            <option value="running">Running</option>
-            <option value="completed">Completed</option>
-          </select>
+          {statusFilterApplies ? (
+            <select
+              aria-label="Status"
+              className="text-input report-compact-select"
+              onChange={(event) => filters.setStatusFilter(event.target.value as "all" | "running" | "completed")}
+              value={filters.statusFilter}
+            >
+              <option value="all">All Status</option>
+              <option value="running">Running</option>
+              <option value="completed">Completed</option>
+            </select>
+          ) : activeReport === "running" || activeReport === "completed" ? (
+            <span className="report-scope-chip">
+              {activeReport === "completed" ? "Completed cases only" : "Running cases only"}
+            </span>
+          ) : null}
           <TextInput
             aria-label="From date"
             className="report-date-control"
@@ -503,6 +529,9 @@ export function ReportsWorkspace() {
                 error={data.tenderDetails.error}
                 getRowKey={(row) => row.caseId}
                 isLoading={data.tenderDetails.isLoading}
+                isSelectionEnabled={canExport}
+                onSelectedRowIdsChange={setSelectedReportRows}
+                selectedRowIds={selectedExportIds}
               />
             ) : null}
             {reportCode === "running" ? (
@@ -513,6 +542,9 @@ export function ReportsWorkspace() {
                 error={data.running.error}
                 getRowKey={(row) => row.caseId}
                 isLoading={data.running.isLoading}
+                isSelectionEnabled={canExport}
+                onSelectedRowIdsChange={setSelectedReportRows}
+                selectedRowIds={selectedExportIds}
               />
             ) : null}
             {reportCode === "completed" ? (
@@ -523,6 +555,9 @@ export function ReportsWorkspace() {
                 error={data.completed.error}
                 getRowKey={(row) => row.caseId}
                 isLoading={data.completed.isLoading}
+                isSelectionEnabled={canExport}
+                onSelectedRowIdsChange={setSelectedReportRows}
+                selectedRowIds={selectedExportIds}
               />
             ) : null}
             {reportCode === "vendor_awards" ? (
@@ -533,6 +568,9 @@ export function ReportsWorkspace() {
                 error={data.vendorAwards.error}
                 getRowKey={(row) => row.awardId}
                 isLoading={data.vendorAwards.isLoading}
+                isSelectionEnabled={canExport}
+                onSelectedRowIdsChange={setSelectedReportRows}
+                selectedRowIds={selectedExportIds}
               />
             ) : null}
             {reportCode === "stage_time" ? (
@@ -543,6 +581,9 @@ export function ReportsWorkspace() {
                 error={data.stageTime.error}
                 getRowKey={(row) => String(row.stageCode)}
                 isLoading={data.stageTime.isLoading}
+                isSelectionEnabled={canExport}
+                onSelectedRowIdsChange={setSelectedReportRows}
+                selectedRowIds={selectedExportIds}
               />
             ) : null}
             {reportCode === "rc_po_expiry" ? (
@@ -553,6 +594,9 @@ export function ReportsWorkspace() {
                 error={data.rcPoExpiry.error}
                 getRowKey={(row) => row.sourceId}
                 isLoading={data.rcPoExpiry.isLoading}
+                isSelectionEnabled={canExport}
+                onSelectedRowIdsChange={setSelectedReportRows}
+                selectedRowIds={selectedExportIds}
               />
             ) : null}
           </section>
@@ -1170,6 +1214,9 @@ function ReportTable<TRow>({
   error,
   getRowKey,
   isLoading,
+  isSelectionEnabled,
+  onSelectedRowIdsChange,
+  selectedRowIds,
 }: {
   columns: VirtualTableColumn<TRow>[];
   data: TRow[] | undefined;
@@ -1177,6 +1224,9 @@ function ReportTable<TRow>({
   error: Error | null;
   getRowKey: (row: TRow) => string;
   isLoading: boolean;
+  isSelectionEnabled: boolean;
+  onSelectedRowIdsChange: (rowIds: string[]) => void;
+  selectedRowIds: string[];
 }) {
   const [tableSearch, setTableSearch] = useState("");
   const [density, setDensity] = useState<"comfortable" | "dense">("comfortable");
@@ -1184,6 +1234,41 @@ function ReportTable<TRow>({
     () => filterTableRows(data ?? [], tableSearch),
     [data, tableSearch],
   );
+  const selectedSet = useMemo(() => new Set(selectedRowIds), [selectedRowIds]);
+  const visibleRowIds = useMemo(() => rows.map((row) => getRowKey(row)), [getRowKey, rows]);
+  const selectedVisibleCount = isSelectionEnabled ? visibleRowIds.filter((rowId) => selectedSet.has(rowId)).length : 0;
+  const selectionColumns = useMemo<VirtualTableColumn<TRow>[]>(
+    () => [
+      {
+        key: "select",
+        header: "Select",
+        render: (row) => {
+          const rowId = getRowKey(row);
+          return (
+            <input
+              aria-label={`Select row ${rowId}`}
+              checked={selectedSet.has(rowId)}
+              className="report-row-checkbox"
+              onChange={(event) => {
+                if (event.target.checked) {
+                  onSelectedRowIdsChange([...selectedRowIds, rowId]);
+                  return;
+                }
+                onSelectedRowIdsChange(selectedRowIds.filter((selectedId) => selectedId !== rowId));
+              }}
+              type="checkbox"
+            />
+          );
+        },
+      },
+      ...columns,
+    ],
+    [columns, getRowKey, onSelectedRowIdsChange, selectedRowIds, selectedSet],
+  );
+
+  function selectVisibleRows() {
+    onSelectedRowIdsChange([...new Set([...selectedRowIds, ...visibleRowIds])]);
+  }
 
   if (isLoading) {
     return (
@@ -1228,8 +1313,25 @@ function ReportTable<TRow>({
           ))}
         </div>
       </div>
+      {isSelectionEnabled ? (
+        <div className="report-selection-toolbar">
+          <span>
+            {selectedRowIds.length
+              ? `${selectedRowIds.length} selected${selectedVisibleCount ? ` (${selectedVisibleCount} visible)` : ""}`
+              : "Select rows to export only those records."}
+          </span>
+          <div>
+            <Button disabled={visibleRowIds.length === 0} onClick={selectVisibleRows} variant="secondary">
+              Select visible
+            </Button>
+            <Button disabled={selectedRowIds.length === 0} onClick={() => onSelectedRowIdsChange([])} variant="ghost">
+              Clear selection
+            </Button>
+          </div>
+        </div>
+      ) : null}
       <VirtualTable
-        columns={columns}
+        columns={isSelectionEnabled ? selectionColumns : columns}
         emptyMessage={emptyMessage}
         getRowKey={getRowKey}
         maxHeight={density === "dense" ? 560 : 520}

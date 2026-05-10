@@ -9,8 +9,11 @@ import type { AuthenticatedRequest } from "../../../common/auth/authenticated-re
 const PERMISSION_IMPLICATIONS: Record<string, string[]> = {
   "case.read.all": ["case.read.entity", "case.read.assigned"],
   "case.read.entity": ["case.read.assigned"],
-  "case.update.all": ["case.update.entity", "case.update.assigned"],
-  "case.update.entity": ["case.update.assigned"],
+  "case.update.all": ["case.read.all", "case.update.entity", "case.update.assigned"],
+  "case.update.entity": ["case.read.entity", "case.update.assigned"],
+  "catalog.manage": ["catalog.read"],
+  "entity.manage": ["entity.read"],
+  "user.manage": ["user.read"],
 };
 
 @Injectable()
