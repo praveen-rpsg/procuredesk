@@ -8,6 +8,7 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  Pencil,
   ShieldCheck,
   UploadCloud,
 } from "lucide-react";
@@ -24,6 +25,7 @@ import { DashboardPage } from "../../features/dashboard/pages/DashboardPage";
 import { ImportExportWorkspace } from "../../features/import-export/pages/ImportExportWorkspace";
 import { OperationsWorkspace } from "../../features/operations/pages/OperationsWorkspace";
 import { PlanningWorkspace } from "../../features/planning/pages/PlanningWorkspace";
+import { ProfileDrawer } from "../../features/profile/components/ProfileDrawer";
 import { CasesWorkspace } from "../../features/procurement-cases/pages/CasesWorkspace";
 
 const AdminFoundation = lazy(() =>
@@ -125,6 +127,7 @@ export function AuthenticatedShell() {
   const [assignedToMeSignal, setAssignedToMeSignal] = useState(0);
   const [createCaseSignal, setCreateCaseSignal] = useState(0);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(readCollapsedPref);
   const activeTitle = activeWorkspace === "not-found" ? "Page Not Found" : workspaceTitles[activeWorkspace];
   const visibleNavigation = navigation.filter((item) => canAccessWorkspace(user, item.key));
@@ -247,7 +250,13 @@ export function AuthenticatedShell() {
 
         {/* User footer */}
         <div className="sidebar-footer">
-          <div className="sidebar-user" title={isCollapsed ? `${user?.fullName} · ${user?.email}` : undefined}>
+          <button
+            aria-label="Edit profile"
+            className="sidebar-user"
+            onClick={() => setIsProfileOpen(true)}
+            title={isCollapsed ? "Edit profile" : undefined}
+            type="button"
+          >
             <div aria-hidden="true" className="sidebar-user-avatar">
               {userInitial}
             </div>
@@ -255,7 +264,8 @@ export function AuthenticatedShell() {
               <strong>{user?.fullName}</strong>
               <span>{user?.email}</span>
             </div>
-          </div>
+            <Pencil aria-hidden="true" className="sidebar-user-edit-icon" size={14} />
+          </button>
           <button
             aria-label="Log out"
             className="sidebar-logout"
@@ -287,13 +297,14 @@ export function AuthenticatedShell() {
             ))}
           </nav>
           <div className="drawer-user-footer">
-            <div className="drawer-user-info">
+            <button className="drawer-user-info drawer-profile-button" onClick={() => setIsProfileOpen(true)} type="button">
               <div className="sidebar-user-avatar" aria-hidden="true">{userInitial}</div>
               <div className="sidebar-user-info">
                 <strong>{user?.fullName}</strong>
                 <span>{user?.email}</span>
               </div>
-            </div>
+              <Pencil aria-hidden="true" className="sidebar-user-edit-icon" size={14} />
+            </button>
             <button className="sidebar-logout drawer-logout" onClick={handleLogout} type="button">
               <LogOut size={15} />
               <span>Log out</span>
@@ -301,6 +312,8 @@ export function AuthenticatedShell() {
           </div>
         </div>
       </Drawer>
+
+      <ProfileDrawer isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
 
       {/* Main workspace */}
       <section className="workspace">

@@ -26,6 +26,7 @@ type AuthContextValue = {
   isLoading: boolean;
   login: (input: LoginInput) => Promise<void>;
   logout: () => Promise<void>;
+  updateUser: (user: CurrentUser) => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -79,6 +80,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
           // fails due to an expired CSRF cookie or a transient network issue.
         }
       },
+      updateUser: setUser,
     }),
     [isLoading, queryClient, user],
   );

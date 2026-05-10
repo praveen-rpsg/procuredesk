@@ -42,6 +42,12 @@ export type AssignableOwnerListItem = {
   username: string;
 };
 
+export type UserPasswordRecord = {
+  passwordHash: string | null;
+  passwordChangedAt: Date | null;
+  status: string;
+};
+
 type LoginUserRow = QueryResultRow & {
   id: string;
   tenant_id: string | null;
@@ -227,6 +233,52 @@ export class UserRepository {
     );
   }
 
+  async updateOwnProfile(
+    input: { fullName: string; tenantId: string | null; updatedBy: string; userId: string },
+    client?: PoolClient,
+  ): Promise<boolean> {
+    const result = await this.db.query(
+      `
+        update iam.users
+        set full_name = $3,
+            updated_at = now(),
+            updated_by = $4
+        where id = $1
+          and tenant_id is not distinct from $2::uuid
+          and deleted_at is null
+      `,
+      [input.userId, input.tenantId, input.fullName, input.updatedBy],
+      client,
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async findPasswordRecord(input: { tenantId: string | null; userId: string }): Promise<UserPasswordRecord | null> {
+    const row = await this.db.one<
+      QueryResultRow & {
+        password_changed_at: Date | null;
+        password_hash: string | null;
+        status: string;
+      }
+    >(
+      `
+        select password_hash, password_changed_at, status
+        from iam.users
+        where id = $1
+          and tenant_id is not distinct from $2::uuid
+          and deleted_at is null
+      `,
+      [input.userId, input.tenantId],
+    );
+    return row
+      ? {
+          passwordHash: row.password_hash,
+          passwordChangedAt: row.password_changed_at,
+          status: row.status,
+        }
+      : null;
+  }
+
   async listAssignableOwners(input: {
     entityId: string;
     tenantId: string;
@@ -347,6 +399,37 @@ export class UserRepository {
     return result.rows.map((row) => row.password_hash);
   }
 
+  async listOwnPasswordHashes(input: {
+    historyCount: number;
+    tenantId: string | null;
+    userId: string;
+  }): Promise<string[]> {
+    const result = await this.db.query<QueryResultRow & { password_hash: string }>(
+      `
+        select password_hash
+        from (
+          select password_hash, now() as created_at
+          from iam.users
+          where id = $1
+            and tenant_id is not distinct from $2::uuid
+            and password_hash is not null
+            and deleted_at is null
+          union all
+          select ph.password_hash, ph.created_at
+          from iam.password_history ph
+          join iam.users u on u.id = ph.user_id
+          where u.id = $1
+            and u.tenant_id is not distinct from $2::uuid
+            and u.deleted_at is null
+          order by created_at desc
+          limit $3
+        ) hashes
+      `,
+      [input.userId, input.tenantId, Math.max(input.historyCount + 1, 1)],
+    );
+    return result.rows.map((row) => row.password_hash);
+  }
+
   async setPassword(
     input: { passwordHash: string; tenantId: string; updatedBy: string; userId: string },
     client?: PoolClient,
@@ -378,6 +461,45 @@ export class UserRepository {
             updated_by = $4
         where id = $1
           and tenant_id = $2
+          and deleted_at is null
+      `,
+      [input.userId, input.tenantId, input.passwordHash, input.updatedBy],
+      client,
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async setOwnPassword(
+    input: { passwordHash: string; tenantId: string | null; updatedBy: string; userId: string },
+    client?: PoolClient,
+  ): Promise<boolean> {
+    const result = await this.db.query(
+      `
+        with current_user_password as (
+          select password_hash
+          from iam.users
+          where id = $1
+            and tenant_id is not distinct from $2::uuid
+            and deleted_at is null
+          for update
+        ),
+        history_insert as (
+          insert into iam.password_history (user_id, password_hash)
+          select $1, password_hash
+          from current_user_password
+          where password_hash is not null
+          returning 1
+        )
+        update iam.users
+        set password_hash = $3,
+            status = 'active',
+            failed_login_count = 0,
+            locked_until = null,
+            password_changed_at = now(),
+            updated_at = now(),
+            updated_by = $4
+        where id = $1
+          and tenant_id is not distinct from $2::uuid
           and deleted_at is null
       `,
       [input.userId, input.tenantId, input.passwordHash, input.updatedBy],

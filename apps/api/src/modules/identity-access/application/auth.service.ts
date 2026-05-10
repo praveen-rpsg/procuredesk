@@ -1,8 +1,9 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { createHash, randomBytes } from "node:crypto";
 
 import type { AuthenticatedUser } from "../domain/authenticated-user.js";
+import type { PasswordPolicy } from "../domain/password-policy.js";
 import { LoginRateLimitRepository } from "../infrastructure/login-rate-limit.repository.js";
 import { PasswordPolicyRepository } from "../infrastructure/password-policy.repository.js";
 import { SessionRepository } from "../infrastructure/session.repository.js";
@@ -130,8 +131,97 @@ export class AuthService {
     return this.sessions.findAuthenticatedUser(this.hashSessionToken(sessionToken));
   }
 
+  async updateOwnProfile(
+    actor: AuthenticatedUser,
+    input: { fullName: string },
+  ): Promise<{ user: AuthenticatedUser }> {
+    const fullName = input.fullName.trim();
+    const updated = await this.users.updateOwnProfile({
+      fullName,
+      tenantId: actor.tenantId,
+      updatedBy: actor.id,
+      userId: actor.id,
+    });
+    if (!updated) {
+      throw new NotFoundException("User profile not found.");
+    }
+    return { user: { ...actor, fullName } };
+  }
+
+  async changeOwnPassword(
+    actor: AuthenticatedUser,
+    input: { currentPassword: string; newPassword: string },
+  ): Promise<{ updated: true }> {
+    if (input.currentPassword === input.newPassword) {
+      throw new BadRequestException("New password must be different from the current password.");
+    }
+
+    const passwordRecord = await this.users.findPasswordRecord({
+      tenantId: actor.tenantId,
+      userId: actor.id,
+    });
+    if (!passwordRecord?.passwordHash) {
+      throw new NotFoundException("User password is not available.");
+    }
+
+    const currentPasswordMatches = await this.passwords.verify(passwordRecord.passwordHash, input.currentPassword);
+    if (!currentPasswordMatches) {
+      throw new UnauthorizedException("Current password is incorrect.");
+    }
+
+    const policy = await this.passwordPolicyForUser(actor.tenantId);
+    const errors = this.passwords.validateAgainstPolicy(input.newPassword, policy);
+    const historicalHashes = await this.users.listOwnPasswordHashes({
+      historyCount: policy.passwordHistoryCount,
+      tenantId: actor.tenantId,
+      userId: actor.id,
+    });
+
+    for (const hash of historicalHashes) {
+      if (await this.passwords.verify(hash, input.newPassword)) {
+        errors.push("Password cannot match the current password or recent password history.");
+        break;
+      }
+    }
+
+    if (errors.length) {
+      throw new BadRequestException(`Password does not satisfy policy: ${errors.join(" ")}`);
+    }
+
+    const passwordHash = await this.passwords.hash(input.newPassword);
+    const updated = await this.users.setOwnPassword({
+      passwordHash,
+      tenantId: actor.tenantId,
+      updatedBy: actor.id,
+      userId: actor.id,
+    });
+    if (!updated) {
+      throw new NotFoundException("User profile not found.");
+    }
+    return { updated: true };
+  }
+
   hashSessionToken(sessionToken: string): string {
     return createHash("sha256").update(sessionToken).digest("hex");
+  }
+
+  private passwordPolicyForUser(tenantId: string | null): Promise<PasswordPolicy> | PasswordPolicy {
+    if (tenantId) {
+      return this.passwordPolicies.findByTenantId(tenantId);
+    }
+    return {
+      tenantId: "platform",
+      minLength: 12,
+      requireUppercase: true,
+      requireLowercase: true,
+      requireNumber: true,
+      requireSpecialCharacter: true,
+      passwordHistoryCount: 5,
+      lockoutAttempts: 5,
+      lockoutMinutes: 15,
+      forcePeriodicExpiry: false,
+      expiryDays: null,
+    };
   }
 
   private isPasswordExpired(

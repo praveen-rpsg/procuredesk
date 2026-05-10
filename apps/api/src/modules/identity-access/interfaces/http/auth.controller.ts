@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Patch, Post, Put, Req, Res, UseGuards } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { FastifyReply } from "fastify";
 
@@ -10,7 +10,14 @@ import { AuditWriterService } from "../../../audit/application/audit-writer.serv
 import type { AuthenticatedUser } from "../../domain/authenticated-user.js";
 import { AuthGuard } from "../../application/auth.guard.js";
 import { AuthService } from "../../application/auth.service.js";
-import { LoginRequestSchema, type LoginRequest } from "./auth.schemas.js";
+import {
+  ChangeOwnPasswordRequestSchema,
+  LoginRequestSchema,
+  UpdateOwnProfileRequestSchema,
+  type ChangeOwnPasswordRequest,
+  type LoginRequest,
+  type UpdateOwnProfileRequest,
+} from "./auth.schemas.js";
 
 @Controller("auth")
 export class AuthController {
@@ -82,6 +89,43 @@ export class AuthController {
   @UseGuards(AuthGuard)
   me(@CurrentUser() user: AuthenticatedUser) {
     return { user };
+  }
+
+  @Patch("me/profile")
+  @UseGuards(AuthGuard)
+  async updateOwnProfile(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(new ZodValidationPipe(UpdateOwnProfileRequestSchema)) body: UpdateOwnProfileRequest,
+  ) {
+    const result = await this.auth.updateOwnProfile(user, body);
+    await this.audit.write({
+      action: "user.profile_update",
+      actorUserId: user.id,
+      details: { changedFields: ["fullName"] },
+      summary: "User updated own profile",
+      targetId: user.id,
+      targetType: "user",
+      tenantId: user.tenantId,
+    });
+    return result;
+  }
+
+  @Put("me/password")
+  @UseGuards(AuthGuard)
+  async changeOwnPassword(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(new ZodValidationPipe(ChangeOwnPasswordRequestSchema)) body: ChangeOwnPasswordRequest,
+  ) {
+    const result = await this.auth.changeOwnPassword(user, body);
+    await this.audit.write({
+      action: "user.password_change",
+      actorUserId: user.id,
+      summary: "User changed own password",
+      targetId: user.id,
+      targetType: "user",
+      tenantId: user.tenantId,
+    });
+    return result;
   }
 
   private get cookieName(): string {
