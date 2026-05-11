@@ -80,13 +80,13 @@ export class CatalogService {
 
   async deleteReferenceCategory(actor: AuthenticatedUser, categoryId: string) {
     const tenantId = this.requireTenant(actor);
-    const valueCount = await this.catalog.countReferenceCategoryValues({
+    const usageCount = await this.catalog.countReferenceCategoryUsage({
       tenantId,
       categoryId,
     });
-    if (valueCount > 0) {
+    if (usageCount > 0) {
       throw new BadRequestException(
-        "This choice category has values. Delete or move its values before removing the category.",
+        "This choice category is used by tenders. Remove tender mappings before deleting it.",
       );
     }
     const deleted = await this.catalog.deleteReferenceCategory({
@@ -117,7 +117,10 @@ export class CatalogService {
     await this.cache.invalidateTenant(tenantId);
   }
 
-  async deleteReferenceValue(actor: AuthenticatedUser, referenceValueId: string) {
+  async deleteReferenceValue(
+    actor: AuthenticatedUser,
+    referenceValueId: string,
+  ) {
     const tenantId = this.requireTenant(actor);
     const usageCount = await this.catalog.countReferenceValueUsage({
       tenantId,
@@ -226,7 +229,8 @@ export class CatalogService {
     tenderTypeId?: string | null;
     tenantId: string;
   }) {
-    const catalogErrors = await this.catalog.validateProcurementCaseSelections(input);
+    const catalogErrors =
+      await this.catalog.validateProcurementCaseSelections(input);
     if (catalogErrors.length > 0) {
       throw new BadRequestException({
         catalogErrors,
@@ -235,7 +239,10 @@ export class CatalogService {
     }
   }
 
-  getTenderTypeCompletionDays(input: { tenantId: string; tenderTypeId: string }) {
+  getTenderTypeCompletionDays(input: {
+    tenantId: string;
+    tenderTypeId: string;
+  }) {
     return this.catalog.getTenderTypeCompletionDays(input);
   }
 

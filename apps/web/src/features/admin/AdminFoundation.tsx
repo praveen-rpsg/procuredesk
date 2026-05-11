@@ -1,10 +1,9 @@
-import { Building2, CalendarClock, FileClock, FolderTree, LayoutDashboard, ShieldCheck, Tags, UsersRound } from "lucide-react";
+import { Building2, CalendarClock, FileClock, LayoutDashboard, ShieldCheck, Tags, UsersRound } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo } from "react";
 
 import { AdminAuditPage } from "./audit/AdminAuditPage";
 import { CatalogAdminPage } from "./catalog/CatalogAdminPage";
-import { DepartmentsAdminPage } from "./departments/DepartmentsAdminPage";
 import { EntitiesAdminPage } from "./entities/EntitiesAdminPage";
 import { AdminOverviewPage, type AdminOverviewItem } from "./overview/AdminOverviewPage";
 import { RolesAdminPage } from "./roles/RolesAdminPage";
@@ -23,7 +22,7 @@ import { navigateToAppPath, useAppLocation } from "../../shared/routing/appLocat
 import { AccessDeniedState, NotFoundState } from "../../shared/ui/app-states/AppStates";
 import { SecondaryNav } from "../../shared/ui/secondary-nav/SecondaryNav";
 
-type AdminSectionKey = "audit" | "catalog" | "departments" | "entities" | "overview" | "roles" | "tender-rules" | "users";
+type AdminSectionKey = "audit" | "catalog" | "entities" | "overview" | "roles" | "tender-rules" | "users";
 
 type AdminSectionDefinition = AdminOverviewItem & {
   icon: LucideIcon;
@@ -34,13 +33,14 @@ type AdminSectionDefinition = AdminOverviewItem & {
 const adminSectionPaths: Record<AdminSectionKey, string> = {
   audit: "/admin/audit-logs",
   catalog: "/admin/choice-lists",
-  departments: "/admin/departments",
   entities: "/admin/entities",
   overview: "/admin/overview",
   roles: "/admin/roles",
   "tender-rules": "/admin/tender-types",
   users: "/admin/users",
 };
+
+const legacyDepartmentsPath = "/admin/departments";
 
 export function AdminFoundation() {
   const { user } = useAuth();
@@ -82,24 +82,14 @@ export function AdminFoundation() {
       });
     }
     if (hasEntityAccess) {
-      items.push(
-        {
-          group: "Organization",
-          description: "Manage tenant entities.",
-          icon: Building2,
-          key: "entities",
-          label: "Entities",
-          path: adminSectionPaths.entities,
-        },
-        {
-          group: "Organization",
-          description: "Manage departments under each entity.",
-          icon: FolderTree,
-          key: "departments",
-          label: "Departments",
-          path: adminSectionPaths.departments,
-        },
-      );
+      items.push({
+        group: "Organization",
+        description: "Manage tenant entities and their departments.",
+        icon: Building2,
+        key: "entities",
+        label: "Entities & Departments",
+        path: adminSectionPaths.entities,
+      });
     }
     if (hasCatalogAccess) {
       items.push(
@@ -136,8 +126,9 @@ export function AdminFoundation() {
 
   const requestedSection = adminSectionFromPath(location.pathname);
   const isRootAdminPath = location.pathname === "/admin";
+  const isLegacyDepartmentsPath = location.pathname === legacyDepartmentsPath;
   const firstSection = sections[0];
-  const activeSection = requestedSection ?? firstSection?.key ?? "overview";
+  const activeSection = isLegacyDepartmentsPath ? "entities" : requestedSection ?? firstSection?.key ?? "overview";
   const activeSectionAllowed = sections.some((section) => section.key === activeSection);
   const departmentFocusEntityId = new URLSearchParams(location.search).get("entityId") ?? "";
 
@@ -147,11 +138,17 @@ export function AdminFoundation() {
     }
   }, [firstSection, isRootAdminPath]);
 
+  useEffect(() => {
+    if (isLegacyDepartmentsPath) {
+      navigateToAppPath(`${adminSectionPaths.entities}${location.search}`, { replace: true });
+    }
+  }, [isLegacyDepartmentsPath, location.search]);
+
   if (!hasUserAccess && !hasEntityAccess && !hasCatalogAccess && !hasAuditAccess) {
     return <AccessDeniedState />;
   }
 
-  if (!requestedSection && !isRootAdminPath) {
+  if (!requestedSection && !isRootAdminPath && !isLegacyDepartmentsPath) {
     return <NotFoundState />;
   }
 
@@ -180,12 +177,7 @@ export function AdminFoundation() {
         />
       </section>
       <div className="admin-section-host">
-        {renderAdminSection(
-          activeSection,
-          sections,
-          openSection,
-          departmentFocusEntityId,
-        )}
+        {renderAdminSection(activeSection, sections, openSection, departmentFocusEntityId)}
       </div>
     </section>
   );
@@ -208,25 +200,7 @@ function renderAdminSection(
   if (section === "users") return <AdminUsersPage />;
   if (section === "roles") return <RolesAdminPage />;
   if (section === "entities") {
-    return (
-      <EntitiesAdminPage
-        onManageDepartments={(entityId) => {
-          navigateToAppPath(`${adminSectionPaths.departments}?entityId=${encodeURIComponent(entityId)}`);
-        }}
-      />
-    );
-  }
-  if (section === "departments") {
-    return (
-      <DepartmentsAdminPage
-        focusEntityId={departmentFocusEntityId}
-        onEntityScopeChange={(entityId) =>
-          navigateToAppPath(`${adminSectionPaths.departments}?entityId=${encodeURIComponent(entityId)}`, {
-            replace: true,
-          })
-        }
-      />
-    );
+    return <EntitiesAdminPage focusEntityId={departmentFocusEntityId} />;
   }
   if (section === "catalog") return <CatalogAdminPage />;
   if (section === "tender-rules") return <TenderTypeDaysAdminPage />;

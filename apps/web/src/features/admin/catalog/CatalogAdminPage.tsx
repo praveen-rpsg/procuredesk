@@ -1,5 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FolderPlus, LockKeyhole, Pencil, Plus, Tags, Trash2 } from "lucide-react";
+import {
+  FolderPlus,
+  LockKeyhole,
+  Pencil,
+  Plus,
+  Tags,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import {
@@ -36,15 +43,33 @@ function normalizeCategoryCode(value: string) {
     .replace(/_{2,}/g, "_");
 }
 
+function pluralize(count: number, singular: string, plural = `${singular}s`) {
+  return count === 1 ? singular : plural;
+}
+
+function formatChoiceCount(
+  count: number,
+  singular: string,
+  plural = `${singular}s`,
+) {
+  return `${count} ${pluralize(count, singular, plural)}`;
+}
+
 export function CatalogAdminPage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { notify } = useToast();
   const canManage = canManageCatalog(user);
-  const catalog = useQuery({ queryFn: getCatalogSnapshot, queryKey: ["catalog-snapshot"] });
+  const catalog = useQuery({
+    queryFn: getCatalogSnapshot,
+    queryKey: ["catalog-snapshot"],
+  });
   const [newValue, setNewValue] = useState({ categoryCode: "", label: "" });
   const [newCategory, setNewCategory] = useState({ code: "", name: "" });
-  const [editCategory, setEditCategory] = useState({ isActive: true, name: "" });
+  const [editCategory, setEditCategory] = useState({
+    isActive: true,
+    name: "",
+  });
   const [selectedReferenceValueId, setSelectedReferenceValueId] = useState("");
   const [referenceValueToDelete, setReferenceValueToDelete] =
     useState<CatalogReferenceValue | null>(null);
@@ -60,7 +85,10 @@ export function CatalogAdminPage() {
   });
 
   const categoryOptions = useMemo(
-    () => [...(catalog.data?.referenceCategories ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
+    () =>
+      [...(catalog.data?.referenceCategories ?? [])].sort((a, b) =>
+        a.name.localeCompare(b.name),
+      ),
     [catalog.data?.referenceCategories],
   );
 
@@ -88,10 +116,30 @@ export function CatalogAdminPage() {
     [catalog.data?.referenceValues, categoryOptions],
   );
 
+  const choiceListSummary = useMemo(() => {
+    const categories = catalog.data?.referenceCategories ?? [];
+    const values = catalog.data?.referenceValues ?? [];
+
+    return {
+      tenderMappings: categories.reduce(
+        (total, category) => total + category.usageCount,
+        0,
+      ),
+      tenantCategories: categories.filter(
+        (category) => !category.isSystemCategory,
+      ).length,
+      totalCategories: categories.length,
+      values: values.length,
+    };
+  }, [catalog.data?.referenceCategories, catalog.data?.referenceValues]);
+
   useEffect(() => {
     const firstActiveCategory = activeCategoryOptions[0];
     if (!newValue.categoryCode && firstActiveCategory) {
-      setNewValue((value) => ({ ...value, categoryCode: firstActiveCategory.code }));
+      setNewValue((value) => ({
+        ...value,
+        categoryCode: firstActiveCategory.code,
+      }));
     }
   }, [activeCategoryOptions, newValue.categoryCode]);
 
@@ -138,7 +186,8 @@ export function CatalogAdminPage() {
   });
 
   const deleteCategoryMutation = useMutation({
-    mutationFn: () => deleteCatalogReferenceCategory(categoryToDelete?.id ?? ""),
+    mutationFn: () =>
+      deleteCatalogReferenceCategory(categoryToDelete?.id ?? ""),
     onSuccess: async () => {
       setCategoryToDelete(null);
       await queryClient.invalidateQueries({ queryKey: ["catalog-snapshot"] });
@@ -167,7 +216,8 @@ export function CatalogAdminPage() {
   });
 
   const deleteValueMutation = useMutation({
-    mutationFn: () => deleteCatalogReferenceValue(referenceValueToDelete?.id ?? ""),
+    mutationFn: () =>
+      deleteCatalogReferenceValue(referenceValueToDelete?.id ?? ""),
     onSuccess: async () => {
       setReferenceValueToDelete(null);
       setSelectedReferenceValueId("");
@@ -217,6 +267,18 @@ export function CatalogAdminPage() {
     });
   };
 
+  const deleteCategoryDescription = categoryToDelete
+    ? categoryToDelete.usageCount > 0
+      ? `${categoryToDelete.name} is used by ${formatChoiceCount(
+          categoryToDelete.usageCount,
+          "tender",
+        )} and cannot be deleted.`
+      : `Delete ${categoryToDelete.name}? ${formatChoiceCount(
+          categoryToDelete.valueCount,
+          "value",
+        )} in this category will also be removed.`
+    : "Delete this choice category?";
+
   return (
     <section className="admin-section">
       <PageHeader eyebrow="Admin" title="Choice Lists">
@@ -227,77 +289,110 @@ export function CatalogAdminPage() {
         <section className="state-panel choice-list-guidance">
           <div>
             <p className="eyebrow">How this works</p>
-            <h2>Categories organize dropdowns. Values are the options users select.</h2>
+            <h2>
+              Categories organize dropdowns. Values are the options users
+              select.
+            </h2>
             <p>
-              System categories are protected because forms and reports depend on them. Tenant
-              categories can be added, renamed, disabled, or removed when they are empty.
+              System categories are protected because forms and reports depend
+              on them. Tenant categories can be added, renamed, disabled, or
+              removed when none of their values are mapped to tenders.
             </p>
           </div>
           {canManage ? (
-          <Button onClick={() => setIsCategoryOpen(true)}>
-            <FolderPlus size={18} />
-            New Category
-          </Button>
+            <Button onClick={() => setIsCategoryOpen(true)}>
+              <FolderPlus size={18} />
+              New Category
+            </Button>
           ) : null}
         </section>
 
-        {canManage ? (
-        <section className="state-panel">
-          <div className="detail-header">
-            <div>
-              <p className="eyebrow">Create</p>
-              <h2>Add Choice Value</h2>
+        {catalog.data ? (
+          <section
+            className="choice-list-summary-grid"
+            aria-label="Choice list summary"
+          >
+            <div className="choice-list-summary-item">
+              <span>Categories</span>
+              <strong>{choiceListSummary.totalCategories}</strong>
             </div>
-            <Tags size={20} />
-          </div>
-          <form className="choice-list-add-grid" onSubmit={onCreateValue}>
-            <FormField label="Category">
-              <select
-                className="text-input"
-                disabled={activeCategoryOptions.length === 0}
-                onChange={(event) =>
-                  setNewValue((value) => ({
-                    ...value,
-                    categoryCode: event.target.value,
-                  }))
+            <div className="choice-list-summary-item">
+              <span>Tenant Categories</span>
+              <strong>{choiceListSummary.tenantCategories}</strong>
+            </div>
+            <div className="choice-list-summary-item">
+              <span>Values</span>
+              <strong>{choiceListSummary.values}</strong>
+            </div>
+            <div className="choice-list-summary-item">
+              <span>Tender Mappings</span>
+              <strong>{choiceListSummary.tenderMappings}</strong>
+            </div>
+          </section>
+        ) : null}
+
+        {canManage ? (
+          <section className="state-panel">
+            <div className="detail-header">
+              <div>
+                <p className="eyebrow">Create</p>
+                <h2>Add Choice Value</h2>
+              </div>
+              <Tags size={20} />
+            </div>
+            <form className="choice-list-add-grid" onSubmit={onCreateValue}>
+              <FormField label="Category">
+                <select
+                  className="text-input"
+                  disabled={activeCategoryOptions.length === 0}
+                  onChange={(event) =>
+                    setNewValue((value) => ({
+                      ...value,
+                      categoryCode: event.target.value,
+                    }))
+                  }
+                  required
+                  value={newValue.categoryCode}
+                >
+                  {activeCategoryOptions.map((category) => (
+                    <option key={category.id} value={category.code}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+              <FormField label="Value">
+                <TextInput
+                  maxLength={200}
+                  onChange={(event) =>
+                    setNewValue((value) => ({
+                      ...value,
+                      label: event.target.value,
+                    }))
+                  }
+                  placeholder="Enter value text"
+                  required
+                  value={newValue.label}
+                />
+              </FormField>
+              <Button
+                disabled={
+                  createValueMutation.isPending ||
+                  activeCategoryOptions.length === 0 ||
+                  !newValue.categoryCode
                 }
-                required
-                value={newValue.categoryCode}
+                type="submit"
               >
-                {activeCategoryOptions.map((category) => (
-                  <option key={category.id} value={category.code}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-            <FormField label="Value">
-              <TextInput
-                maxLength={200}
-                onChange={(event) =>
-                  setNewValue((value) => ({ ...value, label: event.target.value }))
-                }
-                placeholder="Enter value text"
-                required
-                value={newValue.label}
-              />
-            </FormField>
-            <Button
-              disabled={
-                createValueMutation.isPending ||
-                activeCategoryOptions.length === 0 ||
-                !newValue.categoryCode
-              }
-              type="submit"
-            >
-              <Plus size={18} />
-              Add Value
-            </Button>
-          </form>
-          {createValueMutation.error ? (
-            <p className="inline-error">{createValueMutation.error.message}</p>
-          ) : null}
-        </section>
+                <Plus size={18} />
+                Add Value
+              </Button>
+            </form>
+            {createValueMutation.error ? (
+              <p className="inline-error">
+                {createValueMutation.error.message}
+              </p>
+            ) : null}
+          </section>
         ) : null}
 
         {catalog.isLoading ? (
@@ -316,96 +411,140 @@ export function CatalogAdminPage() {
           </section>
         ) : (
           <div className="choice-list-card-grid">
-            {groupedValues.map(({ category, values }) => (
-              <section className="choice-list-card" key={category.id}>
-                <div className="choice-list-card-header">
-                  <div>
-                    <p className="eyebrow">Category</p>
-                    <h2>{category.name}</h2>
-                    <span className="choice-list-category-code">{category.code}</span>
+            {groupedValues.map(({ category, values }) => {
+              const categoryUsageCount = category.usageCount;
+              const canDeleteCategory = categoryUsageCount === 0;
+
+              return (
+                <section className="choice-list-card" key={category.id}>
+                  <div className="choice-list-card-header">
+                    <div>
+                      <p className="eyebrow">Category</p>
+                      <h2>{category.name}</h2>
+                      <span className="choice-list-category-code">
+                        {category.code}
+                      </span>
+                    </div>
+                    <div className="choice-list-card-actions">
+                      <Badge
+                        tone={category.isSystemCategory ? "info" : "neutral"}
+                      >
+                        {category.isSystemCategory ? "System" : "Tenant"}
+                      </Badge>
+                      <StatusBadge
+                        tone={category.isActive ? "success" : "neutral"}
+                      >
+                        {category.isActive ? "Active" : "Inactive"}
+                      </StatusBadge>
+                      {category.isSystemCategory ? (
+                        <LockKeyhole className="choice-list-lock" size={17} />
+                      ) : canManage ? (
+                        <div className="row-actions">
+                          <IconButton
+                            aria-label={`Edit ${category.name}`}
+                            onClick={() => openCategoryEdit(category)}
+                            tooltip="Edit category"
+                          >
+                            <Pencil size={17} />
+                          </IconButton>
+                          <IconButton
+                            aria-label={`Delete ${category.name}`}
+                            disabled={!canDeleteCategory}
+                            onClick={() => setCategoryToDelete(category)}
+                            tooltip={
+                              canDeleteCategory
+                                ? "Delete category and unused values"
+                                : "Category is used by tenders and cannot be deleted"
+                            }
+                            variant="danger"
+                          >
+                            <Trash2 size={17} />
+                          </IconButton>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
-                  <div className="choice-list-card-actions">
-                    <Badge tone={category.isSystemCategory ? "info" : "neutral"}>
-                      {category.isSystemCategory ? "System" : "Tenant"}
-                    </Badge>
-                    <StatusBadge tone={category.isActive ? "success" : "neutral"}>
-                      {category.isActive ? "Active" : "Inactive"}
-                    </StatusBadge>
-                    {category.isSystemCategory ? (
-                      <LockKeyhole className="choice-list-lock" size={17} />
-                    ) : canManage ? (
-                      <div className="row-actions">
-                        <IconButton
-                          aria-label={`Edit ${category.name}`}
-                          onClick={() => openCategoryEdit(category)}
-                          tooltip="Edit category"
-                        >
-                          <Pencil size={17} />
-                        </IconButton>
-                        <IconButton
-                          aria-label={`Delete ${category.name}`}
-                          disabled={category.valueCount > 0}
-                          onClick={() => setCategoryToDelete(category)}
-                          tooltip={
-                            category.valueCount > 0
-                              ? "Delete values before removing this category"
-                              : "Delete category"
-                          }
-                          variant="danger"
-                        >
-                          <Trash2 size={17} />
-                        </IconButton>
-                      </div>
+                  <div className="choice-list-card-stats">
+                    <span className="choice-list-stat-pill">
+                      <strong>{category.valueCount}</strong>
+                      {pluralize(category.valueCount, "value")}
+                    </span>
+                    <span
+                      className={`choice-list-stat-pill ${
+                        categoryUsageCount > 0
+                          ? "choice-list-stat-pill-warning"
+                          : ""
+                      }`}
+                    >
+                      <strong>{categoryUsageCount}</strong>
+                      {pluralize(categoryUsageCount, "tender")} mapped
+                    </span>
+                    {!category.isSystemCategory && canManage ? (
+                      <span
+                        className={`choice-list-delete-note ${
+                          canDeleteCategory ? "is-ready" : "is-blocked"
+                        }`}
+                      >
+                        {canDeleteCategory
+                          ? "Delete removes unused values"
+                          : "Tender usage blocks delete"}
+                      </span>
                     ) : null}
                   </div>
-                </div>
-                {values.length > 0 ? (
-                  <div className="choice-list-row-list">
-                    {values.map((value) => (
-                      <div className="choice-list-row" key={value.id}>
-                        <div className="choice-list-value-copy">
-                          <strong>{value.label}</strong>
-                          <span>{value.usageCount} tenders</span>
-                        </div>
-                        <div className="choice-list-row-meta">
-                          <StatusBadge tone={value.isActive ? "success" : "neutral"}>
-                            {value.isActive ? "Active" : "Inactive"}
-                          </StatusBadge>
-                          {canManage ? (
-                          <div className="row-actions">
-                            <IconButton
-                              aria-label={`Edit ${value.label}`}
-                              onClick={() => openValueEdit(value)}
-                              tooltip="Edit value"
-                            >
-                              <Pencil size={17} />
-                            </IconButton>
-                            <IconButton
-                              aria-label={`Delete ${value.label}`}
-                              disabled={value.usageCount > 0}
-                              onClick={() => setReferenceValueToDelete(value)}
-                              tooltip={
-                                value.usageCount > 0
-                                  ? "Value is used by tenders and cannot be deleted"
-                                  : "Delete value"
-                              }
-                              variant="danger"
-                            >
-                              <Trash2 size={17} />
-                            </IconButton>
+                  {values.length > 0 ? (
+                    <div className="choice-list-row-list">
+                      {values.map((value) => (
+                        <div className="choice-list-row" key={value.id}>
+                          <div className="choice-list-value-copy">
+                            <strong>{value.label}</strong>
+                            <span>
+                              {formatChoiceCount(value.usageCount, "tender")}
+                            </span>
                           </div>
-                          ) : null}
+                          <div className="choice-list-row-meta">
+                            <StatusBadge
+                              tone={value.isActive ? "success" : "neutral"}
+                            >
+                              {value.isActive ? "Active" : "Inactive"}
+                            </StatusBadge>
+                            {canManage ? (
+                              <div className="row-actions">
+                                <IconButton
+                                  aria-label={`Edit ${value.label}`}
+                                  onClick={() => openValueEdit(value)}
+                                  tooltip="Edit value"
+                                >
+                                  <Pencil size={17} />
+                                </IconButton>
+                                <IconButton
+                                  aria-label={`Delete ${value.label}`}
+                                  disabled={value.usageCount > 0}
+                                  onClick={() =>
+                                    setReferenceValueToDelete(value)
+                                  }
+                                  tooltip={
+                                    value.usageCount > 0
+                                      ? "Value is used by tenders and cannot be deleted"
+                                      : "Delete value"
+                                  }
+                                  variant="danger"
+                                >
+                                  <Trash2 size={17} />
+                                </IconButton>
+                              </div>
+                            ) : null}
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState title="No values yet">
-                    <Tags size={18} />
-                  </EmptyState>
-                )}
-              </section>
-            ))}
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState title="No values yet">
+                      <Tags size={18} />
+                    </EmptyState>
+                  )}
+                </section>
+              );
+            })}
           </div>
         )}
 
@@ -443,10 +582,16 @@ export function CatalogAdminPage() {
                 required
                 value={newCategory.code}
               />
-              <p className="field-hint">Use lowercase letters, numbers, and underscores.</p>
+              <p className="field-hint">
+                Use lowercase letters, numbers, and underscores.
+              </p>
             </FormField>
             <div className="modal-actions">
-              <Button variant="secondary" onClick={() => setIsCategoryOpen(false)} type="button">
+              <Button
+                variant="secondary"
+                onClick={() => setIsCategoryOpen(false)}
+                type="button"
+              >
                 Cancel
               </Button>
               <Button disabled={createCategoryMutation.isPending} type="submit">
@@ -455,14 +600,20 @@ export function CatalogAdminPage() {
             </div>
           </form>
           {createCategoryMutation.error ? (
-            <p className="inline-error">{createCategoryMutation.error.message}</p>
+            <p className="inline-error">
+              {createCategoryMutation.error.message}
+            </p>
           ) : null}
         </Modal>
 
         <Modal
           isOpen={Boolean(categoryToEdit)}
           onClose={() => setCategoryToEdit(null)}
-          title={categoryToEdit ? `Edit ${categoryToEdit.name}` : "Edit Choice Category"}
+          title={
+            categoryToEdit
+              ? `Edit ${categoryToEdit.name}`
+              : "Edit Choice Category"
+          }
         >
           <form className="stack-form" onSubmit={onUpdateCategory}>
             <FormField label="Category Name">
@@ -470,7 +621,10 @@ export function CatalogAdminPage() {
                 disabled={!categoryToEdit}
                 maxLength={160}
                 onChange={(event) =>
-                  setEditCategory((value) => ({ ...value, name: event.target.value }))
+                  setEditCategory((value) => ({
+                    ...value,
+                    name: event.target.value,
+                  }))
                 }
                 required
                 value={editCategory.name}
@@ -481,30 +635,46 @@ export function CatalogAdminPage() {
                 checked={editCategory.isActive}
                 disabled={!categoryToEdit}
                 onChange={(event) =>
-                  setEditCategory((value) => ({ ...value, isActive: event.target.checked }))
+                  setEditCategory((value) => ({
+                    ...value,
+                    isActive: event.target.checked,
+                  }))
                 }
                 type="checkbox"
               />
               Active
             </label>
             <div className="modal-actions">
-              <Button variant="secondary" onClick={() => setCategoryToEdit(null)} type="button">
+              <Button
+                variant="secondary"
+                onClick={() => setCategoryToEdit(null)}
+                type="button"
+              >
                 Cancel
               </Button>
-              <Button disabled={!categoryToEdit || updateCategoryMutation.isPending} type="submit">
+              <Button
+                disabled={!categoryToEdit || updateCategoryMutation.isPending}
+                type="submit"
+              >
                 Save Category
               </Button>
             </div>
           </form>
           {updateCategoryMutation.error ? (
-            <p className="inline-error">{updateCategoryMutation.error.message}</p>
+            <p className="inline-error">
+              {updateCategoryMutation.error.message}
+            </p>
           ) : null}
         </Modal>
 
         <Modal
           isOpen={isEditValueOpen}
           onClose={() => setIsEditValueOpen(false)}
-          title={selectedReferenceValue ? selectedReferenceValue.label : "Edit Choice Value"}
+          title={
+            selectedReferenceValue
+              ? selectedReferenceValue.label
+              : "Edit Choice Value"
+          }
         >
           <form className="stack-form" onSubmit={onUpdateValue}>
             <FormField label="Label">
@@ -536,10 +706,19 @@ export function CatalogAdminPage() {
               Active
             </label>
             <div className="modal-actions">
-              <Button variant="secondary" onClick={() => setIsEditValueOpen(false)} type="button">
+              <Button
+                variant="secondary"
+                onClick={() => setIsEditValueOpen(false)}
+                type="button"
+              >
                 Cancel
               </Button>
-              <Button disabled={!selectedReferenceValue || updateValueMutation.isPending} type="submit">
+              <Button
+                disabled={
+                  !selectedReferenceValue || updateValueMutation.isPending
+                }
+                type="submit"
+              >
                 Save Value
               </Button>
             </div>
@@ -551,11 +730,7 @@ export function CatalogAdminPage() {
 
         <ConfirmationDialog
           confirmLabel="Delete Category"
-          description={
-            categoryToDelete
-              ? `Delete ${categoryToDelete.name}? This only works when the category has no values.`
-              : "Delete this choice category?"
-          }
+          description={deleteCategoryDescription}
           isPending={deleteCategoryMutation.isPending}
           isOpen={Boolean(categoryToDelete)}
           onCancel={() => setCategoryToDelete(null)}
@@ -564,7 +739,9 @@ export function CatalogAdminPage() {
           tone="danger"
         >
           {deleteCategoryMutation.error ? (
-            <p className="inline-error">{deleteCategoryMutation.error.message}</p>
+            <p className="inline-error">
+              {deleteCategoryMutation.error.message}
+            </p>
           ) : null}
         </ConfirmationDialog>
 

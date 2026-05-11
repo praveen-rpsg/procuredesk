@@ -1,12 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, CheckCircle2, FolderTree, Pencil, Plus, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Building2, CheckCircle2, ChevronDown, ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Fragment, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import {
+  createAdminDepartment,
   createAdminEntity,
+  deleteAdminDepartment,
   deleteAdminEntity,
+  listAdminDepartments,
   listAdminEntities,
+  updateAdminDepartment,
   updateAdminEntity,
+  type AdminDepartment,
   type AdminEntity,
 } from "../api/adminApi";
 import { useAuth } from "../../../shared/auth/AuthProvider";
@@ -21,68 +26,15 @@ import { Modal } from "../../../shared/ui/modal/Modal";
 import { PageHeader } from "../../../shared/ui/page-header/PageHeader";
 import { Skeleton } from "../../../shared/ui/skeleton/Skeleton";
 import { StatusBadge } from "../../../shared/ui/status/StatusBadge";
-import { DataTable, type DataTableColumn } from "../../../shared/ui/table/DataTable";
 import { useToast } from "../../../shared/ui/toast/ToastProvider";
 
 type EntitiesAdminPageProps = {
-  onManageDepartments?: (entityId: string) => void;
+  focusEntityId?: string;
 };
 
 const suggestedDepartments = ["Commercial", "Civil", "Stores", "Finance", "HR & Admin", "IT", "Mechanical", "Electrical"];
 
-const entityColumns = (
-  onDelete: (entity: AdminEntity) => void,
-  onEdit: (entity: AdminEntity) => void,
-  onManageDepartments: ((entityId: string) => void) | undefined,
-  canManage: boolean,
-): DataTableColumn<AdminEntity>[] => [
-  { key: "code", header: "Code", render: (row) => row.code },
-  { key: "name", header: "Entity Name", render: (row) => row.name },
-  {
-    key: "departments",
-    header: "Departments",
-    render: (row) => formatDepartmentSummary(row.departments, row.departmentCount),
-  },
-  {
-    key: "status",
-    header: "Status",
-    render: (row) => <StatusBadge tone={row.isActive ? "success" : "neutral"}>{row.isActive ? "Active" : "Inactive"}</StatusBadge>,
-  },
-  { key: "tenders", header: "Tenders", render: (row) => row.tenderCount },
-  {
-    key: "action",
-    header: "Actions",
-    render: (row) => (
-      <div className="row-actions">
-        <IconButton
-          aria-label={`Manage departments for ${row.name}`}
-          onClick={() => onManageDepartments?.(row.id)}
-          tooltip="Manage departments"
-        >
-          <FolderTree size={17} />
-        </IconButton>
-        {canManage ? (
-        <>
-        <IconButton aria-label={`Edit ${row.name}`} onClick={() => onEdit(row)} tooltip="Edit entity">
-          <Pencil size={17} />
-        </IconButton>
-        <IconButton
-          aria-label={`Delete ${row.name}`}
-          disabled={row.tenderCount > 0}
-          onClick={() => onDelete(row)}
-          tooltip={row.tenderCount > 0 ? "Entity has tenders and cannot be deleted" : "Delete entity"}
-          variant="danger"
-        >
-          <Trash2 size={17} />
-        </IconButton>
-        </>
-        ) : null}
-      </div>
-    ),
-  },
-];
-
-export function EntitiesAdminPage({ onManageDepartments }: EntitiesAdminPageProps) {
+export function EntitiesAdminPage({ focusEntityId = "" }: EntitiesAdminPageProps) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { notify } = useToast();
@@ -91,9 +43,27 @@ export function EntitiesAdminPage({ onManageDepartments }: EntitiesAdminPageProp
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [entityToDelete, setEntityToDelete] = useState<AdminEntity | null>(null);
+  const [departmentCreateEntity, setDepartmentCreateEntity] = useState<AdminEntity | null>(null);
+  const [departmentToDelete, setDepartmentToDelete] = useState<AdminDepartment | null>(null);
+  const [departmentToEdit, setDepartmentToEdit] = useState<AdminDepartment | null>(null);
   const [newEntity, setNewEntity] = useState({ code: "", departmentsText: "", name: "" });
+  const [newDepartmentName, setNewDepartmentName] = useState("");
+  const [expandedEntityId, setExpandedEntityId] = useState("");
   const [selectedEntityId, setSelectedEntityId] = useState("");
+  const [editDepartment, setEditDepartment] = useState({ isActive: true, name: "" });
   const [editEntity, setEditEntity] = useState({ code: "", isActive: true, name: "" });
+
+  useEffect(() => {
+    if (focusEntityId) {
+      setExpandedEntityId(focusEntityId);
+    }
+  }, [focusEntityId]);
+
+  const expandedDepartments = useQuery({
+    enabled: Boolean(expandedEntityId),
+    queryFn: () => listAdminDepartments(expandedEntityId),
+    queryKey: ["admin-departments", expandedEntityId],
+  });
 
   const selectedEntity = useMemo(
     () => entities.data?.find((entity) => entity.id === selectedEntityId) ?? null,
@@ -129,10 +99,11 @@ export function EntitiesAdminPage({ onManageDepartments }: EntitiesAdminPageProp
       }),
     onSuccess: async (result) => {
       setNewEntity({ code: "", departmentsText: "", name: "" });
+      setExpandedEntityId(result.id);
       setSelectedEntityId(result.id);
       setIsCreateOpen(false);
       await queryClient.invalidateQueries({ queryKey: ["admin-entities"] });
-      await queryClient.invalidateQueries({ queryKey: ["admin-departments"] });
+      await queryClient.invalidateQueries({ queryKey: ["admin-departments", result.id] });
       notify({ message: "Entity created.", tone: "success" });
     },
   });
@@ -155,11 +126,64 @@ export function EntitiesAdminPage({ onManageDepartments }: EntitiesAdminPageProp
   const deleteMutation = useMutation({
     mutationFn: () => deleteAdminEntity(entityToDelete?.id ?? ""),
     onSuccess: async () => {
+      const deletedEntityId = entityToDelete?.id;
       setEntityToDelete(null);
       setSelectedEntityId("");
+      if (deletedEntityId === expandedEntityId) {
+        setExpandedEntityId("");
+      }
       await queryClient.invalidateQueries({ queryKey: ["admin-entities"] });
-      await queryClient.invalidateQueries({ queryKey: ["admin-departments"] });
+      if (deletedEntityId) {
+        await queryClient.invalidateQueries({ queryKey: ["admin-departments", deletedEntityId] });
+      }
       notify({ message: "Entity deleted.", tone: "success" });
+    },
+  });
+
+  const createDepartmentMutation = useMutation({
+    mutationFn: () => {
+      if (!departmentCreateEntity) throw new Error("Select an entity before creating a department.");
+      return createAdminDepartment(departmentCreateEntity.id, { name: newDepartmentName });
+    },
+    onSuccess: async () => {
+      const entityId = departmentCreateEntity?.id;
+      setNewDepartmentName("");
+      setDepartmentCreateEntity(null);
+      if (entityId) {
+        setExpandedEntityId(entityId);
+        await queryClient.invalidateQueries({ queryKey: ["admin-departments", entityId] });
+      }
+      await queryClient.invalidateQueries({ queryKey: ["admin-entities"] });
+      notify({ message: "Department created.", tone: "success" });
+    },
+  });
+
+  const updateDepartmentMutation = useMutation({
+    mutationFn: () => {
+      if (!departmentToEdit) throw new Error("Select a department before saving.");
+      return updateAdminDepartment(departmentToEdit.id, editDepartment);
+    },
+    onSuccess: async () => {
+      const entityId = departmentToEdit?.entityId;
+      setDepartmentToEdit(null);
+      if (entityId) {
+        await queryClient.invalidateQueries({ queryKey: ["admin-departments", entityId] });
+      }
+      await queryClient.invalidateQueries({ queryKey: ["admin-entities"] });
+      notify({ message: "Department saved.", tone: "success" });
+    },
+  });
+
+  const deleteDepartmentMutation = useMutation({
+    mutationFn: () => deleteAdminDepartment(departmentToDelete?.id ?? ""),
+    onSuccess: async () => {
+      const entityId = departmentToDelete?.entityId;
+      setDepartmentToDelete(null);
+      if (entityId) {
+        await queryClient.invalidateQueries({ queryKey: ["admin-departments", entityId] });
+      }
+      await queryClient.invalidateQueries({ queryKey: ["admin-entities"] });
+      notify({ message: "Department deleted.", tone: "success" });
     },
   });
 
@@ -175,6 +199,18 @@ export function EntitiesAdminPage({ onManageDepartments }: EntitiesAdminPageProp
     updateMutation.mutate();
   };
 
+  const onCreateDepartment = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canManage) return;
+    createDepartmentMutation.mutate();
+  };
+
+  const onUpdateDepartment = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canManage) return;
+    updateDepartmentMutation.mutate();
+  };
+
   const openEdit = (entity: AdminEntity) => {
     setSelectedEntityId(entity.id);
     setEditEntity({
@@ -183,6 +219,20 @@ export function EntitiesAdminPage({ onManageDepartments }: EntitiesAdminPageProp
       name: entity.name,
     });
     setIsEditOpen(true);
+  };
+
+  const openCreateDepartment = (entity: AdminEntity) => {
+    setDepartmentCreateEntity(entity);
+    setNewDepartmentName("");
+    setExpandedEntityId(entity.id);
+  };
+
+  const openDepartmentEdit = (department: AdminDepartment) => {
+    setDepartmentToEdit(department);
+    setEditDepartment({
+      isActive: department.isActive,
+      name: department.name,
+    });
   };
 
   return (
@@ -197,9 +247,9 @@ export function EntitiesAdminPage({ onManageDepartments }: EntitiesAdminPageProp
           ) : null
         }
         eyebrow="Admin"
-        title="Entities"
+        title="Entities & Departments"
       >
-        Maintain tenant business entities in a table-first view.
+        Maintain tenant entities and their departments from one table.
       </PageHeader>
 
       <div className="admin-stack">
@@ -214,7 +264,7 @@ export function EntitiesAdminPage({ onManageDepartments }: EntitiesAdminPageProp
           <div className="detail-header">
             <div>
               <p className="eyebrow">Directory</p>
-              <h2>Business Entities</h2>
+              <h2>Entities & Departments</h2>
             </div>
             <Building2 size={20} />
           </div>
@@ -223,11 +273,168 @@ export function EntitiesAdminPage({ onManageDepartments }: EntitiesAdminPageProp
           ) : entities.error ? (
             <p className="inline-error">{entities.error.message}</p>
           ) : (entities.data ?? []).length > 0 ? (
-            <DataTable
-              columns={entityColumns(setEntityToDelete, openEdit, onManageDepartments, canManage)}
-              getRowKey={(row) => row.id}
-              rows={entities.data ?? []}
-            />
+            <div aria-label="Entities and departments" className="table-shell entity-tree-table" role="region" tabIndex={0}>
+              <table>
+                <thead>
+                  <tr>
+                    <th aria-label="Expand departments" />
+                    <th scope="col">Code</th>
+                    <th scope="col">Entity / Department</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Tenders</th>
+                    <th scope="col">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(entities.data ?? []).map((entity) => {
+                    const isExpanded = expandedEntityId === entity.id;
+                    return (
+                      <Fragment key={entity.id}>
+                        <tr className={isExpanded ? "entity-tree-row entity-tree-row-expanded" : "entity-tree-row"}>
+                          <td className="entity-tree-toggle-cell">
+                            <IconButton
+                              aria-label={`${isExpanded ? "Collapse" : "Expand"} departments for ${entity.name}`}
+                              onClick={() => setExpandedEntityId((currentId) => (currentId === entity.id ? "" : entity.id))}
+                              tooltip={isExpanded ? "Collapse departments" : "Show departments"}
+                            >
+                              {isExpanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
+                            </IconButton>
+                          </td>
+                          <td className="col-mono">{entity.code}</td>
+                          <td>
+                            <div className="entity-tree-title">
+                              <strong>{entity.name}</strong>
+                              <span>{formatDepartmentSummary(entity.departments, entity.departmentCount)}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <StatusBadge tone={entity.isActive ? "success" : "neutral"}>
+                              {entity.isActive ? "Active" : "Inactive"}
+                            </StatusBadge>
+                          </td>
+                          <td>{entity.tenderCount}</td>
+                          <td>
+                            <div className="row-actions">
+                              {canManage ? (
+                                <IconButton
+                                  aria-label={`Add department under ${entity.name}`}
+                                  onClick={() => openCreateDepartment(entity)}
+                                  tooltip="Add department"
+                                >
+                                  <Plus size={17} />
+                                </IconButton>
+                              ) : null}
+                              {canManage ? (
+                                <>
+                                  <IconButton aria-label={`Edit ${entity.name}`} onClick={() => openEdit(entity)} tooltip="Edit entity">
+                                    <Pencil size={17} />
+                                  </IconButton>
+                                  <IconButton
+                                    aria-label={`Delete ${entity.name}`}
+                                    disabled={entity.tenderCount > 0}
+                                    onClick={() => setEntityToDelete(entity)}
+                                    tooltip={entity.tenderCount > 0 ? "Entity has tenders and cannot be deleted" : "Delete entity"}
+                                    variant="danger"
+                                  >
+                                    <Trash2 size={17} />
+                                  </IconButton>
+                                </>
+                              ) : (
+                                "-"
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                        {isExpanded ? (
+                          <tr className="entity-departments-row">
+                            <td colSpan={6}>
+                              <div className="entity-departments-panel">
+                                <div className="entity-departments-panel-header">
+                                  <div>
+                                    <strong>Departments for {entity.name}</strong>
+                                    <span>{entity.departmentCount} active departments</span>
+                                  </div>
+                                  {canManage ? (
+                                    <Button variant="secondary" onClick={() => openCreateDepartment(entity)} type="button">
+                                      <Plus size={16} />
+                                      New Department
+                                    </Button>
+                                  ) : null}
+                                </div>
+                                {expandedDepartments.isLoading ? (
+                                  <Skeleton height={16} />
+                                ) : expandedDepartments.error ? (
+                                  <p className="inline-error">{expandedDepartments.error.message}</p>
+                                ) : (expandedDepartments.data ?? []).length > 0 ? (
+                                  <table className="entity-departments-table">
+                                    <thead>
+                                      <tr>
+                                        <th scope="col">Department</th>
+                                        <th scope="col">Status</th>
+                                        <th scope="col">Tenders</th>
+                                        <th scope="col">Actions</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {(expandedDepartments.data ?? []).map((department) => (
+                                        <tr key={department.id}>
+                                          <td>
+                                            <div className="entity-tree-title">
+                                              <strong>{department.name}</strong>
+                                              <span>{entity.code}</span>
+                                            </div>
+                                          </td>
+                                          <td>
+                                            <StatusBadge tone={department.isActive ? "success" : "neutral"}>
+                                              {department.isActive ? "Active" : "Inactive"}
+                                            </StatusBadge>
+                                          </td>
+                                          <td>{department.tenderCount}</td>
+                                          <td>
+                                            {canManage ? (
+                                              <div className="row-actions">
+                                                <IconButton
+                                                  aria-label={`Edit ${department.name}`}
+                                                  onClick={() => openDepartmentEdit(department)}
+                                                  tooltip="Edit department"
+                                                >
+                                                  <Pencil size={17} />
+                                                </IconButton>
+                                                <IconButton
+                                                  aria-label={`Delete ${department.name}`}
+                                                  disabled={department.tenderCount > 0}
+                                                  onClick={() => setDepartmentToDelete(department)}
+                                                  tooltip={
+                                                    department.tenderCount > 0
+                                                      ? "Department has tenders and cannot be deleted"
+                                                      : "Delete department"
+                                                  }
+                                                  variant="danger"
+                                                >
+                                                  <Trash2 size={17} />
+                                                </IconButton>
+                                              </div>
+                                            ) : (
+                                              "-"
+                                            )}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                ) : (
+                                  <p className="entity-departments-empty">No departments under this entity yet.</p>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <EmptyState title="No entities yet">
               <Building2 size={18} />
@@ -254,7 +461,7 @@ export function EntitiesAdminPage({ onManageDepartments }: EntitiesAdminPageProp
               />
             </FormField>
             <FormField
-              helperText="Optional. These departments are created with the entity and can be managed later from Admin > Departments."
+              helperText="Optional. These departments are created with the entity and can be managed later from this table."
               label="Initial Departments"
             >
               <TextArea
@@ -324,7 +531,7 @@ export function EntitiesAdminPage({ onManageDepartments }: EntitiesAdminPageProp
                   ))}
                 </div>
               ) : (
-                <p className="entity-department-empty">Best practice: add core departments now, then maintain changes from the Departments section.</p>
+                <p className="entity-department-empty">Best practice: add core departments now, then maintain changes from the entity row.</p>
               )}
             </div>
             <div className="modal-actions">
@@ -384,11 +591,11 @@ export function EntitiesAdminPage({ onManageDepartments }: EntitiesAdminPageProp
                 onClick={() => {
                   if (!selectedEntity) return;
                   setIsEditOpen(false);
-                  onManageDepartments?.(selectedEntity.id);
+                  openCreateDepartment(selectedEntity);
                 }}
                 type="button"
               >
-                Manage Departments
+                Add Department
               </Button>
             </div>
             <div className="modal-actions">
@@ -401,6 +608,69 @@ export function EntitiesAdminPage({ onManageDepartments }: EntitiesAdminPageProp
             </div>
           </form>
           {updateMutation.error ? <p className="inline-error">{updateMutation.error.message}</p> : null}
+        </Modal>
+
+        <Modal
+          isOpen={Boolean(departmentCreateEntity)}
+          onClose={() => setDepartmentCreateEntity(null)}
+          title={departmentCreateEntity ? `New Department - ${departmentCreateEntity.code}` : "New Department"}
+        >
+          <form className="stack-form" onSubmit={onCreateDepartment}>
+            <FormField label="Name">
+              <TextInput
+                disabled={!departmentCreateEntity}
+                maxLength={200}
+                onChange={(event) => setNewDepartmentName(event.target.value)}
+                required
+                value={newDepartmentName}
+              />
+            </FormField>
+            <div className="modal-actions">
+              <Button variant="secondary" onClick={() => setDepartmentCreateEntity(null)} type="button">
+                Cancel
+              </Button>
+              <Button disabled={!departmentCreateEntity || createDepartmentMutation.isPending} type="submit">
+                Create Department
+              </Button>
+            </div>
+          </form>
+          {createDepartmentMutation.error ? <p className="inline-error">{createDepartmentMutation.error.message}</p> : null}
+        </Modal>
+
+        <Modal
+          isOpen={Boolean(departmentToEdit)}
+          onClose={() => setDepartmentToEdit(null)}
+          title={departmentToEdit ? departmentToEdit.name : "Edit Department"}
+        >
+          <form className="stack-form" onSubmit={onUpdateDepartment}>
+            <FormField label="Name">
+              <TextInput
+                disabled={!departmentToEdit}
+                maxLength={200}
+                onChange={(event) => setEditDepartment((value) => ({ ...value, name: event.target.value }))}
+                required
+                value={editDepartment.name}
+              />
+            </FormField>
+            <label className="checkbox-row">
+              <input
+                checked={editDepartment.isActive}
+                disabled={!departmentToEdit}
+                onChange={(event) => setEditDepartment((value) => ({ ...value, isActive: event.target.checked }))}
+                type="checkbox"
+              />
+              Active
+            </label>
+            <div className="modal-actions">
+              <Button variant="secondary" onClick={() => setDepartmentToEdit(null)} type="button">
+                Cancel
+              </Button>
+              <Button disabled={!departmentToEdit || updateDepartmentMutation.isPending} type="submit">
+                Save Department
+              </Button>
+            </div>
+          </form>
+          {updateDepartmentMutation.error ? <p className="inline-error">{updateDepartmentMutation.error.message}</p> : null}
         </Modal>
 
         <ConfirmationDialog
@@ -418,6 +688,23 @@ export function EntitiesAdminPage({ onManageDepartments }: EntitiesAdminPageProp
           tone="danger"
         >
           {deleteMutation.error ? <p className="inline-error">{deleteMutation.error.message}</p> : null}
+        </ConfirmationDialog>
+
+        <ConfirmationDialog
+          confirmLabel="Delete Department"
+          description={
+            departmentToDelete
+              ? `Delete ${departmentToDelete.name}? It will be removed from new case form choices.`
+              : "Delete this department?"
+          }
+          isOpen={Boolean(departmentToDelete)}
+          isPending={deleteDepartmentMutation.isPending}
+          onCancel={() => setDepartmentToDelete(null)}
+          onConfirm={() => deleteDepartmentMutation.mutate()}
+          title="Delete Department"
+          tone="danger"
+        >
+          {deleteDepartmentMutation.error ? <p className="inline-error">{deleteDepartmentMutation.error.message}</p> : null}
         </ConfirmationDialog>
       </div>
     </section>

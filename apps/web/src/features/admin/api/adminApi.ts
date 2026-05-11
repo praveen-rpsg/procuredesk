@@ -72,6 +72,7 @@ export type CatalogReferenceCategory = {
   isActive: boolean;
   isSystemCategory: boolean;
   name: string;
+  usageCount: number;
   valueCount: number;
 };
 
@@ -134,7 +135,10 @@ export function updateAdminUserProfile(
   });
 }
 
-export function updateAdminUserStatus(userId: string, status: AdminUser["status"]) {
+export function updateAdminUserStatus(
+  userId: string,
+  status: AdminUser["status"],
+) {
   return apiRequest<void>(`/admin/users/${userId}/status`, {
     body: JSON.stringify({ status }),
     method: "PATCH",
@@ -163,7 +167,11 @@ export function createAdminRole(payload: {
 
 export function updateAdminRole(
   roleId: string,
-  payload: { description?: string | null; name: string; permissionCodes: string[] },
+  payload: {
+    description?: string | null;
+    name: string;
+    permissionCodes: string[];
+  },
 ) {
   return apiRequest<void>(`/admin/roles/${roleId}`, {
     body: JSON.stringify(payload),
@@ -188,7 +196,11 @@ export function listAdminEntities() {
   return apiRequest<AdminEntity[]>("/entities");
 }
 
-export function createAdminEntity(payload: { code: string; departments: string[]; name: string }) {
+export function createAdminEntity(payload: {
+  code: string;
+  departments: string[];
+  name: string;
+}) {
   return apiRequest<{ id: string }>("/admin/entities", {
     body: JSON.stringify(payload),
     method: "POST",
@@ -197,7 +209,12 @@ export function createAdminEntity(payload: { code: string; departments: string[]
 
 export function updateAdminEntity(
   entityId: string,
-  payload: { code: string; departments?: string[]; isActive: boolean; name: string },
+  payload: {
+    code: string;
+    departments?: string[];
+    isActive: boolean;
+    name: string;
+  },
 ) {
   return apiRequest<void>(`/admin/entities/${entityId}`, {
     body: JSON.stringify(payload),
@@ -211,7 +228,10 @@ export function deleteAdminEntity(entityId: string) {
   });
 }
 
-export function replaceAdminUserEntityScopes(userId: string, entityIds: string[]) {
+export function replaceAdminUserEntityScopes(
+  userId: string,
+  entityIds: string[],
+) {
   return apiRequest<void>(`/admin/users/${userId}/entity-scopes`, {
     body: JSON.stringify({ entityIds }),
     method: "PUT",
@@ -224,17 +244,25 @@ export function listAdminDepartments(entityId: string) {
 
 export function listAssignableOwners(entityId: string) {
   const search = new URLSearchParams({ entityId });
-  return apiRequest<AssignableOwner[]>(`/admin/users/assignable-owners?${search.toString()}`);
+  return apiRequest<AssignableOwner[]>(
+    `/admin/users/assignable-owners?${search.toString()}`,
+  );
 }
 
-export function createAdminDepartment(entityId: string, payload: { name: string }) {
+export function createAdminDepartment(
+  entityId: string,
+  payload: { name: string },
+) {
   return apiRequest<{ id: string }>(`/admin/entities/${entityId}/departments`, {
     body: JSON.stringify(payload),
     method: "POST",
   });
 }
 
-export function updateAdminDepartment(departmentId: string, payload: { isActive: boolean; name: string }) {
+export function updateAdminDepartment(
+  departmentId: string,
+  payload: { isActive: boolean; name: string },
+) {
   return apiRequest<void>(`/admin/departments/${departmentId}`, {
     body: JSON.stringify(payload),
     method: "PATCH",
@@ -251,14 +279,20 @@ export function getCatalogSnapshot() {
   return apiRequest<CatalogSnapshot>("/catalog");
 }
 
-export function createCatalogReferenceValue(payload: { categoryCode: string; label: string }) {
+export function createCatalogReferenceValue(payload: {
+  categoryCode: string;
+  label: string;
+}) {
   return apiRequest<{ id: string }>("/admin/catalog/reference-values", {
     body: JSON.stringify(payload),
     method: "POST",
   });
 }
 
-export function createCatalogReferenceCategory(payload: { code: string; name: string }) {
+export function createCatalogReferenceCategory(payload: {
+  code: string;
+  name: string;
+}) {
   return apiRequest<{ id: string }>("/admin/catalog/reference-categories", {
     body: JSON.stringify(payload),
     method: "POST",
@@ -285,16 +319,22 @@ export function updateCatalogReferenceValue(
   referenceValueId: string,
   payload: { isActive: boolean; label: string },
 ) {
-  return apiRequest<void>(`/admin/catalog/reference-values/${referenceValueId}`, {
-    body: JSON.stringify(payload),
-    method: "PATCH",
-  });
+  return apiRequest<void>(
+    `/admin/catalog/reference-values/${referenceValueId}`,
+    {
+      body: JSON.stringify(payload),
+      method: "PATCH",
+    },
+  );
 }
 
 export function deleteCatalogReferenceValue(referenceValueId: string) {
-  return apiRequest<void>(`/admin/catalog/reference-values/${referenceValueId}`, {
-    method: "DELETE",
-  });
+  return apiRequest<void>(
+    `/admin/catalog/reference-values/${referenceValueId}`,
+    {
+      method: "DELETE",
+    },
+  );
 }
 
 export function createTenderType(payload: {
@@ -329,25 +369,36 @@ export function deleteTenderType(tenderTypeId: string) {
   });
 }
 
-export function updateTenderTypeCompletionRule(ruleId: string, completionDays: number) {
+export function updateTenderTypeCompletionRule(
+  ruleId: string,
+  completionDays: number,
+) {
   return apiRequest<void>(`/admin/catalog/tender-type-rules/${ruleId}`, {
     body: JSON.stringify({ completionDays }),
     method: "PATCH",
   });
 }
 
-export function upsertTenderTypeCompletionRule(tenderTypeId: string, completionDays: number) {
-  return apiRequest<{ id: string }>(`/admin/catalog/tender-types/${tenderTypeId}/completion-rule`, {
-    body: JSON.stringify({ completionDays }),
-    method: "PATCH",
-  });
+export function upsertTenderTypeCompletionRule(
+  tenderTypeId: string,
+  completionDays: number,
+) {
+  return apiRequest<{ id: string }>(
+    `/admin/catalog/tender-types/${tenderTypeId}/completion-rule`,
+    {
+      body: JSON.stringify({ completionDays }),
+      method: "PATCH",
+    },
+  );
 }
 
 export function getPasswordPolicy() {
   return apiRequest<PasswordPolicy>("/admin/security/password-policy");
 }
 
-export function updatePasswordPolicy(payload: Omit<PasswordPolicy, "tenantId">) {
+export function updatePasswordPolicy(
+  payload: Omit<PasswordPolicy, "tenantId">,
+) {
   return apiRequest<PasswordPolicy>("/admin/security/password-policy", {
     body: JSON.stringify(payload),
     method: "PUT",
@@ -355,8 +406,11 @@ export function updatePasswordPolicy(payload: Omit<PasswordPolicy, "tenantId">) 
 }
 
 export function setAdminUserPassword(userId: string, password: string) {
-  return apiRequest<{ updated: true }>(`/admin/security/users/${userId}/password`, {
-    body: JSON.stringify({ password }),
-    method: "PUT",
-  });
+  return apiRequest<{ updated: true }>(
+    `/admin/security/users/${userId}/password`,
+    {
+      body: JSON.stringify({ password }),
+      method: "PUT",
+    },
+  );
 }

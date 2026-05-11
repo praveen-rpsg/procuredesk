@@ -10,6 +10,7 @@ export type CatalogSnapshot = {
     name: string;
     isSystemCategory: boolean;
     isActive: boolean;
+    usageCount: number;
     valueCount: number;
   }>;
   referenceValues: Array<{
@@ -35,47 +36,80 @@ export class CatalogRepository {
   constructor(private readonly db: DatabaseService) {}
 
   async getSnapshot(tenantId: string): Promise<CatalogSnapshot> {
-    const [referenceCategories, referenceValues, tenderTypes] = await Promise.all([
-      this.db.query<
-        QueryResultRow & {
-          id: string;
-          code: string;
-          name: string;
-          is_system_category: boolean;
-          is_active: boolean;
-          value_count: number;
-        }
-      >(
-        `
+    const [referenceCategories, referenceValues, tenderTypes] =
+      await Promise.all([
+        this.db.query<
+          QueryResultRow & {
+            id: string;
+            code: string;
+            name: string;
+            is_system_category: boolean;
+            is_active: boolean;
+            usage_count: number;
+            value_count: number;
+          }
+        >(
+          `
+          with reference_usage_raw as (
+            select pr_receiving_medium_id as reference_value_id, count(*) as usage_count
+            from procurement.cases
+            where tenant_id = $1 and pr_receiving_medium_id is not null
+            group by pr_receiving_medium_id
+            union all
+            select budget_type_id as reference_value_id, count(*) as usage_count
+            from procurement.cases
+            where tenant_id = $1 and budget_type_id is not null
+            group by budget_type_id
+            union all
+            select nature_of_work_id as reference_value_id, count(*) as usage_count
+            from procurement.cases
+            where tenant_id = $1 and nature_of_work_id is not null
+            group by nature_of_work_id
+          ),
+          reference_usage as (
+            select reference_value_id, sum(usage_count)::integer as usage_count
+            from reference_usage_raw
+            group by reference_value_id
+          ),
+          category_summary as (
+            select
+              rv.category_id,
+              count(rv.id)::integer as value_count,
+              coalesce(sum(coalesce(ru.usage_count, 0)), 0)::integer as usage_count
+            from catalog.reference_values rv
+            left join reference_usage ru
+              on ru.reference_value_id = rv.id
+            where rv.tenant_id = $1
+              and rv.deleted_at is null
+            group by rv.category_id
+          )
           select
             rc.id,
             rc.code,
             rc.name,
             rc.is_system_category,
             rc.is_active,
-            count(rv.id)::integer as value_count
+            coalesce(cs.usage_count, 0)::integer as usage_count,
+            coalesce(cs.value_count, 0)::integer as value_count
           from catalog.reference_categories rc
-          left join catalog.reference_values rv
-            on rv.category_id = rc.id
-           and rv.tenant_id = $1
-           and rv.deleted_at is null
+          left join category_summary cs
+            on cs.category_id = rc.id
           where (rc.tenant_id = $1 or rc.tenant_id is null)
             and rc.deleted_at is null
-          group by rc.id
           order by rc.is_system_category desc, rc.name asc
         `,
-        [tenantId],
-      ),
-      this.db.query<
-        QueryResultRow & {
-          id: string;
-          category_code: string;
-          label: string;
-          is_active: boolean;
-          usage_count: number;
-        }
-      >(
-        `
+          [tenantId],
+        ),
+        this.db.query<
+          QueryResultRow & {
+            id: string;
+            category_code: string;
+            label: string;
+            is_active: boolean;
+            usage_count: number;
+          }
+        >(
+          `
           with reference_usage_raw as (
             select pr_receiving_medium_id as reference_value_id, count(*) as usage_count
             from procurement.cases
@@ -113,20 +147,20 @@ export class CatalogRepository {
             and rv.deleted_at is null
           order by rc.code asc, rv.display_order asc, rv.label asc
         `,
-        [tenantId],
-      ),
-      this.db.query<
-        QueryResultRow & {
-          id: string;
-          name: string;
-          requires_full_milestone_form: boolean;
-          completion_days: number | null;
-          rule_id: string | null;
-          is_active: boolean;
-          usage_count: number;
-        }
-      >(
-        `
+          [tenantId],
+        ),
+        this.db.query<
+          QueryResultRow & {
+            id: string;
+            name: string;
+            requires_full_milestone_form: boolean;
+            completion_days: number | null;
+            rule_id: string | null;
+            is_active: boolean;
+            usage_count: number;
+          }
+        >(
+          `
           with tender_usage as (
             select tender_type_id, count(*)::integer as usage_count
             from procurement.cases
@@ -151,9 +185,9 @@ export class CatalogRepository {
             and tt.deleted_at is null
           order by tt.name asc
         `,
-        [tenantId],
-      ),
-    ]);
+          [tenantId],
+        ),
+      ]);
 
     return {
       referenceCategories: referenceCategories.rows.map((row) => ({
@@ -162,6 +196,7 @@ export class CatalogRepository {
         name: row.name,
         isSystemCategory: row.is_system_category,
         isActive: row.is_active,
+        usageCount: row.usage_count,
         valueCount: row.value_count,
       })),
       referenceValues: referenceValues.rows.map((row) => ({
@@ -257,23 +292,47 @@ export class CatalogRepository {
           and is_system_category = false
           and deleted_at is null
       `,
-      [input.categoryId, input.tenantId, input.name, input.isActive, input.updatedBy],
+      [
+        input.categoryId,
+        input.tenantId,
+        input.name,
+        input.isActive,
+        input.updatedBy,
+      ],
     );
     return (result.rowCount ?? 0) > 0;
   }
 
-  async countReferenceCategoryValues(input: { categoryId: string; tenantId: string }): Promise<number> {
-    const row = await this.db.one<QueryResultRow & { value_count: number }>(
+  async countReferenceCategoryUsage(input: {
+    categoryId: string;
+    tenantId: string;
+  }): Promise<number> {
+    const row = await this.db.one<QueryResultRow & { usage_count: number }>(
       `
-        select count(*)::integer as value_count
-        from catalog.reference_values rv
+        with reference_usage_raw as (
+          select pr_receiving_medium_id as reference_value_id
+          from procurement.cases
+          where tenant_id = $1 and pr_receiving_medium_id is not null
+          union all
+          select budget_type_id as reference_value_id
+          from procurement.cases
+          where tenant_id = $1 and budget_type_id is not null
+          union all
+          select nature_of_work_id as reference_value_id
+          from procurement.cases
+          where tenant_id = $1 and nature_of_work_id is not null
+        )
+        select count(*)::integer as usage_count
+        from reference_usage_raw ru
+        join catalog.reference_values rv
+          on rv.id = ru.reference_value_id
         where rv.tenant_id = $1
           and rv.category_id = $2
           and rv.deleted_at is null
       `,
       [input.tenantId, input.categoryId],
     );
-    return row?.value_count ?? 0;
+    return row?.usage_count ?? 0;
   }
 
   async deleteReferenceCategory(input: {
@@ -281,22 +340,46 @@ export class CatalogRepository {
     deletedBy: string;
     tenantId: string;
   }): Promise<boolean> {
-    const result = await this.db.query(
-      `
-        update catalog.reference_categories
-        set is_active = false,
-            deleted_at = now(),
-            deleted_by = $3,
-            updated_at = now(),
-            updated_by = $3
-        where id = $1
-          and tenant_id = $2
-          and is_system_category = false
-          and deleted_at is null
-      `,
-      [input.categoryId, input.tenantId, input.deletedBy],
-    );
-    return (result.rowCount ?? 0) > 0;
+    return this.db.transaction(async (client) => {
+      const result = await this.db.query(
+        `
+          update catalog.reference_categories
+          set is_active = false,
+              deleted_at = now(),
+              deleted_by = $3,
+              updated_at = now(),
+              updated_by = $3
+          where id = $1
+            and tenant_id = $2
+            and is_system_category = false
+            and deleted_at is null
+        `,
+        [input.categoryId, input.tenantId, input.deletedBy],
+        client,
+      );
+
+      if ((result.rowCount ?? 0) === 0) {
+        return false;
+      }
+
+      await this.db.query(
+        `
+          update catalog.reference_values
+          set is_active = false,
+              deleted_at = now(),
+              deleted_by = $3,
+              updated_at = now(),
+              updated_by = $3
+          where tenant_id = $1
+            and category_id = $2
+            and deleted_at is null
+        `,
+        [input.tenantId, input.categoryId, input.deletedBy],
+        client,
+      );
+
+      return true;
+    });
   }
 
   async updateReferenceValue(input: {
@@ -569,7 +652,9 @@ export class CatalogRepository {
     tenantId: string;
     tenderTypeId: string;
   }): Promise<number | null> {
-    const row = await this.db.one<QueryResultRow & { completion_days: number | null }>(
+    const row = await this.db.one<
+      QueryResultRow & { completion_days: number | null }
+    >(
       `
         select tcr.completion_days
         from catalog.tender_types tt
