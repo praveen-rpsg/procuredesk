@@ -127,7 +127,7 @@ export function CaseDetailPanel({ caseId, onDeleted, onEdit }: CaseDetailPanelPr
       </div>
 
       <dl className="detail-grid case-preview-metrics">
-        <Metric label="PR ID" value={kase.prId} />
+        <Metric label="Case ID" value={kase.prId} />
         <Metric label="Stage" value={`${kase.stageCode}${kase.desiredStageCode == null ? "" : ` / ${kase.desiredStageCode}`}`} />
         <Metric label="PR Receipt" value={formatDate(kase.prReceiptDate)} />
         <Metric label="Target" value={formatDate(kase.tentativeCompletionDate)} />

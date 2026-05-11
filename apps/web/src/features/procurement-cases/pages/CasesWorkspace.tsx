@@ -386,7 +386,7 @@ function CasesWorkspaceList() {
           />
         ),
       },
-      { key: "prId", header: "PR ID", render: (row) => row.prId },
+      { key: "prId", header: "Case ID", render: (row) => row.prId },
       { key: "entity", header: "Entity", render: (row) => entityNameById.get(row.entityId) ?? row.entityId },
       { key: "description", header: "Description", render: (row) => row.prDescription ?? row.tenderName ?? "-" },
       {
@@ -440,7 +440,7 @@ function CasesWorkspaceList() {
   );
   const deletedCaseColumns = useMemo<Array<VirtualTableColumn<DeletedCaseListItem>>>(
     () => [
-      { key: "prId", header: "PR ID", render: (row) => row.prId },
+      { key: "prId", header: "Case ID", render: (row) => row.prId },
       { key: "entity", header: "Entity", render: (row) => entityNameById.get(row.entityId) ?? row.entityId },
       { key: "description", header: "Description", render: (row) => row.prDescription ?? row.tenderName ?? "-" },
       { key: "deletedAt", header: "Deleted", render: (row) => new Date(row.deletedAt).toLocaleString() },
@@ -516,7 +516,7 @@ function CasesWorkspaceList() {
           <TextInput
             aria-label="Search cases"
             onChange={(event) => setQ(event.target.value)}
-            placeholder="Search PR ID, tender name…"
+            placeholder="Search Case ID, tender name…"
             value={q}
           />
         </div>

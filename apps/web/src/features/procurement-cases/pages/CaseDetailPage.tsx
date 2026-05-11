@@ -223,7 +223,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
 
         <div className="case-page-topbar-title">
           <span className="case-page-topbar-eyebrow">
-            {kase.entityId} · PR #{kase.prId}
+            {kase.entityId} · Case ID {kase.prId}
           </span>
           <h1 className="case-page-topbar-name">{caseTitle}</h1>
         </div>
@@ -355,7 +355,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
           <div className="case-page-main case-page-main-contained">
             <SectionCard title="PR Details">
               <div className="case-info-list">
-                <InfoRow label="PR ID" value={String(kase.prId)} />
+                <InfoRow label="Case ID" value={String(kase.prId)} />
                 <InfoRow label="Entity" value={kase.entityId} />
                 {kase.departmentName && <InfoRow label="Department" value={kase.departmentName} />}
                 {kase.ownerFullName && <InfoRow label="Case Owner" value={kase.ownerFullName} />}

@@ -37,7 +37,7 @@ type DashboardPageProps = {
 };
 
 const caseColumns: DataTableColumn<CaseListItem>[] = [
-  { key: "pr", header: "PR", render: (row) => row.prId },
+  { key: "pr", header: "Case ID", render: (row) => row.prId },
   { key: "description", header: "Description", render: (row) => row.prDescription ?? row.tenderName ?? "-" },
   { key: "stage", header: "Stage", render: (row) => row.stageCode },
   {

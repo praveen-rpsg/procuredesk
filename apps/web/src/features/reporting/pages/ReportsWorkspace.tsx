@@ -173,7 +173,7 @@ export function ReportsWorkspace() {
 
   const caseColumns = useMemo<VirtualTableColumn<ReportCaseRow>[]>(
     () => [
-      { key: "pr", header: "PR", render: (row) => row.prId },
+      { key: "pr", header: "Case ID", render: (row) => row.prId },
       { key: "tender", header: "Tender", render: (row) => row.tenderName ?? "-" },
       {
         key: "status",
@@ -194,7 +194,7 @@ export function ReportsWorkspace() {
   const vendorColumns = useMemo<VirtualTableColumn<VendorAwardReportRow>[]>(
     () => [
       { key: "vendor", header: "Vendor", render: (row) => row.vendorName },
-      { key: "pr", header: "PR", render: (row) => row.prId },
+      { key: "pr", header: "Case ID", render: (row) => row.prId },
       { key: "po", header: "PO", render: (row) => row.poNumber ?? "-" },
       { key: "value", header: "Value", render: (row) => formatAmount(row.poValue, filters.amountUnit) },
       { key: "awardDate", header: "Award Date", render: (row) => row.poAwardDate ?? "-" },
@@ -326,7 +326,7 @@ export function ReportsWorkspace() {
             <TextInput
               aria-label="Search reports"
               onChange={(event) => filters.setSearchTerm(event.target.value)}
-              placeholder="Search PR, tender, vendor"
+              placeholder="Search Case ID, tender, vendor"
               value={filters.searchTerm}
             />
           </div>

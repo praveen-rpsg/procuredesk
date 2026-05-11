@@ -108,6 +108,15 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
   const activeTenderTypes = (catalog.data?.tenderTypes ?? []).filter(
     (tenderType) => tenderType.isActive,
   );
+  const selectedEntity = useMemo(
+    () => (entities.data ?? []).find((entity) => entity.id === entityId) ?? null,
+    [entities.data, entityId],
+  );
+
+  useEffect(() => {
+    setPrId(selectedEntity?.code ? buildGeneratedCaseId(selectedEntity.code) : "");
+  }, [selectedEntity?.code]);
+
   useEffect(() => {
     if (
       !prReceiptDate ||
@@ -251,10 +260,15 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
       <div className="form-section">
         <p className="eyebrow">PR</p>
         <div className="two-column">
-          <FormField error={formErrors.prId ?? ""} label="PR ID">
+          <FormField
+            error={formErrors.prId ?? ""}
+            helperText="Auto-generated as RPSG_EntityCode_DDMMYYYY_HHMMSS."
+            label="Case ID"
+          >
             <TextInput
               maxLength={100}
-              onChange={(event) => setPrId(event.target.value)}
+              placeholder="Select entity to generate"
+              readOnly
               required
               value={prId}
             />
@@ -413,9 +427,9 @@ function validateCreateCaseForm(
     errors.entityId = "Entity is required.";
   }
   if (!values.prId.trim()) {
-    errors.prId = "PR ID is required.";
+    errors.prId = "Case ID is required.";
   } else if (values.prId.trim().length > createCaseFormSchema.maxPrIdLength) {
-    errors.prId = `PR ID must be ${createCaseFormSchema.maxPrIdLength} characters or less.`;
+    errors.prId = `Case ID must be ${createCaseFormSchema.maxPrIdLength} characters or less.`;
   }
   if (values.prReceiptDate && !isDateOnlyString(values.prReceiptDate)) {
     errors.prReceiptDate = "Use a valid PR receipt date.";
@@ -466,4 +480,17 @@ function formatCurrencyInput(value: string) {
     return `${formattedInteger || "0"}.${decimalPart}`;
   }
   return formattedInteger;
+}
+
+function buildGeneratedCaseId(entityCode: string, date = new Date()): string {
+  const normalizedEntityCode = entityCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const pad = (value: number): string => String(value).padStart(2, "0");
+  const day = pad(date.getDate());
+  const month = pad(date.getMonth() + 1);
+  const year = date.getFullYear();
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  const seconds = pad(date.getSeconds());
+
+  return `RPSG_${normalizedEntityCode || "ENTITY"}_${day}${month}${year}_${hours}${minutes}${seconds}`;
 }
