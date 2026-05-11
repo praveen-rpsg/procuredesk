@@ -3015,7 +3015,7 @@ textarea:focus:not(:focus-visible) {
   align-items: center;
   gap: var(--space-1);
   color: var(--color-subtle);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0;
@@ -3026,7 +3026,7 @@ textarea:focus:not(:focus-visible) {
 
 .case-kpi-card dd {
   margin: var(--space-1) 0 0;
-  font-size: clamp(1rem, 0.72rem + 0.32vw, var(--font-size-lg));
+  font-size: clamp(0.92rem, 0.66rem + 0.28vw, var(--font-size-md));
   font-weight: var(--font-weight-semibold);
   letter-spacing: 0;
   color: var(--color-ink);
@@ -3036,7 +3036,7 @@ textarea:focus:not(:focus-visible) {
 }
 
 .case-kpi-unit {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-2xs);
   font-weight: var(--font-weight-normal);
   color: var(--color-muted);
 }
