@@ -15,6 +15,11 @@ type DrawerProps = PropsWithChildren<{
 
 export function Drawer({ children, isOpen, onClose, title }: DrawerProps) {
   const drawerRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -29,7 +34,7 @@ export function Drawer({ children, isOpen, onClose, title }: DrawerProps) {
 
     function onKeyDown(e: globalThis.KeyboardEvent) {
       if (e.key === "Escape") {
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== "Tab" || !drawerRef.current) return;
@@ -51,7 +56,7 @@ export function Drawer({ children, isOpen, onClose, title }: DrawerProps) {
       document.body.style.overflow = "";
       prevFocus?.focus();
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
