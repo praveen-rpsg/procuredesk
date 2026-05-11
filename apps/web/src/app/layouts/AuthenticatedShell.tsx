@@ -66,8 +66,6 @@ const workspaceTitles: Record<WorkspaceKey, string> = {
 
 const renderWorkspace = (
   workspace: RouteWorkspace,
-  assignedToMeSignal: number,
-  createCaseSignal: number,
   onDashboardNavigate: (target: DashboardTarget) => void,
   user: CurrentUser | null,
 ) => {
@@ -78,7 +76,7 @@ const renderWorkspace = (
     case "admin":
       return renderLazyWorkspace(<AdminFoundation />);
     case "cases":
-      return <CasesWorkspace assignedToMeSignal={assignedToMeSignal} createCaseSignal={createCaseSignal} />;
+      return <CasesWorkspace />;
     case "imports":
       return <ImportExportWorkspace />;
     case "operations":
@@ -124,8 +122,6 @@ export function AuthenticatedShell() {
   const { user, logout } = useAuth();
   const location = useAppLocation();
   const activeWorkspace = workspaceFromPath(location.pathname);
-  const [assignedToMeSignal, setAssignedToMeSignal] = useState(0);
-  const [createCaseSignal, setCreateCaseSignal] = useState(0);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(readCollapsedPref);
@@ -138,17 +134,6 @@ export function AuthenticatedShell() {
       navigateToAppPath("/dashboard", { replace: true });
     }
   }, [location.pathname]);
-
-  useEffect(() => {
-    if (activeWorkspace !== "cases") return;
-    const params = new URLSearchParams(location.search);
-    if (params.get("view") === "assigned") {
-      setAssignedToMeSignal((value) => value + 1);
-    }
-    if (params.get("action") === "new") {
-      setCreateCaseSignal((value) => value + 1);
-    }
-  }, [activeWorkspace, location.search]);
 
   const selectWorkspace = (workspace: WorkspaceKey) => {
     const item = navigation.find((entry) => entry.key === workspace);
@@ -330,7 +315,7 @@ export function AuthenticatedShell() {
           <span className="workspace-mobile-title">{activeTitle}</span>
         </div>
 
-        {renderWorkspace(activeWorkspace, assignedToMeSignal, createCaseSignal, handleDashboardNavigate, user)}
+        {renderWorkspace(activeWorkspace, handleDashboardNavigate, user)}
       </section>
     </main>
   );

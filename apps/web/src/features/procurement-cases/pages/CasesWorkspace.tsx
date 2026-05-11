@@ -50,11 +50,6 @@ import { StatusBadge } from "../../../shared/ui/status/StatusBadge";
 import { type VirtualTableColumn, VirtualTable } from "../../../shared/ui/table/VirtualTable";
 import { useToast } from "../../../shared/ui/toast/ToastProvider";
 
-type CasesWorkspaceProps = {
-  assignedToMeSignal?: number;
-  createCaseSignal?: number;
-};
-
 type BooleanFilter = "" | "false" | "true";
 type CaseColumnKey = "actions" | "description" | "entity" | "flags" | "prId" | "select" | "stage" | "status" | "updated";
 type ValueSlabFilter = "" | "10l_1cr" | "1cr_10cr" | "gte_10cr" | "lt_10l";
@@ -121,7 +116,7 @@ const defaultVisibleColumnKeys: CaseColumnKey[] = [
 
 const savedViewsStorageKey = "procuredesk.caseViews.v1";
 
-export function CasesWorkspace({ assignedToMeSignal = 0, createCaseSignal = 0 }: CasesWorkspaceProps) {
+export function CasesWorkspace() {
   const location = useAppLocation();
   const caseIdFromPath = parseCaseIdFromPath(location.pathname);
 
@@ -134,10 +129,10 @@ export function CasesWorkspace({ assignedToMeSignal = 0, createCaseSignal = 0 }:
     );
   }
 
-  return <CasesWorkspaceList assignedToMeSignal={assignedToMeSignal} createCaseSignal={createCaseSignal} />;
+  return <CasesWorkspaceList />;
 }
 
-function CasesWorkspaceList({ assignedToMeSignal = 0, createCaseSignal = 0 }: CasesWorkspaceProps) {
+function CasesWorkspaceList() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { notify } = useToast();
@@ -244,17 +239,25 @@ function CasesWorkspaceList({ assignedToMeSignal = 0, createCaseSignal = 0 }: Ca
   ]);
 
   useEffect(() => {
-    if (createCaseSignal > 0 && canCreate) {
+    const params = new URLSearchParams(location.search);
+    if (params.get("action") === "new" && canCreate) {
       setIsCreateOpen(true);
     }
-  }, [canCreate, createCaseSignal]);
+
+    if (params.has("action")) {
+      params.delete("action");
+      const query = params.toString();
+      navigateToAppPath(`${location.pathname}${query ? `?${query}` : ""}`, { replace: true });
+    }
+  }, [canCreate, location.pathname, location.search]);
 
   useEffect(() => {
-    if (assignedToMeSignal > 0 && user?.id) {
+    const params = new URLSearchParams(location.search);
+    if (params.get("view") === "assigned" && user?.id) {
       setOwnerUserId(user.id);
       setPageCursors([""]);
     }
-  }, [assignedToMeSignal, user?.id]);
+  }, [location.search, user?.id]);
 
   const cases = useQuery({
     queryFn: () => listCases(caseFilters),
