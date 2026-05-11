@@ -2961,6 +2961,14 @@ textarea:focus:not(:focus-visible) {
   min-width: 0;
 }
 
+.case-kpi-group-stage {
+  flex: 1.35;
+}
+
+.case-kpi-group-stage .case-kpi-card:first-child {
+  flex: 1.45;
+}
+
 .case-kpi-group-label {
   font-size: 10px;
   font-weight: var(--font-weight-bold);
@@ -2974,6 +2982,7 @@ textarea:focus:not(:focus-visible) {
 .case-kpi-group-cards {
   display: flex;
   gap: var(--space-2);
+  min-width: 0;
 }
 
 .case-kpi-divider {
@@ -2990,6 +2999,7 @@ textarea:focus:not(:focus-visible) {
   border-radius: var(--radius-lg);
   padding: var(--space-2-5) var(--space-3);
   min-width: 0;
+  min-height: 96px;
   transition:
     border-color var(--transition-fast),
     box-shadow var(--transition-fast);
@@ -3016,13 +3026,13 @@ textarea:focus:not(:focus-visible) {
 
 .case-kpi-card dd {
   margin: var(--space-1) 0 0;
-  font-size: var(--font-size-lg);
+  font-size: clamp(1rem, 0.72rem + 0.32vw, var(--font-size-lg));
   font-weight: var(--font-weight-semibold);
   letter-spacing: 0;
   color: var(--color-ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: var(--line-height-snug);
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .case-kpi-unit {

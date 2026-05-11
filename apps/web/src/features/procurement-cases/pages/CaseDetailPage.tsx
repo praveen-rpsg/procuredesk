@@ -267,7 +267,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
       {/* ── KPI strip ──────────────────────────────────────────── */}
       <div className="case-kpi-strip">
         {/* Time / Progress group */}
-        <div className="case-kpi-group">
+        <div className="case-kpi-group case-kpi-group-progress">
           <span className="case-kpi-group-label">Progress</span>
           <div className="case-kpi-group-cards">
             <KpiCard
@@ -295,7 +295,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
         <div className="case-kpi-divider" />
 
         {/* Stage group */}
-        <div className="case-kpi-group">
+        <div className="case-kpi-group case-kpi-group-stage">
           <span className="case-kpi-group-label">Stage</span>
           <div className="case-kpi-group-cards">
             <KpiCard
@@ -316,7 +316,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
         <div className="case-kpi-divider" />
 
         {/* Financials group */}
-        <div className="case-kpi-group">
+        <div className="case-kpi-group case-kpi-group-financials">
           <span className="case-kpi-group-label">Financials</span>
           <div className="case-kpi-group-cards">
             <KpiCard
