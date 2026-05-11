@@ -231,50 +231,51 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
       buildDelayChangedFields(detail.data, { delayExternalDays, delayReason }),
     [delayExternalDays, delayReason, detail.data],
   );
+  const ownerChanged = Boolean(
+    canReassignOwner && detail.data && ownerUserId && ownerUserId !== (detail.data.ownerUserId ?? ""),
+  );
   const milestoneChangedFields = useMemo(
     () => buildMilestoneChangedFields(detail.data, milestones),
     [detail.data, milestones],
   );
 
-  const updateCaseMutation = useMutation({
-    mutationFn: () =>
-      updateCase(caseId as string, {
-        priorityCase,
-        tenderName: tenderName || null,
-        tenderNo: tenderNo || null,
-      }),
-    onSuccess: async () => {
-      await invalidateCaseQueries(queryClient, caseId);
-      toast.notify({ message: "Case updated.", tone: "success" });
-    },
-  });
-  const ownerMutation = useMutation({
-    mutationFn: () => assignCaseOwner(caseId as string, ownerUserId),
-    onSuccess: async () => {
-      await invalidateCaseQueries(queryClient, caseId);
-      toast.notify({ message: "Owner updated.", tone: "success" });
-    },
-  });
-
-  const updateMilestoneMutation = useMutation({
+  const saveCaseMutation = useMutation({
     mutationFn: async () => {
-      const financials = financialPayload({
-        approvedAmount,
-        estimateBenchmark,
-      });
-      if (financials) {
-        await updateCase(caseId as string, { financials });
+      const targetCaseId = caseId as string;
+
+      if (canEditCase) {
+        const financials = financialPayload({
+          approvedAmount,
+          estimateBenchmark,
+        });
+        await updateCase(targetCaseId, {
+          financials: financials ?? undefined,
+          priorityCase,
+          tenderName: tenderName || null,
+          tenderNo: tenderNo || null,
+        });
+        await updateMilestones(targetCaseId, milestonePayload(milestones));
       }
-      return updateMilestones(caseId as string, milestonePayload(milestones));
+
+      if (canReassignOwner && ownerUserId && ownerChanged) {
+        await assignCaseOwner(targetCaseId, ownerUserId);
+      }
+
+      if (canEditDelay) {
+        await updateDelay(targetCaseId, {
+          delayExternalDays: delayExternalDays ? Number(delayExternalDays) : null,
+          delayReason: delayReason || null,
+        });
+      }
     },
     onSuccess: async () => {
       await invalidateCaseQueries(queryClient, caseId);
-      toast.notify({ message: "Milestones updated.", tone: "success" });
+      toast.notify({ message: "Case saved.", tone: "success" });
     },
   });
   const serverChronologyErrors = useMemo(
-    () => extractChronologyErrors(updateMilestoneMutation.error),
-    [updateMilestoneMutation.error],
+    () => extractChronologyErrors(saveCaseMutation.error),
+    [saveCaseMutation.error],
   );
   const serverMilestoneErrors = useMemo(
     () => mapChronologyErrorsToFields(serverChronologyErrors),
@@ -285,50 +286,31 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
     ...serverMilestoneErrors,
   };
 
-  const delayMutation = useMutation({
-    mutationFn: () =>
-      updateDelay(caseId as string, {
-        delayExternalDays: delayExternalDays ? Number(delayExternalDays) : null,
-        delayReason: delayReason || null,
-      }),
-    onSuccess: async () => {
-      await invalidateCaseQueries(queryClient, caseId);
-      toast.notify({ message: "Delay updated.", tone: "success" });
-    },
-  });
-
-  function handleCaseSubmit(event: FormEvent<HTMLFormElement>) {
+  function handleSaveAll(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canEditCase) return;
-    setShowCaseErrors(true);
-    if (Object.keys(caseErrors).length > 0) return;
-    if (caseId) updateCaseMutation.mutate();
-  }
-
-  function handleMilestoneSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!canEditCase) return;
-    setShowMilestoneErrors(true);
-    setShowFinancialErrors(true);
-    if (Object.keys(financialErrors).length > 0) return;
-    if (Object.keys(milestoneErrors).length > 0) return;
-    if (caseId) updateMilestoneMutation.mutate();
-  }
-
-  function handleDelaySubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!canEditDelay) return;
-    setShowDelayErrors(true);
-    if (Object.keys(delayErrors).length > 0) return;
-    if (caseId) delayMutation.mutate();
-  }
-
-  function handleOwnerSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (caseId && canReassignOwner && ownerUserId) {
-      ownerMutation.mutate();
+    if (!caseId) return;
+    if (canEditCase) {
+      setShowCaseErrors(true);
+      setShowFinancialErrors(true);
+      setShowMilestoneErrors(true);
     }
+    if (canEditDelay) {
+      setShowDelayErrors(true);
+    }
+
+    if (canEditCase && Object.keys(caseErrors).length > 0) return;
+    if (canEditCase && Object.keys(financialErrors).length > 0) return;
+    if (canEditCase && Object.keys(milestoneErrors).length > 0) return;
+    if (canEditDelay && Object.keys(delayErrors).length > 0) return;
+
+    saveCaseMutation.mutate();
   }
+  const hasVisibleChanges =
+    caseChangedFields.length > 0 ||
+    financialChangedFields.length > 0 ||
+    milestoneChangedFields.length > 0 ||
+    delayChangedFields.length > 0 ||
+    ownerChanged;
 
   if (!caseId) {
     return null;
@@ -369,11 +351,11 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
         </div>
       </div>
 
+      <form className="stack-form" onSubmit={handleSaveAll}>
       <div className="update-workspace-grid">
         {canEditCase ? (
-          <form
+          <section
             className="stack-form case-edit-card case-edit-card-primary"
-            onSubmit={handleCaseSubmit}
           >
             <p className="eyebrow">Basic Details</p>
             <FormField
@@ -405,21 +387,12 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
               Priority Case
             </label>
             <ChangedFields fields={caseChangedFields} />
-            {updateCaseMutation.error ? (
-              <div className="form-error">
-                {updateCaseMutation.error.message}
-              </div>
-            ) : null}
-            <Button disabled={updateCaseMutation.isPending} type="submit">
-              Save Details
-            </Button>
-          </form>
+          </section>
         ) : null}
 
         {canReassignOwner ? (
-          <form
+          <section
             className="stack-form case-edit-card"
-            onSubmit={handleOwnerSubmit}
           >
             <p className="eyebrow">Ownership And Target</p>
             <FormField
@@ -448,24 +421,13 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
                 value={milestoneString(detail.data?.tentativeCompletionDate)}
               />
             </FormField>
-            {ownerMutation.error ? (
-              <div className="form-error">{ownerMutation.error.message}</div>
-            ) : null}
-            <Button
-              disabled={
-                !canReassignOwner || !ownerUserId || ownerMutation.isPending
-              }
-              type="submit"
-            >
-              Save Owner
-            </Button>
-          </form>
+            <ChangedFields fields={ownerChanged ? ["Owner"] : []} />
+          </section>
         ) : null}
 
         {canEditDelay ? (
-          <form
+          <section
             className="stack-form case-edit-card"
-            onSubmit={handleDelaySubmit}
           >
             <p className="eyebrow">Delay</p>
             <FormField
@@ -491,20 +453,13 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
               />
             </FormField>
             <ChangedFields fields={delayChangedFields} />
-            {delayMutation.error ? (
-              <div className="form-error">{delayMutation.error.message}</div>
-            ) : null}
-            <Button disabled={delayMutation.isPending} type="submit">
-              Save Delay
-            </Button>
-          </form>
+          </section>
         ) : null}
       </div>
 
       {canEditCase ? (
-        <form
+        <section
           className="stack-form case-edit-card case-edit-milestones"
-          onSubmit={handleMilestoneSubmit}
         >
           <div className="case-edit-section-heading">
             <div>
@@ -693,16 +648,26 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
                 </ul>
               </div>
             </div>
-          ) : updateMilestoneMutation.error ? (
-            <div className="form-error">
-              {updateMilestoneMutation.error.message}
-            </div>
           ) : null}
-          <Button disabled={updateMilestoneMutation.isPending} type="submit">
-            Save Milestones
-          </Button>
-        </form>
+        </section>
       ) : null}
+      {saveCaseMutation.error && serverChronologyErrors.length === 0 ? (
+        <div className="form-error">{saveCaseMutation.error.message}</div>
+      ) : null}
+      <div className="case-edit-save-bar">
+        <div>
+          <strong>{hasVisibleChanges ? "Unsaved changes" : "No unsaved changes"}</strong>
+          <span>
+            {hasVisibleChanges
+              ? "Review all sections, then save once."
+              : "Changes across details, owner, delay, and milestones will appear here."}
+          </span>
+        </div>
+        <Button disabled={saveCaseMutation.isPending || !hasVisibleChanges} type="submit">
+          {saveCaseMutation.isPending ? "Saving..." : "Save Case"}
+        </Button>
+      </div>
+      </form>
     </section>
   );
 }
