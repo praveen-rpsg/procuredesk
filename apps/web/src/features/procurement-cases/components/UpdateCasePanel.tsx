@@ -24,6 +24,7 @@ import {
   canManageCaseDelay,
   canUpdateCase,
 } from "../../../shared/auth/permissions";
+import { isDateOnlyString, toDateOnlyInputValue } from "../../../shared/utils/dateOnly";
 import { Button } from "../../../shared/ui/button/Button";
 import { FormField, TextInput } from "../../../shared/ui/form/FormField";
 import { Select } from "../../../shared/ui/form/Select";
@@ -857,15 +858,15 @@ function validateMilestones(
 ): MilestoneErrors {
   const errors: MilestoneErrors = {};
   for (const key of dateMilestoneKeys) {
-    if (value[key] && !isDateString(value[key])) {
+    if (value[key] && !isDateOnlyString(value[key])) {
       errors[key] = "Use a valid date.";
     }
   }
 
   if (
     prReceiptDate &&
-    isDateString(prReceiptDate) &&
-    isDateString(value.nitInitiationDate) &&
+    isDateOnlyString(prReceiptDate) &&
+    isDateOnlyString(value.nitInitiationDate) &&
     value.nitInitiationDate < prReceiptDate
   ) {
     errors.nitInitiationDate =
@@ -1062,7 +1063,7 @@ function requireDateOrder(
 ) {
   const earlierValue = value[earlierKey];
   const laterValue = value[laterKey];
-  if (!isDateString(earlierValue) || !isDateString(laterValue)) return;
+  if (!isDateOnlyString(earlierValue) || !isDateOnlyString(laterValue)) return;
   if (laterValue < earlierValue) {
     errors[laterKey] = message;
   }
@@ -1094,15 +1095,6 @@ function parseMoneyInput(value: string) {
   return Number(value.replace(/,/g, "").trim());
 }
 
-function isDateString(value: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const parsed = new Date(`${value}T00:00:00.000Z`);
-  return (
-    !Number.isNaN(parsed.getTime()) &&
-    parsed.toISOString().slice(0, 10) === value
-  );
-}
-
 function milestonePayload(value: MilestoneFormState) {
   return {
     bidReceiptDate: value.bidReceiptDate || null,
@@ -1127,7 +1119,7 @@ function milestonePayload(value: MilestoneFormState) {
 }
 
 function milestoneString(value: unknown) {
-  return typeof value === "string" ? value : "";
+  return typeof value === "string" ? toDateOnlyInputValue(value) : "";
 }
 
 function numberString(value: unknown) {

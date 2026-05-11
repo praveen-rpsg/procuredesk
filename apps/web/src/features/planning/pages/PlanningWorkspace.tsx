@@ -27,6 +27,7 @@ import { Skeleton } from "../../../shared/ui/skeleton/Skeleton";
 import { StatusBadge } from "../../../shared/ui/status/StatusBadge";
 import { type VirtualTableColumn, VirtualTable } from "../../../shared/ui/table/VirtualTable";
 import { useToast } from "../../../shared/ui/toast/ToastProvider";
+import { formatDateOnly, todayDateOnlyString, toDateOnlyInputValue } from "../../../shared/utils/dateOnly";
 
 const tenderColumns: VirtualTableColumn<TenderPlanCase>[] = [
   { key: "description", header: "Tender", render: (row) => row.tenderDescription ?? "-" },
@@ -35,7 +36,7 @@ const tenderColumns: VirtualTableColumn<TenderPlanCase>[] = [
     header: "Value",
     render: (row) => (row.valueRs == null ? "-" : row.valueRs.toLocaleString()),
   },
-  { key: "planned", header: "Planned", render: (row) => row.plannedDate ?? "-" },
+  { key: "planned", header: "Planned", render: (row) => formatDateOnly(row.plannedDate) },
   { key: "cpc", header: "CPC", render: (row) => (row.cpcInvolved ? "Yes" : "No") },
 ];
 
@@ -232,7 +233,7 @@ export function PlanningWorkspace() {
     { key: "description", header: "Contract", render: (row) => row.tenderDescription ?? "-" },
     { key: "source", header: "Source", render: (row) => (row.sourceType === "manual_plan" ? "Plan / Import" : "Case Award") },
     { key: "vendors", header: "Vendor", render: (row) => row.awardedVendors ?? "-" },
-    { key: "validity", header: "Validity", render: (row) => row.rcPoValidityDate },
+    { key: "validity", header: "Validity", render: (row) => formatDateOnly(row.rcPoValidityDate) },
     {
       key: "urgency",
       header: "Urgency",
@@ -248,7 +249,7 @@ export function PlanningWorkspace() {
       render: (row) =>
         row.sourceType === "manual_plan" ? (
           <TextInput
-            defaultValue={row.tentativeTenderingDate ?? ""}
+            defaultValue={toDateOnlyInputValue(row.tentativeTenderingDate)}
             onBlur={(event) =>
               updateRcMutation.mutate({
                 payload: { tentativeTenderingDate: event.target.value || null },
@@ -303,7 +304,7 @@ export function PlanningWorkspace() {
     setEditingTenderPlan(row);
     setEditTenderDescription(row.tenderDescription ?? "");
     setEditTenderValue(row.valueRs == null ? "" : String(row.valueRs));
-    setEditPlannedDate(row.plannedDate ?? "");
+    setEditPlannedDate(toDateOnlyInputValue(row.plannedDate));
     setEditCpcInvolved(Boolean(row.cpcInvolved));
   }
 
@@ -789,20 +790,13 @@ function downloadCsv(filenamePrefix: string, headers: string[], rows: string[][]
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `${filenamePrefix}-${todayDateString()}.csv`;
+  anchor.download = `${filenamePrefix}-${todayDateOnlyString()}.csv`;
   anchor.click();
   URL.revokeObjectURL(url);
 }
 
 function escapeCsvValue(value: string) {
   return `"${value.replace(/"/g, '""')}"`;
-}
-
-function todayDateString() {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${now.getFullYear()}-${month}-${day}`;
 }
 
 function planningSectionFromPath(pathname: string): PlanningSectionKey | null {

@@ -11,6 +11,7 @@ import {
 } from "../api/awardsApi";
 import { useAuth } from "../../../shared/auth/AuthProvider";
 import { canManageAwards } from "../../../shared/auth/permissions";
+import { formatDateOnly, toDateOnlyInputValue } from "../../../shared/utils/dateOnly";
 import { Button } from "../../../shared/ui/button/Button";
 import { FormField, TextInput } from "../../../shared/ui/form/FormField";
 import { Modal } from "../../../shared/ui/modal/Modal";
@@ -52,8 +53,8 @@ const columns = (
     header: "PO Value",
     render: (row) => formatMoney(row.poValue),
   },
-  { key: "awardDate", header: "Award Date", render: (row) => row.poAwardDate ?? "-" },
-  { key: "validity", header: "Validity", render: (row) => row.poValidityDate ?? "-" },
+  { key: "awardDate", header: "Award Date", render: (row) => formatDateOnly(row.poAwardDate) },
+  { key: "validity", header: "Validity", render: (row) => formatDateOnly(row.poValidityDate) },
   {
     key: "actions",
     header: "",
@@ -104,10 +105,10 @@ export function AwardsPanel({ caseId }: AwardsPanelProps) {
     }
     setForm({
       notes: editingAward.notes ?? "",
-      poAwardDate: editingAward.poAwardDate ?? "",
+      poAwardDate: toDateOnlyInputValue(editingAward.poAwardDate),
       poNumber: editingAward.poNumber ?? "",
       poValue: editingAward.poValue == null ? "" : String(editingAward.poValue),
-      poValidityDate: editingAward.poValidityDate ?? "",
+      poValidityDate: toDateOnlyInputValue(editingAward.poValidityDate),
       vendorCode: editingAward.vendorCode ?? "",
       vendorName: editingAward.vendorName,
     });

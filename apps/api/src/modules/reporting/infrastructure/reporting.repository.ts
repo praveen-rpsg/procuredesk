@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import type { QueryResultRow } from "pg";
 
+import { toDateOnlyString } from "../../../common/utils/date-only.js";
 import { DatabaseService } from "../../../database/database.service.js";
 import type {
   ContractExpiryReportRow,
@@ -357,8 +358,8 @@ export class ReportingRepository {
       entityId: row.entity_id,
       isDelayed: row.is_delayed,
       prId: row.pr_id,
-      prReceiptDate: this.dateToIso(row.pr_receipt_date),
-      rcPoAwardDate: this.dateToIso(row.rc_po_award_date),
+      prReceiptDate: this.dateOnly(row.pr_receipt_date),
+      rcPoAwardDate: this.dateOnly(row.rc_po_award_date),
       stageCode: row.stage_code,
       status: row.status,
       tenderName: row.tender_name,
@@ -405,10 +406,10 @@ export class ReportingRepository {
       awardId: row.award_id,
       caseId: row.case_id,
       entityId: row.entity_id,
-      poAwardDate: this.dateToIso(row.po_award_date),
+      poAwardDate: this.dateOnly(row.po_award_date),
       poNumber: row.po_number,
       poValue: this.numberOrNull(row.po_value),
-      poValidityDate: this.dateToIso(row.po_validity_date),
+      poValidityDate: this.dateOnly(row.po_validity_date),
       prId: row.pr_id,
       tenderName: row.tender_name,
       vendorName: row.vendor_name,
@@ -488,7 +489,7 @@ export class ReportingRepository {
       daysToExpiry: row.days_to_expiry,
       entityId: row.entity_id,
       rcPoAmount: this.numberOrNull(row.rc_po_amount),
-      rcPoValidityDate: this.dateToIso(row.rc_po_validity_date) ?? "",
+      rcPoValidityDate: this.dateOnly(row.rc_po_validity_date) ?? "",
       sourceId: row.source_id,
       sourceType: row.source_type,
       tenderDescription: row.tender_description,
@@ -785,10 +786,8 @@ export class ReportingRepository {
     where.push(`${entityColumn} = any($${values.length}::uuid[])`);
   }
 
-  private dateToIso(value: Date | string | null): string | null {
-    if (!value) return null;
-    if (value instanceof Date) return value.toISOString().slice(0, 10);
-    return value;
+  private dateOnly(value: Date | string | null): string | null {
+    return toDateOnlyString(value);
   }
 
   private numberOrNull(value: string | number | null): number | null {

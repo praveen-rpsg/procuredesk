@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import type { PoolClient, QueryResultRow } from "pg";
 
+import { toDateOnlyString } from "../../../common/utils/date-only.js";
 import { DatabaseService } from "../../../database/database.service.js";
 import type { AwardRollup, CaseAward } from "../domain/case-award.js";
 import type { MoneyAmount } from "../domain/money.js";
@@ -290,8 +291,8 @@ export class CaseAwardRepository {
 
     return {
       awardCount: rollup.awardCount,
-      effectiveValidityDate: this.dateToIso(rollup.effectiveValidityDate),
-      firstAwardDate: this.dateToIso(rollup.firstAwardDate),
+      effectiveValidityDate: this.dateOnly(rollup.effectiveValidityDate),
+      firstAwardDate: this.dateOnly(rollup.firstAwardDate),
       totalAwardedAmount: this.numberOrZero(rollup.totalAwardedAmount),
     };
   }
@@ -412,8 +413,8 @@ export class CaseAwardRepository {
       throw new Error("Award not found.");
     }
 
-    const awardDate = this.dateToIso(row.po_award_date);
-    const validityDate = this.dateToIso(row.po_validity_date);
+    const awardDate = this.dateOnly(row.po_award_date);
+    const validityDate = this.dateOnly(row.po_validity_date);
     if (awardDate && validityDate && validityDate < awardDate) {
       throw new Error("Award date invalid.");
     }
@@ -425,10 +426,10 @@ export class CaseAwardRepository {
       createdAt: row.created_at.toISOString(),
       id: row.id,
       notes: row.notes,
-      poAwardDate: this.dateToIso(row.po_award_date),
+      poAwardDate: this.dateOnly(row.po_award_date),
       poNumber: row.po_number,
       poValue: this.numberOrNull(row.po_value),
-      poValidityDate: this.dateToIso(row.po_validity_date),
+      poValidityDate: this.dateOnly(row.po_validity_date),
       tenantId: row.tenant_id,
       updatedAt: row.updated_at.toISOString(),
       vendorCode: row.vendor_code,
@@ -436,10 +437,8 @@ export class CaseAwardRepository {
     };
   }
 
-  private dateToIso(value: Date | string | null): string | null {
-    if (!value) return null;
-    if (value instanceof Date) return value.toISOString().slice(0, 10);
-    return value;
+  private dateOnly(value: Date | string | null): string | null {
+    return toDateOnlyString(value);
   }
 
   private numberOrNull(value: string | number | null): number | null {

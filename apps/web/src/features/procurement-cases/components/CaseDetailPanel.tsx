@@ -6,6 +6,7 @@ import { listAuditEvents } from "../../operations/api/operationsApi";
 import { deleteCase, getCase, type CaseDetail } from "../api/casesApi";
 import { useAuth } from "../../../shared/auth/AuthProvider";
 import { canDeleteCase, canReadAudit, canUpdateCase } from "../../../shared/auth/permissions";
+import { formatDateOnly, toDateOnlyInputValue } from "../../../shared/utils/dateOnly";
 import { ActivityFeed } from "../../../shared/ui/activity-feed/ActivityFeed";
 import { Button } from "../../../shared/ui/button/Button";
 import { ConfirmationDialog } from "../../../shared/ui/confirmation-dialog/ConfirmationDialog";
@@ -244,19 +245,12 @@ function formatMoney(value: number | null | undefined) {
 }
 
 function formatDate(value: string | null | undefined) {
-  if (!value) return "-";
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(date);
+  return formatDateOnly(value, "-");
 }
 
 function milestoneDate(kase: CaseDetail, key: string) {
   const value = kase.milestones[key];
-  return typeof value === "string" ? value : null;
+  return typeof value === "string" ? toDateOnlyInputValue(value) || null : null;
 }
 
 function activityTone(action: string): "danger" | "neutral" | "success" | "warning" {

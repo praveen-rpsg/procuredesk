@@ -35,6 +35,7 @@ import { useAuth } from "../../../shared/auth/AuthProvider";
 import { canCreateCase, canPotentiallyUpdateCaseFromList, canRestoreCase } from "../../../shared/auth/permissions";
 import { useDebouncedValue } from "../../../shared/hooks/useDebouncedValue";
 import { navigateToAppPath, useAppLocation } from "../../../shared/routing/appLocation";
+import { todayDateOnlyString, toDateOnlyInputValue } from "../../../shared/utils/dateOnly";
 import { Button } from "../../../shared/ui/button/Button";
 import { Drawer } from "../../../shared/ui/drawer/Drawer";
 import { ErrorState } from "../../../shared/ui/error-state/ErrorState";
@@ -1002,7 +1003,7 @@ function exportCurrentView(
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `procuredesk-cases-${new Date().toISOString().slice(0, 10)}.csv`;
+  anchor.download = `procuredesk-cases-${todayDateOnlyString()}.csv`;
   anchor.click();
   URL.revokeObjectURL(url);
 }
@@ -1033,18 +1034,12 @@ function caseExportFlags(row: CaseListItem): string[] {
 }
 
 function isCaseOverdue(row: Pick<CaseListItem, "status" | "tentativeCompletionDate">) {
+  const targetDate = toDateOnlyInputValue(row.tentativeCompletionDate);
   return Boolean(
     row.status === "running" &&
-      row.tentativeCompletionDate &&
-      row.tentativeCompletionDate < todayDateString(),
+      targetDate &&
+      targetDate < todayDateOnlyString(),
   );
-}
-
-function todayDateString() {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${now.getFullYear()}-${month}-${day}`;
 }
 
 function escapeCsvValue(value: string) {

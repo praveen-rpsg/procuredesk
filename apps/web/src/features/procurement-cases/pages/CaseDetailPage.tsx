@@ -33,6 +33,13 @@ import {
   canReadAudit,
   canUpdateCase,
 } from "../../../shared/auth/permissions";
+import {
+  dateOnlyToLocalDate,
+  formatDateOnly,
+  parseDateOnlyParts,
+  todayDateOnlyString,
+  toDateOnlyInputValue,
+} from "../../../shared/utils/dateOnly";
 import { ActivityFeed } from "../../../shared/ui/activity-feed/ActivityFeed";
 import { Button } from "../../../shared/ui/button/Button";
 import { ConfirmationDialog } from "../../../shared/ui/confirmation-dialog/ConfirmationDialog";
@@ -620,16 +627,7 @@ function formatMoney(value: number | null | undefined) {
 }
 
 function formatDate(value: string | null | undefined) {
-  if (!value) return "—";
-  try {
-    return new Date(value + "T00:00:00").toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return value;
-  }
+  return formatDateOnly(value, "—");
 }
 
 function formatDateTime(value: string | null | undefined) {
@@ -654,9 +652,11 @@ function formatSavingsPct(savings: number | null | undefined, base: number | nul
 }
 
 function runningAgeDays(prReceiptDate: string | null | undefined): string {
-  if (!prReceiptDate) return "—";
-  const start = new Date(prReceiptDate + "T00:00:00");
-  const days = Math.floor((Date.now() - start.getTime()) / 86400000);
+  const start = dateOnlyToLocalDate(prReceiptDate);
+  if (!start) return "—";
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = Math.floor((today.getTime() - start.getTime()) / 86400000);
   return days >= 0 ? String(days) : "—";
 }
 
@@ -664,26 +664,24 @@ function timeElapsedPct(
   prReceiptDate: string | null | undefined,
   targetDate: string | null | undefined,
 ): string {
-  if (!prReceiptDate || !targetDate) return "—";
-  const start = new Date(prReceiptDate + "T00:00:00").getTime();
-  const end = new Date(targetDate + "T00:00:00").getTime();
+  const startDate = dateOnlyToLocalDate(prReceiptDate);
+  const endDate = dateOnlyToLocalDate(targetDate);
+  if (!startDate || !endDate) return "—";
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const start = startDate.getTime();
+  const end = endDate.getTime();
   const total = end - start;
   if (total <= 0) return "—";
-  const pct = Math.round(((Date.now() - start) / total) * 100);
+  const pct = Math.round(((today - start) / total) * 100);
   return `${Math.max(0, Math.min(pct, 999))}%`;
 }
 
 function completionFY(targetDate: string | null | undefined): string {
-  if (!targetDate) return "—";
-  try {
-    const d = new Date(targetDate + "T00:00:00");
-    const m = d.getMonth();
-    const y = d.getFullYear();
-    const fyStart = m >= 3 ? y : y - 1;
-    return `FY ${fyStart}-${String(fyStart + 1).slice(-2)}`;
-  } catch {
-    return "—";
-  }
+  const parts = parseDateOnlyParts(toDateOnlyInputValue(targetDate));
+  if (!parts) return "—";
+  const fyStart = parts.month >= 4 ? parts.year : parts.year - 1;
+  return `FY ${fyStart}-${String(fyStart + 1).slice(-2)}`;
 }
 
 function elapsedTone(elapsed: string): KpiTone {
@@ -703,7 +701,7 @@ function savingsTone(value: number | null | undefined): KpiTone {
 
 function milestoneDate(kase: CaseDetail, key: string) {
   const value = kase.milestones[key];
-  return typeof value === "string" ? value : null;
+  return typeof value === "string" ? toDateOnlyInputValue(value) || null : null;
 }
 
 function activityTone(action: string): "danger" | "neutral" | "success" | "warning" {
@@ -714,14 +712,10 @@ function activityTone(action: string): "danger" | "neutral" | "success" | "warni
 }
 
 function isOverdue(kase: CaseDetail) {
+  const targetDate = toDateOnlyInputValue(kase.tentativeCompletionDate);
   return Boolean(
     kase.status === "running" &&
-      kase.tentativeCompletionDate &&
-      kase.tentativeCompletionDate < todayDateString(),
+      targetDate &&
+      targetDate < todayDateOnlyString(),
   );
-}
-
-function todayDateString() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }

@@ -973,7 +973,7 @@ function hasValue(value: unknown): boolean {
 
 function textValue(value: unknown): string {
   if (value == null) return "";
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (value instanceof Date) return dateToDateOnlyString(value) ?? "";
   return String(value).trim();
 }
 
@@ -1012,7 +1012,7 @@ function normalizeValidatedPayload(payload: Record<string, unknown>): Record<str
 
 function parseImportDate(value: unknown): string | null {
   if (!hasValue(value)) return null;
-  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  if (value instanceof Date) return dateToDateOnlyString(value);
   const text = textValue(value);
   const ddmmyyyy = /^(\d{1,2})-(\d{1,2})-(\d{4})$/.exec(text);
   if (ddmmyyyy) {
@@ -1029,8 +1029,14 @@ function parseImportDate(value: unknown): string | null {
 }
 
 function isValidIsoDate(value: string): boolean {
-  const date = new Date(`${value}T00:00:00.000Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  const parts = parseIsoDateParts(value);
+  if (!parts) return false;
+  const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+  return (
+    date.getUTCFullYear() === parts.year &&
+    date.getUTCMonth() === parts.month - 1 &&
+    date.getUTCDate() === parts.day
+  );
 }
 
 function numberValue(value: unknown): number | null {
@@ -1057,13 +1063,34 @@ function priorityValue(value: unknown): boolean {
 }
 
 function todayDateString(): string {
-  return new Date().toISOString().slice(0, 10);
+  return dateToDateOnlyString(new Date()) ?? "";
 }
 
 function addDays(value: string, days: number): string {
-  const date = new Date(`${value}T00:00:00.000Z`);
+  const parts = parseIsoDateParts(value);
+  if (!parts) return value;
+  const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
   date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
+  return formatDateOnlyParts(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
+}
+
+function dateToDateOnlyString(value: Date): string | null {
+  if (Number.isNaN(value.getTime())) return null;
+  return formatDateOnlyParts(value.getFullYear(), value.getMonth() + 1, value.getDate());
+}
+
+function parseIsoDateParts(value: string): { day: number; month: number; year: number } | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  return {
+    day: Number(match[3]),
+    month: Number(match[2]),
+    year: Number(match[1]),
+  };
+}
+
+function formatDateOnlyParts(year: number, month: number, day: number): string {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 async function persistRows(

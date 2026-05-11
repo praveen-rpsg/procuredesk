@@ -1,3 +1,7 @@
+import {
+  diffDateOnlyDays,
+  todayDateOnlyString,
+} from "../../../common/utils/date-only.js";
 import type { CaseMilestones } from "./case-aggregate.js";
 
 export class CaseStagePolicy {
@@ -25,13 +29,12 @@ export class CaseStagePolicy {
     if (input.status === "completed") return null;
     if (!input.prReceiptDate || !input.tentativeCompletionDate) return null;
 
-    const prDate = this.toDate(input.prReceiptDate);
-    const targetDate = this.toDate(input.tentativeCompletionDate);
-    const today = this.startOfDay(new Date());
-    const totalDays = this.diffDays(targetDate, prDate);
+    const totalDays =
+      diffDateOnlyDays(input.tentativeCompletionDate, input.prReceiptDate) ?? 0;
     if (totalDays <= 0) return null;
 
-    const elapsedDays = this.diffDays(today, prDate);
+    const elapsedDays =
+      diffDateOnlyDays(todayDateOnlyString(), input.prReceiptDate) ?? 0;
     const pct = (elapsedDays / totalDays) * 100;
     return desiredStageForElapsedPercent(pct);
   }
@@ -40,17 +43,6 @@ export class CaseStagePolicy {
     return desiredStageCode !== null && actualStageCode < desiredStageCode;
   }
 
-  private diffDays(later: Date, earlier: Date): number {
-    return Math.floor((later.getTime() - earlier.getTime()) / 86_400_000);
-  }
-
-  private startOfDay(date: Date): Date {
-    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-  }
-
-  private toDate(value: string): Date {
-    return this.startOfDay(new Date(`${value}T00:00:00.000Z`));
-  }
 }
 
 const desiredStageThresholds: Array<{ maxPercent: number; stageCode: number }> = [

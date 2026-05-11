@@ -8,6 +8,7 @@ import {
 } from "../../admin/api/adminApi";
 import { listEntities } from "../../planning/api/planningApi";
 import { createCase } from "../api/casesApi";
+import { addDaysToDateOnly, isDateOnlyString } from "../../../shared/utils/dateOnly";
 import { Button } from "../../../shared/ui/button/Button";
 import { ComboboxSelect } from "../../../shared/ui/form/ComboboxSelect";
 import { FormField, TextInput } from "../../../shared/ui/form/FormField";
@@ -116,7 +117,7 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
       return;
     }
     setTentativeCompletionDate(
-      addDaysToDateString(prReceiptDate, selectedTenderType.completionDays),
+      addDaysToDateOnly(prReceiptDate, selectedTenderType.completionDays),
     );
   }, [prReceiptDate, selectedTenderType?.completionDays]);
 
@@ -416,12 +417,12 @@ function validateCreateCaseForm(
   } else if (values.prId.trim().length > createCaseFormSchema.maxPrIdLength) {
     errors.prId = `PR ID must be ${createCaseFormSchema.maxPrIdLength} characters or less.`;
   }
-  if (values.prReceiptDate && !isDateString(values.prReceiptDate)) {
+  if (values.prReceiptDate && !isDateOnlyString(values.prReceiptDate)) {
     errors.prReceiptDate = "Use a valid PR receipt date.";
   }
   if (
     values.tentativeCompletionDate &&
-    !isDateString(values.tentativeCompletionDate)
+    !isDateOnlyString(values.tentativeCompletionDate)
   ) {
     errors.tentativeCompletionDate = "Use a valid completion date.";
   }
@@ -443,23 +444,6 @@ function validateCreateCaseForm(
   }
 
   return { errors, prValue };
-}
-
-function isDateString(value: string) {
-  return (
-    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
-    !Number.isNaN(new Date(`${value}T00:00:00`).getTime())
-  );
-}
-
-function addDaysToDateString(dateString: string, days: number) {
-  const [yearText, monthText, dayText] = dateString.split("-");
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
 }
 
 function parseCurrencyAmount(value: string): number | null {

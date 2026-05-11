@@ -1,6 +1,11 @@
 import { Injectable } from "@nestjs/common";
 import type { PoolClient, QueryResultRow } from "pg";
 
+import {
+  diffDateOnlyDays,
+  todayDateOnlyString,
+  toDateOnlyString,
+} from "../../../common/utils/date-only.js";
 import { DatabaseService } from "../../../database/database.service.js";
 import type { RcPoExpiryRow, RcPoPlan } from "../domain/rc-po-plan.js";
 import { ExpiryUrgencyPolicy } from "../domain/expiry-urgency.policy.js";
@@ -372,7 +377,7 @@ export class PlanningRepository {
 
     const urgency = new ExpiryUrgencyPolicy();
     return result.rows.map((row) => {
-      const validityDate = this.dateToIso(row.rc_po_validity_date);
+      const validityDate = this.dateOnly(row.rc_po_validity_date);
       const daysToExpiry = validityDate ? this.diffDays(validityDate) : null;
       return {
         awardedVendors: row.awarded_vendors,
@@ -381,14 +386,14 @@ export class PlanningRepository {
         entityId: row.entity_id,
         ownerUserId: row.owner_user_id,
         rcPoAmount: this.numberOrNull(row.rc_po_amount),
-        rcPoAwardDate: this.dateToIso(row.rc_po_award_date),
+        rcPoAwardDate: this.dateOnly(row.rc_po_award_date),
         rcPoValidityDate: validityDate ?? "",
         sourceCaseId: row.source_case_id,
         sourceId: row.source_id,
         sourceType: row.source_type,
         tenderDescription: row.tender_description,
         tenderFloatedOrNotRequired: row.tender_floated_or_not_required,
-        tentativeTenderingDate: this.dateToIso(row.tentative_tendering_date),
+        tentativeTenderingDate: this.dateOnly(row.tentative_tendering_date),
         urgency: urgency.classify(daysToExpiry),
       };
     });
@@ -465,8 +470,8 @@ export class PlanningRepository {
     );
     if (!row) return;
 
-    const awardDate = this.dateToIso(row.rc_po_award_date);
-    const validityDate = this.dateToIso(row.rc_po_validity_date);
+    const awardDate = this.dateOnly(row.rc_po_award_date);
+    const validityDate = this.dateOnly(row.rc_po_validity_date);
     if (awardDate && validityDate && validityDate < awardDate) {
       throw new Error("RC/PO plan date invalid.");
     }
@@ -529,7 +534,7 @@ export class PlanningRepository {
       entityId: row.entity_id,
       id: row.id,
       notes: row.notes,
-      plannedDate: this.dateToIso(row.planned_date),
+      plannedDate: this.dateOnly(row.planned_date),
       tenderDescription: row.tender_description,
       valueRs: this.numberOrNull(row.value_rs),
     };
@@ -542,26 +547,21 @@ export class PlanningRepository {
       entityId: row.entity_id,
       id: row.id,
       rcPoAmount: this.numberOrNull(row.rc_po_amount),
-      rcPoAwardDate: this.dateToIso(row.rc_po_award_date),
-      rcPoValidityDate: this.dateToIso(row.rc_po_validity_date),
+      rcPoAwardDate: this.dateOnly(row.rc_po_award_date),
+      rcPoValidityDate: this.dateOnly(row.rc_po_validity_date),
       sourceCaseId: row.source_case_id,
       tenderDescription: row.tender_description,
       tenderFloatedOrNotRequired: row.tender_floated_or_not_required,
-      tentativeTenderingDate: this.dateToIso(row.tentative_tendering_date),
+      tentativeTenderingDate: this.dateOnly(row.tentative_tendering_date),
     };
   }
 
-  private dateToIso(value: Date | string | null): string | null {
-    if (!value) return null;
-    if (value instanceof Date) return value.toISOString().slice(0, 10);
-    return value;
+  private dateOnly(value: Date | string | null): string | null {
+    return toDateOnlyString(value);
   }
 
   private diffDays(value: string): number {
-    const today = new Date();
-    const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
-    const target = new Date(`${value}T00:00:00.000Z`).getTime();
-    return Math.ceil((target - todayUtc) / 86_400_000);
+    return diffDateOnlyDays(value, todayDateOnlyString()) ?? 0;
   }
 
   private numberOrNull(value: string | number | null): number | null {

@@ -26,6 +26,7 @@ import {
   canReadCases,
   canReadReports,
 } from "../../../shared/auth/permissions";
+import { formatDateOnly, todayDateOnlyString, toDateOnlyInputValue } from "../../../shared/utils/dateOnly";
 import { Button } from "../../../shared/ui/button/Button";
 import { ErrorState } from "../../../shared/ui/error-state/ErrorState";
 import { Skeleton } from "../../../shared/ui/skeleton/Skeleton";
@@ -60,7 +61,7 @@ const caseColumns: DataTableColumn<CaseListItem>[] = [
 const expiryColumns: DataTableColumn<RcPoExpiryRow>[] = [
   { key: "contract", header: "Contract", render: (row) => row.tenderDescription ?? row.sourceId },
   { key: "vendors", header: "Vendors", render: (row) => row.awardedVendors ?? "-" },
-  { key: "validity", header: "Valid Till", render: (row) => row.rcPoValidityDate },
+  { key: "validity", header: "Valid Till", render: (row) => formatDateOnly(row.rcPoValidityDate) },
   {
     key: "urgency",
     header: "Urgency",
@@ -75,18 +76,12 @@ function urgencyTone(urgency: RcPoExpiryRow["urgency"]) {
 }
 
 function isCaseOverdue(row: Pick<CaseListItem, "status" | "tentativeCompletionDate">) {
+  const targetDate = toDateOnlyInputValue(row.tentativeCompletionDate);
   return Boolean(
     row.status === "running" &&
-      row.tentativeCompletionDate &&
-      row.tentativeCompletionDate < todayDateString(),
+      targetDate &&
+      targetDate < todayDateOnlyString(),
   );
-}
-
-function todayDateString() {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${now.getFullYear()}-${month}-${day}`;
 }
 
 function getGreeting(hour: number): string {

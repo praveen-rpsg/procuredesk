@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type { PoolClient, QueryResultRow } from "pg";
 
 import { DatabaseService } from "../../../database/database.service.js";
+import { toDateOnlyString } from "../../../common/utils/date-only.js";
 import type {
   CaseDelay,
   CaseFinancials,
@@ -364,13 +365,13 @@ export class ProcurementCaseRepository {
       id: row.id,
       prId: row.pr_id,
       prDescription: row.pr_description,
-      prReceiptDate: this.dateToIso(row.pr_receipt_date),
+      prReceiptDate: this.dateOnly(row.pr_receipt_date),
       isDelayed: row.is_delayed,
       priorityCase: row.priority_case,
       status: row.status,
       stageCode: row.stage_code,
       tenderName: row.tender_name,
-      tentativeCompletionDate: this.dateToIso(row.tentative_completion_date),
+      tentativeCompletionDate: this.dateOnly(row.tentative_completion_date),
       updatedAt: row.updated_at.toISOString(),
     }));
   }
@@ -443,13 +444,13 @@ export class ProcurementCaseRepository {
       id: row.id,
       prId: row.pr_id,
       prDescription: row.pr_description,
-      prReceiptDate: this.dateToIso(row.pr_receipt_date),
+      prReceiptDate: this.dateOnly(row.pr_receipt_date),
       isDelayed: row.is_delayed,
       priorityCase: row.priority_case,
       status: row.status,
       stageCode: row.stage_code,
       tenderName: row.tender_name,
-      tentativeCompletionDate: this.dateToIso(row.tentative_completion_date),
+      tentativeCompletionDate: this.dateOnly(row.tentative_completion_date),
       updatedAt: row.updated_at.toISOString(),
       deletedAt: row.deleted_at.toISOString(),
       deleteReason: row.delete_reason,
@@ -727,17 +728,17 @@ export class ProcurementCaseRepository {
       prDescription: row.pr_description,
       prRemarks: row.pr_remarks,
       prSchemeNo: row.pr_scheme_no,
-      prReceiptDate: this.dateToIso(row.pr_receipt_date),
+      prReceiptDate: this.dateOnly(row.pr_receipt_date),
       tenderName: row.tender_name,
       tenderNo: row.tender_no,
-      tentativeCompletionDate: this.dateToIso(row.tentative_completion_date),
+      tentativeCompletionDate: this.dateOnly(row.tentative_completion_date),
       tmRemarks: row.tm_remarks,
       budgetTypeLabel: row.budget_type_label,
       natureOfWorkLabel: row.nature_of_work_label,
       prReceivingMediumLabel: row.pr_receiving_medium_label,
       tenderTypeName: row.tender_type_name,
-      createdAt: this.dateToIso(row.created_at) ?? new Date(0).toISOString(),
-      updatedAt: this.dateToIso(row.updated_at) ?? new Date(0).toISOString(),
+      createdAt: row.created_at.toISOString(),
+      updatedAt: row.updated_at.toISOString(),
       financials: {
         approvedAmount: this.numberOrNull(row.approved_amount),
         estimateBenchmark: this.numberOrNull(row.estimate_benchmark),
@@ -747,20 +748,20 @@ export class ProcurementCaseRepository {
         totalAwardedAmount: this.numberOrNull(row.total_awarded_amount),
       },
       milestones: {
-        bidReceiptDate: this.dateToIso(row.bid_receipt_date),
+        bidReceiptDate: this.dateOnly(row.bid_receipt_date),
         biddersParticipated: row.bidders_participated,
-        commercialEvaluationDate: this.dateToIso(row.commercial_evaluation_date),
+        commercialEvaluationDate: this.dateOnly(row.commercial_evaluation_date),
         loiIssued: row.loi_issued,
-        loiIssuedDate: this.dateToIso(row.loi_issued_date),
-        nfaApprovalDate: this.dateToIso(row.nfa_approval_date),
-        nfaSubmissionDate: this.dateToIso(row.nfa_submission_date),
-        nitApprovalDate: this.dateToIso(row.nit_approval_date),
-        nitInitiationDate: this.dateToIso(row.nit_initiation_date),
-        nitPublishDate: this.dateToIso(row.nit_publish_date),
+        loiIssuedDate: this.dateOnly(row.loi_issued_date),
+        nfaApprovalDate: this.dateOnly(row.nfa_approval_date),
+        nfaSubmissionDate: this.dateOnly(row.nfa_submission_date),
+        nitApprovalDate: this.dateOnly(row.nit_approval_date),
+        nitInitiationDate: this.dateOnly(row.nit_initiation_date),
+        nitPublishDate: this.dateOnly(row.nit_publish_date),
         qualifiedBidders: row.qualified_bidders,
-        rcPoAwardDate: this.dateToIso(row.rc_po_award_date),
-        rcPoValidity: this.dateToIso(row.rc_po_validity),
-        technicalEvaluationDate: this.dateToIso(row.technical_evaluation_date),
+        rcPoAwardDate: this.dateOnly(row.rc_po_award_date),
+        rcPoValidity: this.dateOnly(row.rc_po_validity),
+        technicalEvaluationDate: this.dateOnly(row.technical_evaluation_date),
       },
       delay: {
         delayExternalDays: row.delay_external_days,
@@ -769,10 +770,8 @@ export class ProcurementCaseRepository {
     };
   }
 
-  private dateToIso(value: Date | string | null): string | null {
-    if (!value) return null;
-    if (value instanceof Date) return value.toISOString().slice(0, 10);
-    return value;
+  private dateOnly(value: Date | string | null): string | null {
+    return toDateOnlyString(value);
   }
 
   private applyValueSlabFilter(

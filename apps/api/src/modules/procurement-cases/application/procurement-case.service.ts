@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 
+import { addDaysToDateOnly } from "../../../common/utils/date-only.js";
 import { DatabaseService } from "../../../database/database.service.js";
 import { AuditWriterService } from "../../audit/application/audit-writer.service.js";
 import { CatalogService } from "../../catalog/application/catalog.service.js";
@@ -490,11 +491,5 @@ export class ProcurementCaseService {
 }
 
 function addDaysToDateString(dateString: string, days: number): string {
-  const [yearText, monthText, dayText] = dateString.split("-");
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
+  return addDaysToDateOnly(dateString, days);
 }
