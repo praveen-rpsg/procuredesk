@@ -136,7 +136,7 @@ export class RoleRepository {
     });
   }
 
-  async updateTenantRole(input: {
+  async updateRoleForTenant(input: {
     description: string | null;
     name: string;
     permissionCodes: string[];
@@ -151,8 +151,7 @@ export class RoleRepository {
               description = $4,
               updated_at = now()
           where id = $1
-            and tenant_id = $2
-            and is_system_role = false
+            and (tenant_id = $2 or tenant_id is null)
             and deleted_at is null
         `,
         [input.roleId, input.tenantId, input.name, input.description],

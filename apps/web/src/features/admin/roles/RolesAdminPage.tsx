@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Pencil, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { Copy, Pencil, Plus, Search, ShieldCheck, Trash2 } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 
 import {
@@ -168,9 +168,8 @@ export function RolesAdminPage() {
                       </IconButton>
                       <IconButton
                         aria-label={`Edit ${role.name}`}
-                        disabled={role.isSystemRole}
                         onClick={() => openEdit(role)}
-                        tooltip={role.isSystemRole ? "System roles are read-only" : "Edit role"}
+                        tooltip="Edit role"
                       >
                         <Pencil size={16} />
                       </IconButton>
@@ -280,13 +279,40 @@ function RoleForm({
   onChange: (value: RoleDraft) => void;
   value: RoleDraft;
 }) {
+  const [permissionQuery, setPermissionQuery] = useState("");
   const selected = new Set(value.permissionCodes);
+  const normalizedQuery = permissionQuery.trim().toLowerCase();
+  const visibleGroups = groupedPermissions
+    .map((group) => ({
+      ...group,
+      permissions: normalizedQuery
+        ? group.permissions.filter((permission) =>
+            [permission.name, permission.code, permission.description ?? ""].some((text) =>
+              text.toLowerCase().includes(normalizedQuery),
+            ),
+          )
+        : group.permissions,
+    }))
+    .filter((group) => group.permissions.length > 0);
   const togglePermission = (code: string) => {
     onChange({
       ...value,
       permissionCodes: selected.has(code)
         ? value.permissionCodes.filter((permission) => permission !== code)
         : [...value.permissionCodes, code],
+    });
+  };
+  const selectGroup = (permissions: AdminPermission[]) => {
+    const nextPermissionCodes = Array.from(
+      new Set([...value.permissionCodes, ...permissions.map((permission) => permission.code)]),
+    );
+    onChange({ ...value, permissionCodes: nextPermissionCodes });
+  };
+  const clearGroup = (permissions: AdminPermission[]) => {
+    const groupCodes = new Set(permissions.map((permission) => permission.code));
+    onChange({
+      ...value,
+      permissionCodes: value.permissionCodes.filter((permissionCode) => !groupCodes.has(permissionCode)),
     });
   };
 
@@ -349,13 +375,35 @@ function RoleForm({
             {value.permissionCodes.length > 0 ? "Clear" : "Select All"}
           </Button>
         </div>
+        <div className="permission-search-control">
+          <Search aria-hidden="true" size={16} />
+          <TextInput
+            aria-label="Search permissions"
+            onChange={(event) => setPermissionQuery(event.target.value)}
+            placeholder="Search permission name, code, or description"
+            value={permissionQuery}
+          />
+        </div>
         {isLoadingPermissions ? (
           <Skeleton height={160} />
+        ) : visibleGroups.length === 0 ? (
+          <p className="admin-help-text">No permissions match the current search.</p>
         ) : (
           <div className="permission-group-grid">
-            {groupedPermissions.map((group) => (
+            {visibleGroups.map((group) => {
+              const selectedCount = group.permissions.filter((permission) => selected.has(permission.code)).length;
+              return (
               <section className="permission-group" key={group.group}>
-                <h4>{group.group}</h4>
+                <div className="permission-group-heading">
+                  <div>
+                    <h4>{group.group}</h4>
+                    <span>{selectedCount} of {group.permissions.length} selected</span>
+                  </div>
+                  <div className="row-actions">
+                    <button onClick={() => selectGroup(group.permissions)} type="button">Select</button>
+                    <button onClick={() => clearGroup(group.permissions)} type="button">Clear</button>
+                  </div>
+                </div>
                 {group.permissions.map((permission) => (
                   <label className="permission-row" key={permission.code}>
                     <input
@@ -371,7 +419,8 @@ function RoleForm({
                   </label>
                 ))}
               </section>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

@@ -1802,6 +1802,17 @@ textarea:focus:not(:focus-visible) {
   margin: 0;
 }
 
+.permission-search-control {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.permission-search-control svg {
+  color: var(--color-muted);
+  flex-shrink: 0;
+}
+
 .permission-group-grid {
   display: grid;
   gap: var(--space-3);
@@ -1825,6 +1836,36 @@ textarea:focus:not(:focus-visible) {
   font-size: var(--font-size-sm);
   letter-spacing: 0;
   margin: 0;
+}
+
+.permission-group-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+}
+
+.permission-group-heading span {
+  color: var(--color-muted);
+  display: block;
+  font-size: var(--font-size-xs);
+  margin-top: var(--space-0-5);
+}
+
+.permission-group-heading button {
+  background: transparent;
+  border: 0;
+  color: var(--color-brand-500);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  padding: var(--space-0-5);
+}
+
+.permission-group-heading button:hover {
+  color: var(--color-brand-700);
+  text-decoration: underline;
 }
 
 .permission-row {
