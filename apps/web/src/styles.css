@@ -5833,6 +5833,14 @@ textarea:focus:not(:focus-visible) {
   border-bottom: 1px solid var(--color-border);
 }
 
+.table-header-control {
+  align-items: center;
+  display: flex;
+  gap: var(--space-1);
+  min-width: 0;
+  position: relative;
+}
+
 .table-sort-button {
   align-items: center;
   appearance: none;
@@ -5851,6 +5859,74 @@ textarea:focus:not(:focus-visible) {
 
 .table-sort-button:hover {
   color: var(--color-deep-teal);
+}
+
+.table-sort-button:disabled {
+  cursor: default;
+}
+
+.table-filter-button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--color-muted);
+  cursor: pointer;
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 24px;
+  justify-content: center;
+  padding: 0;
+  width: 24px;
+}
+
+.table-filter-button:hover,
+.table-filter-button-active {
+  background: var(--color-brand-50);
+  border-color: var(--color-brand-200);
+  color: var(--color-deep-teal);
+}
+
+.table-filter-popover {
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  gap: var(--space-1);
+  left: 0;
+  min-width: 220px;
+  padding: var(--space-2);
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  z-index: calc(var(--z-sticky) + 2);
+}
+
+.table-filter-popover input {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-ink);
+  font: inherit;
+  min-width: 0;
+  padding: var(--space-1-5) var(--space-2);
+  text-transform: none;
+  width: 100%;
+}
+
+.table-filter-popover button {
+  align-items: center;
+  background: var(--color-neutral-50);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-muted);
+  cursor: pointer;
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+  width: 28px;
 }
 
 .table-shell td {
