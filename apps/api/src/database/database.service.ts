@@ -23,7 +23,7 @@ export class DatabaseService implements OnModuleDestroy {
   async one<T extends QueryResultRow = QueryResultRow>(
     text: string,
     values: readonly unknown[] = [],
-    client: Queryable = this.pool,
+    client?: Queryable,
   ): Promise<T | null> {
     const result = await this.query<T>(text, values, client);
     return result.rows[0] ?? null;

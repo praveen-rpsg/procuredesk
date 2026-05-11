@@ -11,6 +11,7 @@ import { TenderTypeDaysAdminPage } from "./tender-type-days/TenderTypeDaysAdminP
 import { AdminUsersPage } from "./users/AdminUsersPage";
 import { useAuth } from "../../shared/auth/AuthProvider";
 import {
+  canAccessAdminWorkspace,
   canManageRoles,
   canManageUsers,
   canReadAudit,
@@ -50,6 +51,7 @@ export function AdminFoundation() {
   const hasEntityAccess = canReadEntities(user);
   const hasCatalogAccess = canReadCatalog(user);
   const hasAuditAccess = canReadAudit(user);
+  const hasAdminAccess = canAccessAdminWorkspace(user);
   const sections = useMemo<AdminSectionDefinition[]>(() => {
     const items: AdminSectionDefinition[] = [
       {
@@ -144,7 +146,7 @@ export function AdminFoundation() {
     }
   }, [isLegacyDepartmentsPath, location.search]);
 
-  if (!hasUserAccess && !hasEntityAccess && !hasCatalogAccess && !hasAuditAccess) {
+  if (!hasAdminAccess || (!hasUserAccess && !hasRoleAccess && !hasEntityAccess && !hasCatalogAccess && !hasAuditAccess)) {
     return <AccessDeniedState />;
   }
 

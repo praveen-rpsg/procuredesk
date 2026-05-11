@@ -376,7 +376,7 @@ export function PlanningWorkspace() {
                   onChange={(event) => setSelectedDepartmentId(event.target.value)}
                   value={selectedDepartmentId}
                 >
-                  <option value="">Any Department</option>
+                  <option value="">All Departments</option>
                   {(formDepartments.data ?? [])
                     .filter((department) => department.isActive)
                     .map((department) => (
@@ -461,7 +461,7 @@ export function PlanningWorkspace() {
                   onChange={(event) => setSelectedDepartmentId(event.target.value)}
                   value={selectedDepartmentId}
                 >
-                  <option value="">Any Department</option>
+                  <option value="">All Departments</option>
                   {(formDepartments.data ?? [])
                     .filter((department) => department.isActive)
                     .map((department) => (

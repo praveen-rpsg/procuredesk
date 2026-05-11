@@ -285,20 +285,61 @@ export class ProcurementCaseRepository {
     );
   }
 
-  async restore(input: { caseId: string; tenantId: string; updatedBy: string }): Promise<void> {
-    await this.db.query(
+  async restore(input: {
+    caseId: string;
+    tenantId: string;
+    updatedBy: string;
+  }): Promise<"already_active" | "duplicate_active_case" | "not_found" | "restored"> {
+    const row = await this.db.one<QueryResultRow & { outcome: string }>(
       `
-        update procurement.cases
-        set deleted_at = null,
-            deleted_by = null,
-            delete_reason = null,
-            updated_at = now(),
-            updated_by = $3
-        where id = $1
-          and tenant_id = $2
+        with target as (
+          select id, tenant_id, pr_id, deleted_at
+          from procurement.cases
+          where id = $1
+            and tenant_id = $2
+        ),
+        active_duplicate as (
+          select 1
+          from procurement.cases c
+          join target t on t.tenant_id = c.tenant_id and t.pr_id = c.pr_id
+          where c.id <> t.id
+            and c.deleted_at is null
+          limit 1
+        ),
+        restored as (
+          update procurement.cases c
+          set deleted_at = null,
+              deleted_by = null,
+              delete_reason = null,
+              updated_at = now(),
+              updated_by = $3
+          where c.id = $1
+            and c.tenant_id = $2
+            and c.deleted_at is not null
+            and not exists (select 1 from active_duplicate)
+          returning c.id
+        )
+        select case
+          when exists (select 1 from restored) then 'restored'
+          when not exists (select 1 from target) then 'not_found'
+          when exists (select 1 from target where deleted_at is null) then 'already_active'
+          when exists (select 1 from active_duplicate) then 'duplicate_active_case'
+          else 'not_found'
+        end as outcome
       `,
       [input.caseId, input.tenantId, input.updatedBy],
     );
+
+    if (
+      row?.outcome === "restored" ||
+      row?.outcome === "not_found" ||
+      row?.outcome === "already_active" ||
+      row?.outcome === "duplicate_active_case"
+    ) {
+      return row.outcome;
+    }
+
+    return "not_found";
   }
 
   async getCase(tenantId: string, caseId: string): Promise<ProcurementCaseAggregate | null> {
@@ -466,6 +507,7 @@ export class ProcurementCaseRepository {
         completed_count: string;
         delayed_count: string;
         priority_count: string;
+        risk_count: string;
         running_count: string;
         total_count: string;
       }
@@ -475,8 +517,9 @@ export class ProcurementCaseRepository {
           count(*)::text as total_count,
           count(*) filter (where status = 'running')::text as running_count,
           count(*) filter (where status = 'completed')::text as completed_count,
-          count(*) filter (where is_delayed)::text as delayed_count,
-          count(*) filter (where priority_case)::text as priority_count
+          count(*) filter (where status = 'running' and is_delayed)::text as delayed_count,
+          count(*) filter (where status = 'running' and priority_case)::text as priority_count,
+          count(*) filter (where status = 'running' and (is_delayed or priority_case))::text as risk_count
         from procurement.cases
         where ${where.join(" and ")}
       `,
@@ -487,6 +530,7 @@ export class ProcurementCaseRepository {
       completed: Number(row?.completed_count ?? 0),
       delayed: Number(row?.delayed_count ?? 0),
       priority: Number(row?.priority_count ?? 0),
+      risk: Number(row?.risk_count ?? 0),
       running: Number(row?.running_count ?? 0),
       total: Number(row?.total_count ?? 0),
     };

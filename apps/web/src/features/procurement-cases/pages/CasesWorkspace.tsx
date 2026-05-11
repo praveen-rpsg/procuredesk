@@ -98,7 +98,7 @@ type SavedCaseView = {
 };
 
 const valueSlabOptions = [
-  { label: "Any Value", value: "" },
+  { label: "All Values", value: "" },
   { label: "< 10L", value: "lt_10l" },
   { label: "10L - 1Cr", value: "10l_1cr" },
   { label: "1Cr - 10Cr", value: "1cr_10cr" },
@@ -262,6 +262,20 @@ function CasesWorkspaceList() {
     }
   }, [location.search, user?.id]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const nextStatus = toStatusFilter(params.get("status"));
+    const nextIsDelayed = toBooleanFilter(params.get("isDelayed") ?? "");
+    const nextPriorityCase = toBooleanFilter(params.get("priorityCase") ?? "");
+
+    if (!params.has("status") && !params.has("isDelayed") && !params.has("priorityCase")) return;
+
+    setStatus(nextStatus);
+    setIsDelayed(nextIsDelayed);
+    setPriorityCase(nextPriorityCase);
+    setPageCursors([""]);
+  }, [location.search]);
+
   const cases = useQuery({
     queryFn: () => listCases(caseFilters),
     queryKey: ["cases", caseFilters],
@@ -364,7 +378,7 @@ function CasesWorkspaceList() {
     }
     if (priorityCase) chips.push({ key: "priority", label: priorityCase === "true" ? "Priority" : "Not Priority", onClear: () => setPriorityCase("") });
     if (isDelayed) chips.push({ key: "delayed", label: isDelayed === "true" ? "Delayed" : "On Track", onClear: () => setIsDelayed("") });
-    if (cpcInvolved) chips.push({ key: "cpc", label: cpcInvolved === "true" ? "CPC Involved" : "No CPC", onClear: () => setCpcInvolved("") });
+    if (cpcInvolved) chips.push({ key: "cpc", label: cpcInvolved === "true" ? "CPC: Yes" : "CPC: No", onClear: () => setCpcInvolved("") });
     if (dateFrom) chips.push({ key: "dateFrom", label: `From: ${dateFrom}`, onClear: () => setDateFrom("") });
     if (dateTo) chips.push({ key: "dateTo", label: `To: ${dateTo}`, onClear: () => setDateTo("") });
     if (valueSlab) {
@@ -600,7 +614,7 @@ function CasesWorkspaceList() {
                 { label: "Running", value: "running" },
                 { label: "Completed", value: "completed" },
               ]}
-              placeholder="Any Status"
+              placeholder="All Statuses"
               value={status}
             />
           </FormField>
@@ -611,7 +625,7 @@ function CasesWorkspaceList() {
                 { label: "Priority Only", value: "true" },
                 { label: "Normal Only", value: "false" },
               ]}
-              placeholder="Any Priority"
+              placeholder="All Priorities"
               value={priorityCase}
             />
           </FormField>
@@ -622,7 +636,7 @@ function CasesWorkspaceList() {
                 { label: "Delayed", value: "true" },
                 { label: "On Track", value: "false" },
               ]}
-              placeholder="Any Delay"
+              placeholder="All Delay Statuses"
               value={isDelayed}
             />
           </FormField>
@@ -630,10 +644,10 @@ function CasesWorkspaceList() {
             <Select
               onChange={(event) => setCpcInvolved(toBooleanFilter(event.target.value))}
               options={[
-                { label: "CPC Involved", value: "true" },
-                { label: "No CPC", value: "false" },
+                { label: "Yes", value: "true" },
+                { label: "No", value: "false" },
               ]}
-              placeholder="Any CPC"
+              placeholder="All"
               value={cpcInvolved}
             />
           </FormField>
@@ -653,7 +667,7 @@ function CasesWorkspaceList() {
                 label: `${entity.code} - ${entity.name}`,
                 value: entity.id,
               }))}
-              placeholder="Any Entity"
+              placeholder="All Entities"
               value={entityId}
             />
           </FormField>
@@ -665,7 +679,7 @@ function CasesWorkspaceList() {
                 label: department.name,
                 value: department.id,
               }))}
-              placeholder={entityId ? "Any Department" : "Select Entity First"}
+              placeholder={entityId ? "All Departments" : "Select Entity First"}
               value={departmentId}
             />
           </FormField>
@@ -674,7 +688,7 @@ function CasesWorkspaceList() {
               disabled={!entityId || assignableOwners.isLoading}
               onChange={(event) => setOwnerUserId(event.target.value)}
               options={ownerOptions}
-              placeholder={entityId ? "Any Owner" : "Select Entity First"}
+              placeholder={entityId ? "All Owners" : "Select Entity First"}
               value={ownerUserId}
             />
           </FormField>
@@ -690,7 +704,7 @@ function CasesWorkspaceList() {
                 label: tenderType.name,
                 value: tenderType.id,
               }))}
-              placeholder="Any Tender Type"
+              placeholder="All Tender Types"
               value={tenderTypeId}
             />
           </FormField>
@@ -699,7 +713,7 @@ function CasesWorkspaceList() {
               disabled={catalog.isLoading}
               onChange={(event) => setBudgetTypeId(event.target.value)}
               options={budgetTypes.map((value) => ({ label: value.label, value: value.id }))}
-              placeholder="Any Budget Type"
+              placeholder="All Budget Types"
               value={budgetTypeId}
             />
           </FormField>
@@ -708,7 +722,7 @@ function CasesWorkspaceList() {
               disabled={catalog.isLoading}
               onChange={(event) => setNatureOfWorkId(event.target.value)}
               options={natureOfWork.map((value) => ({ label: value.label, value: value.id }))}
-              placeholder="Any Nature"
+              placeholder="All Nature"
               value={natureOfWorkId}
             />
           </FormField>
@@ -728,7 +742,7 @@ function CasesWorkspaceList() {
             <Select
               onChange={(event) => setValueSlab(toValueSlabFilter(event.target.value))}
               options={valueSlabOptions.filter((option) => option.value)}
-              placeholder="Any Value"
+              placeholder="All Values"
               value={valueSlab}
             />
           </FormField>
@@ -947,6 +961,10 @@ function booleanFilter(value: BooleanFilter) {
 
 function toBooleanFilter(value: string): BooleanFilter {
   return value === "true" || value === "false" ? value : "";
+}
+
+function toStatusFilter(value: string | null): string {
+  return value === "running" || value === "completed" ? value : "";
 }
 
 function toValueSlabFilter(value: string): ValueSlabFilter {

@@ -640,6 +640,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
             />
             <DateField
               error={visibleMilestoneErrors.rcPoValidity}
+              helperText="Auto-filled from the earliest Award Page validity date; edit here when needed."
               label="RC/PO Validity"
               name="rcPoValidity"
               setValue={setMilestones}
@@ -691,19 +692,21 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
 
 function DateField({
   error,
+  helperText,
   label,
   name,
   setValue,
   value,
 }: {
   error?: string | undefined;
+  helperText?: string | undefined;
   label: string;
   name: DateMilestoneKey;
   setValue: Dispatch<SetStateAction<MilestoneFormState>>;
   value: string;
 }) {
   return (
-    <FormField error={error ?? ""} label={label}>
+    <FormField error={error ?? ""} helperText={helperText} label={label}>
       <TextInput
         onChange={(event) =>
           setValue((current) => ({ ...current, [name]: event.target.value }))
@@ -971,6 +974,23 @@ function validateMilestones(
     "nfaSubmissionDate",
     "NFA Submission cannot be before Commercial Evaluation.",
   );
+  requireMilestonePrerequisites(
+    errors,
+    value,
+    Boolean(value.nfaSubmissionDate),
+    "nfaSubmissionDate",
+    [
+      ["nitInitiationDate", "NIT Initiation"],
+      ["nitApprovalDate", "NIT Approval"],
+      ["nitPublishDate", "NIT Publish"],
+      ["bidReceiptDate", "Bid Receipt"],
+      ["biddersParticipated", "Bidders Participated"],
+      ["commercialEvaluationDate", "Commercial Evaluation"],
+      ["technicalEvaluationDate", "Technical Evaluation"],
+      ["qualifiedBidders", "Qualified Bidders"],
+    ],
+    "NFA Submission can be saved only after all prior milestone fields are filled.",
+  );
   requireDateOrder(
     errors,
     value,
@@ -1117,6 +1137,25 @@ function requireDateOrder(
   if (laterValue < earlierValue) {
     errors[laterKey] = message;
   }
+}
+
+function requireMilestonePrerequisites(
+  errors: MilestoneErrors,
+  value: MilestoneFormState,
+  shouldValidate: boolean,
+  targetKey: keyof MilestoneFormState,
+  prerequisites: Array<[keyof MilestoneFormState, string]>,
+  summaryMessage: string,
+) {
+  if (!shouldValidate || errors[targetKey]) return;
+  const missingLabels = prerequisites
+    .filter(([key]) => {
+      const fieldValue = value[key];
+      return typeof fieldValue === "boolean" ? !fieldValue : !fieldValue;
+    })
+    .map(([, label]) => label);
+  if (!missingLabels.length) return;
+  errors[targetKey] = `${summaryMessage} Missing: ${missingLabels.join(", ")}.`;
 }
 
 function validateNonNegativeInteger(

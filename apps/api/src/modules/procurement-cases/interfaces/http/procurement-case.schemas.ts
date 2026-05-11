@@ -5,8 +5,10 @@ const dateString = z
   .regex(/^\d{4}-\d{2}-\d{2}$/)
   .nullable()
   .optional();
+const requiredDateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 const nullableUuid = z.string().uuid().nullable().optional();
+const requiredUuid = z.string().uuid();
 const csvUuidList = z
   .string()
   .optional()
@@ -21,6 +23,10 @@ export const CaseFinancialsSchema = z.object({
   approvedAmount: z.number().min(0).nullable().optional(),
   estimateBenchmark: z.number().min(0).nullable().optional(),
   prValue: z.number().min(0).nullable().optional(),
+});
+
+export const CreateCaseFinancialsSchema = z.object({
+  prValue: z.number().min(0),
 });
 
 export const CaseMilestonesSchema = z.object({
@@ -41,22 +47,22 @@ export const CaseMilestonesSchema = z.object({
 });
 
 export const CreateCaseRequestSchema = z.object({
-  budgetTypeId: nullableUuid,
-  cpcInvolved: z.boolean().nullable().optional(),
-  departmentId: nullableUuid,
+  budgetTypeId: requiredUuid,
+  cpcInvolved: z.boolean(),
+  departmentId: requiredUuid,
   entityId: z.string().uuid(),
-  financials: CaseFinancialsSchema.default({}),
-  natureOfWorkId: nullableUuid,
-  ownerUserId: nullableUuid,
-  prDescription: z.string().trim().max(5000).nullable().optional(),
+  financials: CreateCaseFinancialsSchema,
+  natureOfWorkId: requiredUuid,
+  ownerUserId: requiredUuid,
+  prDescription: z.string().trim().min(1).max(5000),
   prId: z.string().trim().min(1).max(100),
-  prReceiptDate: dateString,
+  prReceiptDate: requiredDateString,
   prReceivingMediumId: nullableUuid,
   prRemarks: z.string().trim().max(5000).nullable().optional(),
   prSchemeNo: z.string().trim().max(100).nullable().optional(),
-  priorityCase: z.boolean().optional(),
-  tenderTypeId: nullableUuid,
-  tentativeCompletionDate: dateString,
+  priorityCase: z.boolean(),
+  tenderTypeId: requiredUuid,
+  tentativeCompletionDate: requiredDateString,
 });
 
 export const UpdateCaseRequestSchema = z.object({

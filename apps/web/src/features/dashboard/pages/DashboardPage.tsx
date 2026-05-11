@@ -31,7 +31,17 @@ import { Skeleton } from "../../../shared/ui/skeleton/Skeleton";
 import { StatusBadge } from "../../../shared/ui/status/StatusBadge";
 import { DataTable, type DataTableColumn } from "../../../shared/ui/table/DataTable";
 
-type DashboardTarget = "assigned-cases" | "imports" | "new-case" | "planning" | "reports";
+type DashboardTarget =
+  | "all-cases"
+  | "assigned-cases"
+  | "completed-cases"
+  | "delayed-cases"
+  | "imports"
+  | "new-case"
+  | "planning"
+  | "priority-cases"
+  | "reports"
+  | "running-cases";
 
 type DashboardPageProps = {
   onNavigate?: (target: DashboardTarget) => void;
@@ -136,7 +146,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     return <ErrorState message={summary.error.message} title="Could not load dashboard" />;
   }
 
-  const metrics = summary.data ?? { completed: 0, delayed: 0, priority: 0, running: 0, total: 0 };
+  const metrics = summary.data ?? { completed: 0, delayed: 0, priority: 0, risk: 0, running: 0, total: 0 };
 
   const now = new Date();
   const greeting = getGreeting(now.getHours());
@@ -148,14 +158,15 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   });
   const completionRate = percentage(metrics.completed, metrics.total);
   const runningRate = percentage(metrics.running, metrics.total);
-  const riskCount = metrics.delayed + metrics.priority;
-  const riskRate = percentage(riskCount, Math.max(metrics.running, metrics.total));
+  const riskCount = metrics.risk;
+  const riskRate = percentage(riskCount, metrics.running);
   const dashboardMetrics = [
     {
       icon: FileText,
       label: "Total Cases",
       progress: undefined,
       subLabel: "All procurement records",
+      target: "all-cases",
       tone: "neutral",
       value: metrics.total,
     },
@@ -164,6 +175,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       label: "Running",
       progress: runningRate,
       subLabel: `${runningRate}% of total portfolio`,
+      target: "running-cases",
       tone: "brand",
       value: metrics.running,
     },
@@ -172,6 +184,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       label: "Completed",
       progress: completionRate,
       subLabel: `${completionRate}% completion rate`,
+      target: "completed-cases",
       tone: "success",
       value: metrics.completed,
     },
@@ -180,6 +193,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       label: "Delayed",
       progress: percentage(metrics.delayed, Math.max(metrics.running, 1)),
       subLabel: "Needs intervention",
+      target: "delayed-cases",
       tone: "danger",
       value: metrics.delayed,
     },
@@ -188,6 +202,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       label: "Priority",
       progress: percentage(metrics.priority, Math.max(metrics.running, 1)),
       subLabel: "High attention cases",
+      target: "priority-cases",
       tone: "warning",
       value: metrics.priority,
     },
@@ -244,7 +259,14 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         {dashboardMetrics.map((metric) => {
           const Icon = metric.icon;
           return (
-            <article className={`metric-card dashboard-metric-card metric-card-${metric.tone}`} key={metric.label}>
+            <button
+              aria-label={`Open ${metric.label} cases`}
+              className={`metric-card dashboard-metric-card dashboard-metric-card-clickable metric-card-${metric.tone}`}
+              disabled={!hasCaseAccess}
+              key={metric.label}
+              onClick={() => onNavigate?.(metric.target)}
+              type="button"
+            >
               <div className="dashboard-metric-topline">
                 <div className="metric-card-icon">
                   <Icon size={16} />
@@ -259,7 +281,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   <i style={{ width: `${Math.min(metric.progress, 100)}%` }} />
                 </div>
               ) : null}
-            </article>
+            </button>
           );
         })}
       </div>

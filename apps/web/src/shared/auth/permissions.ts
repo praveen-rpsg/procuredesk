@@ -64,6 +64,15 @@ const workspacePermissions: Record<WorkspaceKey, Permission[]> = {
   reports: ["report.read"],
 };
 
+const adminWorkspacePermissions: Permission[] = [
+  "audit.read",
+  "catalog.manage",
+  "entity.manage",
+  "role.manage",
+  "tenant.manage",
+  "user.manage",
+];
+
 export function expandPermissions(permissions: string[] | undefined): Set<string> {
   const granted = new Set(permissions ?? []);
   const queue = [...granted];
@@ -99,7 +108,12 @@ export function hasAllPermissions(user: CurrentUser | null | undefined, permissi
 
 export function canAccessWorkspace(user: CurrentUser | null | undefined, workspace: WorkspaceKey): boolean {
   if (workspace === "dashboard") return Boolean(user);
+  if (workspace === "admin") return canAccessAdminWorkspace(user);
   return hasAnyPermission(user, workspacePermissions[workspace]);
+}
+
+export function canAccessAdminWorkspace(user: CurrentUser | null | undefined): boolean {
+  return hasAnyPermission(user, adminWorkspacePermissions);
 }
 
 export function canReadCases(user: CurrentUser | null | undefined): boolean {

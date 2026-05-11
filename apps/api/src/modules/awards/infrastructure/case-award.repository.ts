@@ -201,7 +201,7 @@ export class CaseAwardRepository {
           count(*)::integer as award_count,
           coalesce(sum(po_value), 0)::text as total_awarded_amount,
           min(po_award_date) as first_award_date,
-          max(po_validity_date) as effective_validity_date
+          min(po_validity_date) as effective_validity_date
         from procurement.case_awards
         where tenant_id = $1
           and case_id = $2

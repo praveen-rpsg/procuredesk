@@ -146,6 +146,9 @@ export class CaseAwardService {
     if (!actor.isPlatformSuperAdmin && !actor.permissions.includes("award.manage")) {
       throw new ForbiddenException("Award management permission is required.");
     }
+    if (kase.status !== "completed") {
+      throw new BadRequestException("Awards can be managed only for completed cases.");
+    }
     if (actor.isPlatformSuperAdmin || actor.permissions.includes("case.update.all")) return;
     if (actor.permissions.includes("case.update.entity") && actor.entityIds.includes(kase.entityId)) {
       return;

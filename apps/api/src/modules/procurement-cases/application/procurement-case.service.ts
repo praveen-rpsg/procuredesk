@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -372,11 +373,26 @@ export class ProcurementCaseService {
     });
   }
 
-  async restoreCase(actor: AuthenticatedUser, caseId: string) {
+  async restoreCase(actor: AuthenticatedUser, caseId: string): Promise<void> {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "case.restore");
     await this.db.transaction(async () => {
-      await this.repository.restore({ caseId, tenantId, updatedBy: actor.id });
+      const restoreResult = await this.repository.restore({
+        caseId,
+        tenantId,
+        updatedBy: actor.id,
+      });
+      if (restoreResult === "not_found") {
+        throw new NotFoundException("Deleted case not found.");
+      }
+      if (restoreResult === "already_active") {
+        throw new ConflictException("Case is already active.");
+      }
+      if (restoreResult === "duplicate_active_case") {
+        throw new ConflictException(
+          "Cannot restore this case because another active case already uses the same Case ID.",
+        );
+      }
       await this.audit.write({
         action: "case.restore",
         actorUserId: actor.id,

@@ -81,13 +81,15 @@ const columns = (
 
 type AwardsPanelProps = {
   caseId: string | null;
+  isCaseCompleted?: boolean;
 };
 
-export function AwardsPanel({ caseId }: AwardsPanelProps) {
+export function AwardsPanel({ caseId, isCaseCompleted = false }: AwardsPanelProps) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { notify } = useToast();
-  const canManage = canManageAwards(user);
+  const hasAwardPermission = canManageAwards(user);
+  const canManage = hasAwardPermission && isCaseCompleted;
   const [form, setForm] = useState<AwardFormState>(emptyAwardForm);
   const [editingAward, setEditingAward] = useState<CaseAward | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<CaseAward | null>(null);
@@ -244,6 +246,8 @@ export function AwardsPanel({ caseId }: AwardsPanelProps) {
           ) : null}
         </div>
       </form>
+      ) : !isCaseCompleted ? (
+        <p className="hero-copy">Awards can be managed after the case is completed.</p>
       ) : (
         <p className="hero-copy">Awards are read-only for your role.</p>
       )}

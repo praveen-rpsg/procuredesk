@@ -47,7 +47,7 @@ import { ConfirmationDialog } from "../../../shared/ui/confirmation-dialog/Confi
 import { ErrorState } from "../../../shared/ui/error-state/ErrorState";
 import { TextArea } from "../../../shared/ui/form/TextArea";
 import { Skeleton } from "../../../shared/ui/skeleton/Skeleton";
-import { SecondaryNav } from "../../../shared/ui/secondary-nav/SecondaryNav";
+import { SecondaryNav, type SecondaryNavItem } from "../../../shared/ui/secondary-nav/SecondaryNav";
 import { StatusBadge } from "../../../shared/ui/status/StatusBadge";
 import { Timeline } from "../../../shared/ui/timeline/Timeline";
 import { useToast } from "../../../shared/ui/toast/ToastProvider";
@@ -59,18 +59,13 @@ type CaseDetailPageProps = {
 
 type CaseDetailTabKey = "activity" | "awards" | "overview" | "timeline" | "update";
 
-const caseDetailTabs = [
+const caseDetailTabs: Array<SecondaryNavItem<CaseDetailTabKey>> = [
   { description: "Key case information, PR details, and financial summary.", icon: FileText, key: "overview", label: "Overview" },
   { description: "Update case details, milestone dates, and award readiness.", icon: SquarePen, key: "update", label: "Update" },
   { description: "Track stages, target dates, and delay status.", icon: CalendarClock, key: "timeline", label: "Timeline" },
   { description: "Manage vendor awards, RC/PO values, and savings.", icon: Trophy, key: "awards", label: "Awards" },
   { description: "Review case audit events and operational history.", icon: Activity, key: "activity", label: "Activity" },
-] satisfies Array<{
-  description: string;
-  icon: typeof FileText;
-  key: CaseDetailTabKey;
-  label: string;
-}>;
+];
 
 const milestoneSteps: Array<{ key: string; label: string; stage: number }> = [
   { key: "nitInitiationDate", label: "NIT Initiation", stage: 1 },
@@ -114,19 +109,28 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
         canManageCaseDelay(user, detail.data) ||
         canAssignCaseOwner(user, detail.data)),
   );
-  const visibleTabs = useMemo(
+  const isCompletedCase = detail.data?.status === "completed";
+  const visibleTabs = useMemo<Array<SecondaryNavItem<CaseDetailTabKey>>>(
     () =>
-      caseDetailTabs.filter((tab) => {
-        if (tab.key === "activity") return hasAuditAccess;
-        if (tab.key === "update") return canOpenUpdate;
-        return true;
+      caseDetailTabs.flatMap((tab) => {
+        if (tab.key === "activity") return hasAuditAccess ? [tab] : [];
+        if (tab.key === "update") return canOpenUpdate ? [tab] : [];
+        if (tab.key === "awards" && !isCompletedCase) {
+          return [{
+            ...tab,
+            description: "Awards are enabled after the case is completed.",
+            disabled: true,
+          }];
+        }
+        return [tab];
       }),
-    [canOpenUpdate, hasAuditAccess],
+    [canOpenUpdate, hasAuditAccess, isCompletedCase],
   );
 
   useEffect(() => {
     if (!detail.data) return;
-    if (!visibleTabs.some((tab) => tab.key === activeTab)) {
+    const activeTabConfig = visibleTabs.find((tab) => tab.key === activeTab);
+    if (!activeTabConfig || activeTabConfig.disabled) {
       setActiveTab("overview");
     }
   }, [activeTab, detail.data, visibleTabs]);
@@ -464,7 +468,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
 
         {activeTab === "awards" ? (
           <div className="case-page-awards-section">
-            <AwardsPanel caseId={caseId} />
+            <AwardsPanel caseId={caseId} isCaseCompleted={isCompletedCase} />
           </div>
         ) : null}
 

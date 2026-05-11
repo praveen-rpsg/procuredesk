@@ -56,6 +56,27 @@ export class CaseChronologyPolicy {
       }
     }
 
+    if (m.nfaSubmissionDate) {
+      const missingPriorFields = [
+        ["NIT Initiation", m.nitInitiationDate],
+        ["NIT Approval", m.nitApprovalDate],
+        ["NIT Publish", m.nitPublishDate],
+        ["Bid Receipt", m.bidReceiptDate],
+        ["Bidders Participated", m.biddersParticipated],
+        ["Commercial Evaluation", m.commercialEvaluationDate],
+        ["Technical Evaluation", m.technicalEvaluationDate],
+        ["Qualified Bidders", m.qualifiedBidders],
+      ]
+        .filter(([, value]) => this.isBlank(value))
+        .map(([label]) => label);
+
+      if (missingPriorFields.length) {
+        errors.push(
+          `NFA Submission can be saved only after all prior milestone fields are filled. Missing: ${missingPriorFields.join(", ")}.`,
+        );
+      }
+    }
+
     this.validateConditionalRequirements(errors, m);
 
     return errors;
@@ -92,5 +113,9 @@ export class CaseChronologyPolicy {
 
   private maxDate(values: string[]): string | null {
     return values.length ? values.sort()[values.length - 1] ?? null : null;
+  }
+
+  private isBlank(value: unknown): boolean {
+    return value === null || value === undefined || value === "";
   }
 }

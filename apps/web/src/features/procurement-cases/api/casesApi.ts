@@ -25,6 +25,7 @@ export type CaseSummary = {
   completed: number;
   delayed: number;
   priority: number;
+  risk: number;
   running: number;
   total: number;
 };
@@ -154,19 +155,19 @@ function setStringParam(
 }
 
 export function createCase(payload: {
-  budgetTypeId?: string | null | undefined;
-  cpcInvolved?: boolean | null | undefined;
-  departmentId?: string | null | undefined;
+  budgetTypeId: string;
+  cpcInvolved: boolean;
+  departmentId: string;
   entityId: string;
-  financials: { prValue?: number | null };
-  natureOfWorkId?: string | null | undefined;
-  ownerUserId?: string | null | undefined;
-  prDescription?: string | null;
+  financials: { prValue: number };
+  natureOfWorkId: string;
+  ownerUserId: string;
+  prDescription: string;
   prId: string;
-  prReceiptDate?: string | null;
-  priorityCase?: boolean;
-  tenderTypeId?: string | null | undefined;
-  tentativeCompletionDate?: string | null;
+  prReceiptDate: string;
+  priorityCase: boolean;
+  tenderTypeId: string;
+  tentativeCompletionDate: string;
 }) {
   return apiRequest<{ id: string }>("/cases", {
     body: JSON.stringify(payload),

@@ -744,6 +744,15 @@ textarea:focus:not(:focus-visible) {
   color: var(--color-deep-teal);
 }
 
+.secondary-nav-item:disabled,
+.secondary-nav-item:disabled:hover {
+  background: transparent;
+  box-shadow: none;
+  color: var(--color-muted);
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
 .secondary-nav-item-active,
 .secondary-nav-item-active:hover {
   background: var(--color-brand-100);
@@ -1375,8 +1384,37 @@ textarea:focus:not(:focus-visible) {
 }
 
 .dashboard-metric-card {
+  color: inherit;
+  font: inherit;
+  text-align: left;
   min-height: 170px;
   padding: var(--space-4);
+}
+
+.dashboard-metric-card-clickable {
+  cursor: pointer;
+}
+
+.dashboard-metric-card-clickable:hover {
+  border-color: var(--color-brand-300);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.dashboard-metric-card-clickable:focus-visible {
+  outline: 3px solid var(--color-brand-200);
+  outline-offset: 3px;
+}
+
+.dashboard-metric-card-clickable:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.dashboard-metric-card-clickable:disabled:hover {
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-xs);
+  transform: none;
 }
 
 .dashboard-metric-topline {

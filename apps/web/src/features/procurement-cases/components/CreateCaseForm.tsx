@@ -31,7 +31,7 @@ type CreateCaseFormValues = {
   prId: string;
   prReceiptDate: string;
   prValue: string;
-  priorityCase: boolean;
+  priorityCase: string;
   tenderTypeId: string;
   tentativeCompletionDate: string;
 };
@@ -64,7 +64,7 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
   const [budgetTypeId, setBudgetTypeId] = useState("");
   const [natureOfWorkId, setNatureOfWorkId] = useState("");
   const [cpcInvolved, setCpcInvolved] = useState("");
-  const [priorityCase, setPriorityCase] = useState(false);
+  const [priorityCase, setPriorityCase] = useState("");
   const [prId, setPrId] = useState("");
   const [prDescription, setPrDescription] = useState("");
   const [prReceiptDate, setPrReceiptDate] = useState("");
@@ -168,21 +168,22 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
     });
     setFormErrors(parsed.errors);
     if (Object.keys(parsed.errors).length > 0) return;
+    if (parsed.prValue == null) return;
 
     mutation.mutate({
-      budgetTypeId: budgetTypeId || null,
-      cpcInvolved: cpcInvolved ? cpcInvolved === "true" : null,
-      departmentId: departmentId || null,
+      budgetTypeId,
+      cpcInvolved: cpcInvolved === "true",
+      departmentId,
       entityId,
       financials: { prValue: parsed.prValue },
-      natureOfWorkId: natureOfWorkId || null,
-      ownerUserId: ownerUserId || null,
-      prDescription: prDescription || null,
+      natureOfWorkId,
+      ownerUserId,
+      prDescription,
       prId,
-      prReceiptDate: prReceiptDate || null,
-      priorityCase,
-      tenderTypeId: tenderTypeId || null,
-      tentativeCompletionDate: tentativeCompletionDate || null,
+      prReceiptDate,
+      priorityCase: priorityCase === "true",
+      tenderTypeId,
+      tentativeCompletionDate,
     });
   }
 
@@ -222,11 +223,12 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
                 ))}
             </select>
           </FormField>
-          <FormField label="Department">
+          <FormField error={formErrors.departmentId ?? ""} label="Department">
             <select
               className="text-input"
               disabled={!entityId || departments.isLoading}
               onChange={(event) => setDepartmentId(event.target.value)}
+              required
               value={departmentId}
             >
               <option value="">Select Department</option>
@@ -239,14 +241,15 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
                 ))}
             </select>
           </FormField>
-          <FormField label="Tender Owner">
+          <FormField error={formErrors.ownerUserId ?? ""} label="Tender Owner">
             <select
               className="text-input"
               disabled={!entityId || owners.isLoading}
               onChange={(event) => setOwnerUserId(event.target.value)}
+              required
               value={ownerUserId}
             >
-              <option value="">Current User</option>
+              <option value="">Select Tender Owner</option>
               {(owners.data ?? []).map((owner) => (
                 <option key={owner.id} value={owner.id}>
                   {owner.fullName} - {owner.email}
@@ -279,6 +282,7 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
           >
             <TextInput
               onChange={(event) => setPrReceiptDate(event.target.value)}
+              required
               type="date"
               value={prReceiptDate}
             />
@@ -294,6 +298,7 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
                 setPrValue(formatCurrencyInput(event.target.value))
               }
               placeholder="0.00"
+              required
               value={prValue}
             />
           </FormField>
@@ -305,6 +310,7 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
           <TextArea
             maxLength={5000}
             onChange={(event) => setPrDescription(event.target.value)}
+            required
             value={prDescription}
           />
         </FormField>
@@ -314,6 +320,7 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
         <p className="eyebrow">Classification</p>
         <div className="two-column">
           <FormField
+            error={formErrors.tenderTypeId ?? ""}
             helperText={
               activeTenderTypes.length === 0
                 ? "No active tender types configured. Add them in Admin > Tender Types."
@@ -351,14 +358,16 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
               onChange={(event) =>
                 setTentativeCompletionDate(event.target.value)
               }
+              required
               type="date"
               value={tentativeCompletionDate}
             />
           </FormField>
-          <FormField label="Budget Type">
+          <FormField error={formErrors.budgetTypeId ?? ""} label="Budget Type">
             <select
               className="text-input"
               onChange={(event) => setBudgetTypeId(event.target.value)}
+              required
               value={budgetTypeId}
             >
               <option value="">Select Budget Type</option>
@@ -369,10 +378,11 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
               ))}
             </select>
           </FormField>
-          <FormField label="Nature Of Work">
+          <FormField error={formErrors.natureOfWorkId ?? ""} label="Nature Of Work">
             <select
               className="text-input"
               onChange={(event) => setNatureOfWorkId(event.target.value)}
+              required
               value={natureOfWorkId}
             >
               <option value="">Select Nature</option>
@@ -383,25 +393,30 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
               ))}
             </select>
           </FormField>
-          <FormField label="CPC Involved?">
+          <FormField error={formErrors.cpcInvolved ?? ""} label="CPC Involved?">
             <select
               className="text-input"
               onChange={(event) => setCpcInvolved(event.target.value)}
+              required
               value={cpcInvolved}
             >
-              <option value="">Not Set</option>
+              <option value="">Select CPC Involved</option>
               <option value="true">Yes</option>
               <option value="false">No</option>
             </select>
           </FormField>
-          <label className="checkbox-row">
-            <input
-              checked={priorityCase}
-              onChange={(event) => setPriorityCase(event.target.checked)}
-              type="checkbox"
-            />
-            Priority Case
-          </label>
+          <FormField error={formErrors.priorityCase ?? ""} label="Priority Case?">
+            <select
+              className="text-input"
+              onChange={(event) => setPriorityCase(event.target.value)}
+              required
+              value={priorityCase}
+            >
+              <option value="">Select Priority</option>
+              <option value="true">Yes</option>
+              <option value="false">No</option>
+            </select>
+          </FormField>
         </div>
       </div>
 
@@ -426,18 +441,25 @@ function validateCreateCaseForm(
   if (!values.entityId) {
     errors.entityId = "Entity is required.";
   }
+  if (!values.departmentId) {
+    errors.departmentId = "Department is required.";
+  }
+  if (!values.ownerUserId) {
+    errors.ownerUserId = "Tender Owner is required.";
+  }
   if (!values.prId.trim()) {
     errors.prId = "Case ID is required.";
   } else if (values.prId.trim().length > createCaseFormSchema.maxPrIdLength) {
     errors.prId = `Case ID must be ${createCaseFormSchema.maxPrIdLength} characters or less.`;
   }
-  if (values.prReceiptDate && !isDateOnlyString(values.prReceiptDate)) {
+  if (!values.prReceiptDate) {
+    errors.prReceiptDate = "PR receipt date is required.";
+  } else if (!isDateOnlyString(values.prReceiptDate)) {
     errors.prReceiptDate = "Use a valid PR receipt date.";
   }
-  if (
-    values.tentativeCompletionDate &&
-    !isDateOnlyString(values.tentativeCompletionDate)
-  ) {
+  if (!values.tentativeCompletionDate) {
+    errors.tentativeCompletionDate = "Tentative completion date is required.";
+  } else if (!isDateOnlyString(values.tentativeCompletionDate)) {
     errors.tentativeCompletionDate = "Use a valid completion date.";
   }
   if (
@@ -448,13 +470,32 @@ function validateCreateCaseForm(
     errors.tentativeCompletionDate =
       "Completion date cannot be before PR receipt date.";
   }
-  if (values.prDescription.length > createCaseFormSchema.maxTextLength) {
+  if (!values.prDescription.trim()) {
+    errors.prDescription = "PR description is required.";
+  } else if (values.prDescription.length > createCaseFormSchema.maxTextLength) {
     errors.prDescription = `Description must be ${createCaseFormSchema.maxTextLength} characters or less.`;
   }
-  if (values.prValue && prValue == null) {
+  if (!values.prValue.trim()) {
+    errors.prValue = "PR value is required.";
+  } else if (prValue == null) {
     errors.prValue = "Enter a valid non-negative INR amount.";
   } else if (prValue != null && prValue > createCaseFormSchema.maxMoneyValue) {
     errors.prValue = "PR value is too large.";
+  }
+  if (!values.tenderTypeId) {
+    errors.tenderTypeId = "Tender Type is required.";
+  }
+  if (!values.budgetTypeId) {
+    errors.budgetTypeId = "Budget Type is required.";
+  }
+  if (!values.natureOfWorkId) {
+    errors.natureOfWorkId = "Nature Of Work is required.";
+  }
+  if (!values.cpcInvolved) {
+    errors.cpcInvolved = "CPC Involved is required.";
+  }
+  if (!values.priorityCase) {
+    errors.priorityCase = "Priority Case is required.";
   }
 
   return { errors, prValue };

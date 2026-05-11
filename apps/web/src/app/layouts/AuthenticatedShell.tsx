@@ -36,7 +36,17 @@ const ReportsWorkspace = lazy(() =>
 );
 
 type RouteWorkspace = WorkspaceKey | "not-found";
-type DashboardTarget = "assigned-cases" | "imports" | "new-case" | "planning" | "reports";
+type DashboardTarget =
+  | "all-cases"
+  | "assigned-cases"
+  | "completed-cases"
+  | "delayed-cases"
+  | "imports"
+  | "new-case"
+  | "planning"
+  | "priority-cases"
+  | "reports"
+  | "running-cases";
 
 const navigation = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
@@ -152,8 +162,33 @@ export function AuthenticatedShell() {
   };
 
   const handleDashboardNavigate = (target: DashboardTarget) => {
+    if (target === "all-cases") {
+      navigateToAppPath("/cases");
+      setIsMobileNavOpen(false);
+      return;
+    }
     if (target === "assigned-cases") {
       navigateToAppPath("/cases?view=assigned");
+      setIsMobileNavOpen(false);
+      return;
+    }
+    if (target === "running-cases") {
+      navigateToAppPath("/cases?status=running");
+      setIsMobileNavOpen(false);
+      return;
+    }
+    if (target === "completed-cases") {
+      navigateToAppPath("/cases?status=completed");
+      setIsMobileNavOpen(false);
+      return;
+    }
+    if (target === "delayed-cases") {
+      navigateToAppPath("/cases?status=running&isDelayed=true");
+      setIsMobileNavOpen(false);
+      return;
+    }
+    if (target === "priority-cases") {
+      navigateToAppPath("/cases?status=running&priorityCase=true");
       setIsMobileNavOpen(false);
       return;
     }
