@@ -1328,13 +1328,9 @@ textarea:focus:not(:focus-visible) {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.dashboard-priority-panel,
 .dashboard-expiry-panel {
   grid-column: 1 / -1;
-}
-
-.dashboard-delayed-panel,
-.dashboard-priority-panel {
-  grid-column: span 3;
 }
 
 .metric-card-brand {
@@ -1395,6 +1391,14 @@ textarea:focus:not(:focus-visible) {
   font-size: var(--font-size-xs);
   line-height: var(--line-height-snug);
   margin-top: var(--space-2);
+}
+
+.dashboard-case-filter-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: flex-end;
 }
 
 .dashboard-metric-percent {

@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
@@ -23,6 +25,7 @@ import {
 import { formatDateOnly, todayDateOnlyString, toDateOnlyInputValue } from "../../../shared/utils/dateOnly";
 import { Button } from "../../../shared/ui/button/Button";
 import { ErrorState } from "../../../shared/ui/error-state/ErrorState";
+import { Checkbox } from "../../../shared/ui/form/Checkbox";
 import { Skeleton } from "../../../shared/ui/skeleton/Skeleton";
 import { StatusBadge } from "../../../shared/ui/status/StatusBadge";
 import { DataTable, type DataTableColumn } from "../../../shared/ui/table/DataTable";
@@ -105,21 +108,22 @@ function TableSkeleton({ rows = 4 }: { rows?: number }) {
 }
 
 export function DashboardPage({ onNavigate }: DashboardPageProps) {
+  const [showDelayedCases, setShowDelayedCases] = useState(false);
   const { user } = useAuth();
   const hasCaseAccess = canReadCases(user);
   const hasCreateAccess = canCreateCase(user);
   const hasPlanningAccess = canManagePlanning(user);
   const hasReportAccess = canReadReports(user);
   const summary = useQuery({ enabled: hasCaseAccess, queryFn: getCaseSummary, queryKey: ["case-summary"] });
-  const delayedCases = useQuery({
+  const focusedCases = useQuery({
     enabled: hasCaseAccess,
-    queryFn: () => listCases({ isDelayed: true, limit: 5, status: "running" }),
-    queryKey: ["dashboard-delayed-cases"],
-  });
-  const priorityCases = useQuery({
-    enabled: hasCaseAccess,
-    queryFn: () => listCases({ limit: 5, priorityCase: true, status: "running" }),
-    queryKey: ["dashboard-priority-cases"],
+    queryFn: () =>
+      listCases(
+        showDelayedCases
+          ? { isDelayed: true, limit: 5, status: "running" }
+          : { limit: 5, priorityCase: true, status: "running" },
+      ),
+    queryKey: [showDelayedCases ? "dashboard-delayed-cases" : "dashboard-priority-cases"],
   });
   const expiryRows = useQuery({
     enabled: hasCaseAccess && hasPlanningAccess,
@@ -259,33 +263,6 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         })}
       </div>
 
-      {/* Delayed cases */}
-      {hasCaseAccess ? (
-      <section className="state-panel dashboard-delayed-panel">
-        <div className="detail-header">
-          <div>
-            <p className="eyebrow">Risk</p>
-            <h2>Delayed Cases</h2>
-          </div>
-          <div className="panel-icon panel-icon-danger">
-            <AlertTriangle size={16} />
-          </div>
-        </div>
-        {delayedCases.isLoading ? (
-          <TableSkeleton rows={4} />
-        ) : delayedCases.error ? (
-          <p className="inline-error">{delayedCases.error.message}</p>
-        ) : (
-          <DataTable
-            columns={caseColumns}
-            emptyMessage="No delayed running cases."
-            getRowKey={(row) => row.id}
-            rows={delayedCases.data ?? []}
-          />
-        )}
-      </section>
-      ) : null}
-
       {/* Priority cases */}
       {hasCaseAccess ? (
       <section className="state-panel dashboard-priority-panel">
@@ -294,20 +271,27 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             <p className="eyebrow">Focus</p>
             <h2>Priority Cases</h2>
           </div>
-          <div className="panel-icon panel-icon-warning">
-            <Zap size={16} />
+          <div className="dashboard-case-filter-actions">
+            <Checkbox
+              checked={showDelayedCases}
+              label="Delayed Cases"
+              onChange={(event) => setShowDelayedCases(event.target.checked)}
+            />
+            <div className={`panel-icon ${showDelayedCases ? "panel-icon-danger" : "panel-icon-warning"}`}>
+              {showDelayedCases ? <AlertTriangle size={16} /> : <Zap size={16} />}
+            </div>
           </div>
         </div>
-        {priorityCases.isLoading ? (
+        {focusedCases.isLoading ? (
           <TableSkeleton rows={4} />
-        ) : priorityCases.error ? (
-          <p className="inline-error">{priorityCases.error.message}</p>
+        ) : focusedCases.error ? (
+          <p className="inline-error">{focusedCases.error.message}</p>
         ) : (
           <DataTable
             columns={caseColumns}
-            emptyMessage="No priority running cases."
+            emptyMessage={showDelayedCases ? "No delayed running cases." : "No priority running cases."}
             getRowKey={(row) => row.id}
-            rows={priorityCases.data ?? []}
+            rows={focusedCases.data ?? []}
           />
         )}
       </section>
