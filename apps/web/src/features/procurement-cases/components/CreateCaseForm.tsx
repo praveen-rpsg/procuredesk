@@ -369,7 +369,7 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
               ))}
             </select>
           </FormField>
-          <FormField label="CPC">
+          <FormField label="CPC Involved?">
             <select
               className="text-input"
               onChange={(event) => setCpcInvolved(event.target.value)}

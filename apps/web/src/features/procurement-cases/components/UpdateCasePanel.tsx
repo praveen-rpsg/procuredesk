@@ -58,7 +58,10 @@ type DateMilestoneKey = Exclude<
 >;
 type MilestoneErrors = Partial<Record<keyof MilestoneFormState, string>>;
 type CaseFormErrors = Partial<
-  Record<"approvedAmount" | "tenderName" | "tenderNo", string>
+  Record<"tenderName" | "tenderNo", string>
+>;
+type FinancialFormErrors = Partial<
+  Record<"approvedAmount" | "estimateBenchmark", string>
 >;
 type DelayFormErrors = Partial<
   Record<"delayExternalDays" | "delayReason", string>
@@ -95,6 +98,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
   const [ownerUserId, setOwnerUserId] = useState("");
   const [showCaseErrors, setShowCaseErrors] = useState(false);
   const [showDelayErrors, setShowDelayErrors] = useState(false);
+  const [showFinancialErrors, setShowFinancialErrors] = useState(false);
   const [showMilestoneErrors, setShowMilestoneErrors] = useState(false);
   const [delayExternalDays, setDelayExternalDays] = useState("");
   const [delayReason, setDelayReason] = useState("");
@@ -151,6 +155,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
     setEstimateBenchmark(moneyString(kase.financials.estimateBenchmark));
     setShowCaseErrors(false);
     setShowDelayErrors(false);
+    setShowFinancialErrors(false);
     setShowMilestoneErrors(false);
   }, [detail.data]);
 
@@ -161,18 +166,28 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
   const caseErrors = useMemo(
     () =>
       validateCaseForm({
-        approvedAmount,
-        milestones,
         tenderName,
         tenderNo,
       }),
-    [approvedAmount, milestones, tenderName, tenderNo],
+    [tenderName, tenderNo],
+  );
+  const financialErrors = useMemo(
+    () =>
+      validateFinancialForm({
+        approvedAmount,
+        estimateBenchmark,
+        milestones,
+      }),
+    [approvedAmount, estimateBenchmark, milestones],
   );
   const delayErrors = useMemo(
     () => validateDelayForm({ delayExternalDays, delayReason }),
     [delayExternalDays, delayReason],
   );
   const visibleCaseErrors: CaseFormErrors = showCaseErrors ? caseErrors : {};
+  const visibleFinancialErrors: FinancialFormErrors = showFinancialErrors
+    ? financialErrors
+    : {};
   const visibleDelayErrors: DelayFormErrors = showDelayErrors
     ? delayErrors
     : {};
@@ -192,20 +207,24 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
   const caseChangedFields = useMemo(
     () =>
       buildCaseChangedFields(detail.data, {
-        approvedAmount,
-        estimateBenchmark,
         priorityCase,
         tenderName,
         tenderNo,
       }),
     [
-      approvedAmount,
-      estimateBenchmark,
       detail.data,
       priorityCase,
       tenderName,
       tenderNo,
     ],
+  );
+  const financialChangedFields = useMemo(
+    () =>
+      buildFinancialChangedFields(detail.data, {
+        approvedAmount,
+        estimateBenchmark,
+      }),
+    [approvedAmount, estimateBenchmark, detail.data],
   );
   const delayChangedFields = useMemo(
     () =>
@@ -220,17 +239,6 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
   const updateCaseMutation = useMutation({
     mutationFn: () =>
       updateCase(caseId as string, {
-        financials:
-          approvedAmount.trim() || estimateBenchmark.trim()
-            ? {
-                approvedAmount: approvedAmount.trim()
-                  ? parseMoneyInput(approvedAmount)
-                  : undefined,
-                estimateBenchmark: estimateBenchmark.trim()
-                  ? parseMoneyInput(estimateBenchmark)
-                  : undefined,
-              }
-            : undefined,
         priorityCase,
         tenderName: tenderName || null,
         tenderNo: tenderNo || null,
@@ -249,8 +257,16 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
   });
 
   const updateMilestoneMutation = useMutation({
-    mutationFn: () =>
-      updateMilestones(caseId as string, milestonePayload(milestones)),
+    mutationFn: async () => {
+      const financials = financialPayload({
+        approvedAmount,
+        estimateBenchmark,
+      });
+      if (financials) {
+        await updateCase(caseId as string, { financials });
+      }
+      return updateMilestones(caseId as string, milestonePayload(milestones));
+    },
     onSuccess: async () => {
       await invalidateCaseQueries(queryClient, caseId);
       toast.notify({ message: "Milestones updated.", tone: "success" });
@@ -293,14 +309,8 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
     event.preventDefault();
     if (!canEditCase) return;
     setShowMilestoneErrors(true);
-    if (requiresApprovedAmount(milestones) && !approvedAmount.trim()) {
-      setShowCaseErrors(true);
-    }
-    if (
-      requiresApprovedAmount(milestones) &&
-      (!approvedAmount.trim() || caseErrors.approvedAmount)
-    )
-      return;
+    setShowFinancialErrors(true);
+    if (Object.keys(financialErrors).length > 0) return;
     if (Object.keys(milestoneErrors).length > 0) return;
     if (caseId) updateMilestoneMutation.mutate();
   }
@@ -386,26 +396,6 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
                 value={tenderNo}
               />
             </FormField>
-            <FormField label="Estimate / Benchmark (Rs.)">
-              <TextInput
-                inputMode="decimal"
-                onChange={(event) => setEstimateBenchmark(event.target.value)}
-                placeholder="0"
-                value={estimateBenchmark}
-              />
-            </FormField>
-            <FormField
-              error={visibleCaseErrors.approvedAmount ?? ""}
-              helperText="Required before NFA approval, LOI, or RC/PO award milestones are saved."
-              label="NFA Approved Amount (Rs.)"
-            >
-              <TextInput
-                inputMode="decimal"
-                onChange={(event) => setApprovedAmount(event.target.value)}
-                placeholder="0"
-                value={approvedAmount}
-              />
-            </FormField>
             <label className="checkbox-row">
               <input
                 checked={priorityCase}
@@ -455,7 +445,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
               <TextInput
                 disabled
                 type="date"
-                value={detail.data?.tentativeCompletionDate ?? ""}
+                value={milestoneString(detail.data?.tentativeCompletionDate)}
               />
             </FormField>
             {ownerMutation.error ? (
@@ -530,7 +520,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
               <TextInput
                 disabled
                 type="date"
-                value={detail.data?.prReceiptDate ?? ""}
+                value={milestoneString(detail.data?.prReceiptDate)}
               />
             </FormField>
             <DateField
@@ -607,6 +597,17 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
                 value={milestones.qualifiedBidders}
               />
             </FormField>
+            <FormField
+              error={visibleFinancialErrors.estimateBenchmark ?? ""}
+              label="Estimate / Benchmark (Rs.)"
+            >
+              <TextInput
+                inputMode="decimal"
+                onChange={(event) => setEstimateBenchmark(event.target.value)}
+                placeholder="0"
+                value={estimateBenchmark}
+              />
+            </FormField>
             <DateField
               error={visibleMilestoneErrors.nfaSubmissionDate}
               label="NFA Submission"
@@ -621,6 +622,18 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
               setValue={setMilestones}
               value={milestones.nfaApprovalDate}
             />
+            <FormField
+              error={visibleFinancialErrors.approvedAmount ?? ""}
+              helperText="Required before NFA approval, LOI, or RC/PO award milestones are saved."
+              label="NFA Approved Amount (Rs.)"
+            >
+              <TextInput
+                inputMode="decimal"
+                onChange={(event) => setApprovedAmount(event.target.value)}
+                placeholder="0"
+                value={approvedAmount}
+              />
+            </FormField>
             <label className="checkbox-row">
               <input
                 checked={milestones.loiIssued}
@@ -628,19 +641,24 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
                   setMilestones((value) => ({
                     ...value,
                     loiIssued: event.target.checked,
+                    loiIssuedDate: event.target.checked
+                      ? value.loiIssuedDate
+                      : "",
                   }))
                 }
                 type="checkbox"
               />
               LOI Issued
             </label>
-            <DateField
-              error={visibleMilestoneErrors.loiIssuedDate}
-              label="LOI Issued Date"
-              name="loiIssuedDate"
-              setValue={setMilestones}
-              value={milestones.loiIssuedDate}
-            />
+            {milestones.loiIssued ? (
+              <DateField
+                error={visibleMilestoneErrors.loiIssuedDate}
+                label="LOI Issued Date"
+                name="loiIssuedDate"
+                setValue={setMilestones}
+                value={milestones.loiIssuedDate}
+              />
+            ) : null}
             <DateField
               error={visibleMilestoneErrors.rcPoAwardDate}
               label="RC/PO Award"
@@ -661,7 +679,9 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
               Fix the highlighted milestone fields before saving.
             </div>
           ) : null}
-          <ChangedFields fields={milestoneChangedFields} />
+          <ChangedFields
+            fields={[...financialChangedFields, ...milestoneChangedFields]}
+          />
           {serverChronologyErrors.length > 0 ? (
             <div className="form-error form-error-list">
               <div>
@@ -721,8 +741,6 @@ function ChangedFields({ fields }: { fields: string[] }) {
 function buildCaseChangedFields(
   kase: CaseDetail | undefined,
   value: {
-    approvedAmount: string;
-    estimateBenchmark: string;
     priorityCase: boolean;
     tenderName: string;
     tenderNo: string;
@@ -733,6 +751,18 @@ function buildCaseChangedFields(
   if (value.tenderName !== (kase.tenderName ?? "")) fields.push("Tender Name");
   if (value.tenderNo !== (kase.tenderNo ?? "")) fields.push("Tender No");
   if (value.priorityCase !== kase.priorityCase) fields.push("Priority Case");
+  return fields;
+}
+
+function buildFinancialChangedFields(
+  kase: CaseDetail | undefined,
+  value: {
+    approvedAmount: string;
+    estimateBenchmark: string;
+  },
+) {
+  if (!kase) return [];
+  const fields: string[] = [];
   if (
     value.approvedAmount.trim() &&
     isMoneyInput(value.approvedAmount) &&
@@ -808,8 +838,6 @@ const milestoneLabels: Record<DateMilestoneKey, string> = {
 };
 
 function validateCaseForm(input: {
-  approvedAmount: string;
-  milestones: MilestoneFormState;
   tenderName: string;
   tenderNo: string;
 }): CaseFormErrors {
@@ -819,6 +847,22 @@ function validateCaseForm(input: {
   }
   if (input.tenderNo.length > 200) {
     errors.tenderNo = "Tender number cannot exceed 200 characters.";
+  }
+  return errors;
+}
+
+function validateFinancialForm(input: {
+  approvedAmount: string;
+  estimateBenchmark: string;
+  milestones: MilestoneFormState;
+}): FinancialFormErrors {
+  const errors: FinancialFormErrors = {};
+  if (
+    input.estimateBenchmark.trim() &&
+    !isMoneyInput(input.estimateBenchmark)
+  ) {
+    errors.estimateBenchmark =
+      "Estimate / benchmark must be a valid amount greater than or equal to 0.";
   }
   if (input.approvedAmount.trim() && !isMoneyInput(input.approvedAmount)) {
     errors.approvedAmount =
@@ -832,6 +876,23 @@ function validateCaseForm(input: {
       "Approved amount is required before NFA approval, LOI, or RC/PO award.";
   }
   return errors;
+}
+
+function financialPayload(input: {
+  approvedAmount: string;
+  estimateBenchmark: string;
+}) {
+  if (!input.approvedAmount.trim() && !input.estimateBenchmark.trim()) {
+    return null;
+  }
+  return {
+    approvedAmount: input.approvedAmount.trim()
+      ? parseMoneyInput(input.approvedAmount)
+      : undefined,
+    estimateBenchmark: input.estimateBenchmark.trim()
+      ? parseMoneyInput(input.estimateBenchmark)
+      : undefined,
+  };
 }
 
 function validateDelayForm(input: {

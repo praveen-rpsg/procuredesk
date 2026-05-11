@@ -146,7 +146,10 @@ export function CaseDetailPanel({ caseId, onDeleted, onEdit }: CaseDetailPanelPr
             <CompactMetric label="Tender No" value={kase.tenderNo ?? "-"} />
             <CompactMetric label="CPC" value={kase.cpcInvolved == null ? "-" : kase.cpcInvolved ? "Yes" : "No"} />
             <CompactMetric label="PR Remarks" value={kase.prRemarks ?? "-"} />
-            <CompactMetric label="TM Remarks" value={kase.tmRemarks ?? "-"} />
+            <CompactMetric
+              label="Tender Owner's Remarks"
+              value={kase.tmRemarks ?? "-"}
+            />
           </dl>
         </section>
 

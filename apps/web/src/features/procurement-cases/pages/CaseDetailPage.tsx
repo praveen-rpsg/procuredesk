@@ -399,7 +399,12 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
               <SectionCard icon={MessageSquare} title="Remarks">
                 <div className="case-info-list">
                   {kase.prRemarks && <InfoRow label="PR Remarks" value={kase.prRemarks} />}
-                  {kase.tmRemarks && <InfoRow label="TM Remarks" value={kase.tmRemarks} />}
+                  {kase.tmRemarks && (
+                    <InfoRow
+                      label="Tender Owner's Remarks"
+                      value={kase.tmRemarks}
+                    />
+                  )}
                 </div>
               </SectionCard>
             )}
