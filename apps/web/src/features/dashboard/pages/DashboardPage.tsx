@@ -2,17 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
   AlertTriangle,
-  ArrowUpRight,
   BarChart3,
   CheckCircle2,
   Clock3,
   FilePlus2,
   FileText,
   Gauge,
-  ShieldCheck,
-  TrendingUp,
-  UploadCloud,
-  UserCheck,
   Zap,
 } from "lucide-react";
 
@@ -21,7 +16,6 @@ import { listRcPoExpiry, type RcPoExpiryRow } from "../../planning/api/planningA
 import { useAuth } from "../../../shared/auth/AuthProvider";
 import {
   canCreateCase,
-  canManageImports,
   canManagePlanning,
   canReadCases,
   canReadReports,
@@ -116,13 +110,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const hasCreateAccess = canCreateCase(user);
   const hasPlanningAccess = canManagePlanning(user);
   const hasReportAccess = canReadReports(user);
-  const hasImportAccess = canManageImports(user);
   const summary = useQuery({ enabled: hasCaseAccess, queryFn: getCaseSummary, queryKey: ["case-summary"] });
-  const recentCases = useQuery({
-    enabled: hasCaseAccess,
-    queryFn: () => listCases({ limit: 6 }),
-    queryKey: ["dashboard-recent-cases"],
-  });
   const delayedCases = useQuery({
     enabled: hasCaseAccess,
     queryFn: () => listCases({ isDelayed: true, limit: 5, status: "running" }),
@@ -132,11 +120,6 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     enabled: hasCaseAccess,
     queryFn: () => listCases({ limit: 5, priorityCase: true, status: "running" }),
     queryKey: ["dashboard-priority-cases"],
-  });
-  const assignedCases = useQuery({
-    enabled: hasCaseAccess && Boolean(user?.id),
-    queryFn: () => listCases({ limit: 5, ownerUserId: user?.id as string, status: "running" }),
-    queryKey: ["dashboard-assigned-cases", user?.id],
   });
   const expiryRows = useQuery({
     enabled: hasCaseAccess && hasPlanningAccess,
@@ -275,140 +258,6 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           );
         })}
       </div>
-
-      <section className="state-panel dashboard-actions-panel dashboard-polished-panel">
-        <div className="dashboard-panel-heading">
-          <div>
-            <p className="eyebrow">Shortcuts</p>
-            <h2>Quick Actions</h2>
-          </div>
-          <ShieldCheck size={18} />
-        </div>
-        <div className="dashboard-quick-actions">
-          {hasCreateAccess ? (
-          <button className="dashboard-action-card" type="button" onClick={() => onNavigate?.("new-case")}>
-            <FilePlus2 size={16} />
-            <span>New Case</span>
-            <ArrowUpRight size={14} />
-          </button>
-          ) : null}
-          {hasCaseAccess ? (
-          <button className="dashboard-action-card" type="button" onClick={() => onNavigate?.("assigned-cases")}>
-            <UserCheck size={16} />
-            <span>Assigned To Me</span>
-            <ArrowUpRight size={14} />
-          </button>
-          ) : null}
-          {hasPlanningAccess ? (
-          <button className="dashboard-action-card" type="button" onClick={() => onNavigate?.("planning")}>
-            <Clock3 size={16} />
-            <span>Expiry Plan</span>
-            <ArrowUpRight size={14} />
-          </button>
-          ) : null}
-          {hasImportAccess ? (
-          <button className="dashboard-action-card" type="button" onClick={() => onNavigate?.("imports")}>
-            <UploadCloud size={16} />
-            <span>Import</span>
-            <ArrowUpRight size={14} />
-          </button>
-          ) : null}
-          {hasReportAccess ? (
-          <button className="dashboard-action-card" type="button" onClick={() => onNavigate?.("reports")}>
-            <TrendingUp size={16} />
-            <span>Reports</span>
-            <ArrowUpRight size={14} />
-          </button>
-          ) : null}
-        </div>
-      </section>
-
-      <section className="state-panel dashboard-risk-panel dashboard-polished-panel">
-        <div className="dashboard-panel-heading">
-          <div>
-            <p className="eyebrow">Executive signal</p>
-            <h2>Portfolio Health</h2>
-          </div>
-          <Gauge size={18} />
-        </div>
-        <div className="dashboard-risk-stack">
-          <div className="dashboard-risk-row">
-            <span>Completion rate</span>
-            <strong>{summary.isLoading ? "-" : `${completionRate}%`}</strong>
-          </div>
-          <div className="dashboard-risk-meter">
-            <i style={{ width: `${Math.min(completionRate, 100)}%` }} />
-          </div>
-          <div className="dashboard-risk-row">
-            <span>Delayed + priority</span>
-            <strong>{summary.isLoading ? "-" : riskCount}</strong>
-          </div>
-          <div className="dashboard-risk-row">
-            <span>Running workload</span>
-            <strong>{summary.isLoading ? "-" : metrics.running}</strong>
-          </div>
-          {hasReportAccess ? (
-          <Button variant="secondary" onClick={() => onNavigate?.("reports")}>
-            <BarChart3 size={16} />
-            Reports
-          </Button>
-          ) : null}
-        </div>
-      </section>
-
-      {hasCaseAccess ? (
-      <section className="state-panel dashboard-recent-panel">
-        <div className="detail-header">
-          <div>
-            <p className="eyebrow">Recent</p>
-            <h2>Recently Updated Cases</h2>
-          </div>
-          <Button size="sm" variant="secondary" onClick={() => onNavigate?.("assigned-cases")}>
-            View All
-          </Button>
-        </div>
-        {recentCases.isLoading ? (
-          <TableSkeleton rows={5} />
-        ) : recentCases.error ? (
-          <p className="inline-error">{recentCases.error.message}</p>
-        ) : (
-          <DataTable
-            columns={caseColumns}
-            emptyMessage="No recent cases found."
-            getRowKey={(row) => row.id}
-            rows={recentCases.data ?? []}
-          />
-        )}
-      </section>
-      ) : null}
-
-      {/* Assigned to me */}
-      {hasCaseAccess ? (
-      <section className="state-panel dashboard-assigned-panel">
-        <div className="detail-header">
-          <div>
-            <p className="eyebrow">My Work</p>
-            <h2>Assigned To Me</h2>
-          </div>
-          <Button size="sm" variant="secondary" onClick={() => onNavigate?.("assigned-cases")}>
-            <UserCheck size={15} />
-            View All
-          </Button>
-        </div>
-        {assignedCases.isLoading ? (
-          <TableSkeleton rows={4} />
-        ) : assignedCases.error ? (
-          <p className="inline-error">{assignedCases.error.message}</p>
-        ) : (
-          <DataTable
-            columns={caseColumns}
-            emptyMessage="No running cases assigned to you."
-            getRowKey={(row) => row.id}
-            rows={assignedCases.data ?? []}
-          />
-        )}
-      </section>
-      ) : null}
 
       {/* Delayed cases */}
       {hasCaseAccess ? (
