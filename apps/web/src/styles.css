@@ -3781,6 +3781,16 @@ textarea:focus:not(:focus-visible) {
   justify-content: flex-end;
 }
 
+.case-grid-actions {
+  flex-wrap: nowrap;
+  gap: var(--space-1);
+}
+
+.case-grid-actions .icon-button {
+  height: var(--btn-height-sm);
+  width: var(--btn-height-sm);
+}
+
 /* ============================================================
    PROGRESS CELL
    ============================================================ */

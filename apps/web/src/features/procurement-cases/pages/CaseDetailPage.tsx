@@ -33,10 +33,7 @@ import {
   canReadAudit,
   canUpdateCase,
 } from "../../../shared/auth/permissions";
-import {
-  formatCaseStage,
-  formatCaseStageTransition,
-} from "../../../shared/utils/caseStage";
+import { formatCaseStage } from "../../../shared/utils/caseStage";
 import {
   dateOnlyToLocalDate,
   formatDateOnly,
@@ -249,7 +246,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
 
         {kase.desiredStageCode != null && (
           <div className="case-page-topbar-stage">
-            <span className="case-topbar-stage-label">Target Stage</span>
+            <span className="case-topbar-stage-label">Normative Stage</span>
             <span className="case-topbar-stage-value">{formatCaseStage(kase.desiredStageCode)}</span>
           </div>
         )}
@@ -300,8 +297,14 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
           <div className="case-kpi-group-cards">
             <KpiCard
               icon={Layers}
-              label="Current → Target"
-              value={formatCaseStageTransition(kase.stageCode, kase.desiredStageCode)}
+              label="Current Stage"
+              value={formatCaseStage(kase.stageCode)}
+              tone="brand"
+            />
+            <KpiCard
+              icon={Layers}
+              label="Normative Stage"
+              value={formatCaseStage(kase.desiredStageCode)}
               tone="brand"
             />
             <KpiCard
@@ -423,7 +426,8 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
               title="Milestone Timeline"
               badge={
                 <span className="case-stage-badge">
-                  {formatCaseStageTransition(kase.stageCode, kase.desiredStageCode)}
+                  Current: {formatCaseStage(kase.stageCode)}
+                  {kase.desiredStageCode != null ? ` | Normative: ${formatCaseStage(kase.desiredStageCode)}` : ""}
                 </span>
               }
             >

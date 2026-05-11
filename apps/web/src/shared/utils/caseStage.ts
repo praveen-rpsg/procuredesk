@@ -1,13 +1,13 @@
 const caseStageNames: Record<number, string> = {
-  0: "PR Receipt",
-  1: "NIT Initiation",
-  2: "NIT Approval",
-  3: "NIT Publish",
-  4: "Bid Receipt",
-  5: "Technical / Commercial Evaluation",
-  6: "NFA Submission",
-  7: "NFA Approval / LOI Issued",
-  8: "RC/PO Award",
+  0: "PR under review by Buyer",
+  1: "NIT Approval Awaited",
+  2: "NIT Approved, Tender to be published",
+  3: "NIT published, Bids awaited",
+  4: "Bids under evaluation",
+  5: "Evaluation completed, in Negotiation stage",
+  6: "NFA Note under approval",
+  7: "NFA Note Approved, RC/PO to be issued",
+  8: "RC/PO issued",
 };
 
 export function formatCaseStage(stageCode: number | null | undefined): string {

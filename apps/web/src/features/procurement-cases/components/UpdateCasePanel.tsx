@@ -58,7 +58,7 @@ type DateMilestoneKey = Exclude<
 >;
 type MilestoneErrors = Partial<Record<keyof MilestoneFormState, string>>;
 type CaseFormErrors = Partial<
-  Record<"tenderName" | "tenderNo", string>
+  Record<"tenderName" | "tenderNo" | "tmRemarks", string>
 >;
 type FinancialFormErrors = Partial<
   Record<"approvedAmount" | "estimateBenchmark", string>
@@ -92,6 +92,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
   const [estimateBenchmark, setEstimateBenchmark] = useState("");
   const [tenderName, setTenderName] = useState("");
   const [tenderNo, setTenderNo] = useState("");
+  const [tmRemarks, setTmRemarks] = useState("");
   const [priorityCase, setPriorityCase] = useState(false);
   const [milestones, setMilestones] =
     useState<MilestoneFormState>(emptyMilestones);
@@ -128,6 +129,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
     setEstimateBenchmark(moneyString(kase.financials.estimateBenchmark));
     setTenderName(kase.tenderName ?? "");
     setTenderNo(kase.tenderNo ?? "");
+    setTmRemarks(kase.tmRemarks ?? "");
     setPriorityCase(kase.priorityCase);
     setOwnerUserId(kase.ownerUserId ?? "");
     setMilestones({
@@ -168,8 +170,9 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
       validateCaseForm({
         tenderName,
         tenderNo,
+        tmRemarks,
       }),
-    [tenderName, tenderNo],
+    [tenderName, tenderNo, tmRemarks],
   );
   const financialErrors = useMemo(
     () =>
@@ -210,12 +213,14 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
         priorityCase,
         tenderName,
         tenderNo,
+        tmRemarks,
       }),
     [
       detail.data,
       priorityCase,
       tenderName,
       tenderNo,
+      tmRemarks,
     ],
   );
   const financialChangedFields = useMemo(
@@ -253,6 +258,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
           priorityCase,
           tenderName: tenderName || null,
           tenderNo: tenderNo || null,
+          tmRemarks: tmRemarks || null,
         });
         await updateMilestones(targetCaseId, milestonePayload(milestones));
       }
@@ -376,6 +382,17 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
                 maxLength={200}
                 onChange={(event) => setTenderNo(event.target.value)}
                 value={tenderNo}
+              />
+            </FormField>
+            <FormField
+              error={visibleCaseErrors.tmRemarks ?? ""}
+              label="Tender Owner's Remarks"
+            >
+              <textarea
+                className="text-input text-area"
+                maxLength={5000}
+                onChange={(event) => setTmRemarks(event.target.value)}
+                value={tmRemarks}
               />
             </FormField>
             <label className="checkbox-row">
@@ -709,12 +726,15 @@ function buildCaseChangedFields(
     priorityCase: boolean;
     tenderName: string;
     tenderNo: string;
+    tmRemarks: string;
   },
 ) {
   if (!kase) return [];
   const fields: string[] = [];
   if (value.tenderName !== (kase.tenderName ?? "")) fields.push("Tender Name");
   if (value.tenderNo !== (kase.tenderNo ?? "")) fields.push("Tender No");
+  if (value.tmRemarks !== (kase.tmRemarks ?? ""))
+    fields.push("Tender Owner's Remarks");
   if (value.priorityCase !== kase.priorityCase) fields.push("Priority Case");
   return fields;
 }
@@ -805,6 +825,7 @@ const milestoneLabels: Record<DateMilestoneKey, string> = {
 function validateCaseForm(input: {
   tenderName: string;
   tenderNo: string;
+  tmRemarks: string;
 }): CaseFormErrors {
   const errors: CaseFormErrors = {};
   if (input.tenderName.length > 500) {
@@ -812,6 +833,9 @@ function validateCaseForm(input: {
   }
   if (input.tenderNo.length > 200) {
     errors.tenderNo = "Tender number cannot exceed 200 characters.";
+  }
+  if (input.tmRemarks.length > 5000) {
+    errors.tmRemarks = "Tender Owner's Remarks cannot exceed 5000 characters.";
   }
   return errors;
 }

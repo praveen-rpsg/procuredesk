@@ -43,6 +43,7 @@ import { ErrorState } from "../../../shared/ui/error-state/ErrorState";
 import { FilterDrawer } from "../../../shared/ui/filter-drawer/FilterDrawer";
 import { Checkbox } from "../../../shared/ui/form/Checkbox";
 import { FormField, TextInput } from "../../../shared/ui/form/FormField";
+import { IconButton } from "../../../shared/ui/icon-button/IconButton";
 import { Select } from "../../../shared/ui/form/Select";
 import { Modal } from "../../../shared/ui/modal/Modal";
 import { PageHeader } from "../../../shared/ui/page-header/PageHeader";
@@ -414,21 +415,30 @@ function CasesWorkspaceList() {
         key: "actions",
         header: "Actions",
         render: (row) => (
-          <span className="row-actions">
-            <Button variant="secondary" size="sm" onClick={() => setPreviewCaseId(row.id)}>
+          <span className="row-actions case-grid-actions">
+            <IconButton
+              aria-label={`Preview ${row.prId}`}
+              onClick={() => setPreviewCaseId(row.id)}
+              tooltip="Preview"
+            >
               <PanelRightOpen size={15} />
-              Preview
-            </Button>
+            </IconButton>
             {canPotentiallyUpdateCaseFromList(user, row) ? (
-            <Button variant="secondary" size="sm" onClick={() => setEditCaseId(row.id)}>
+            <IconButton
+              aria-label={`Edit ${row.prId}`}
+              onClick={() => setEditCaseId(row.id)}
+              tooltip="Edit"
+            >
               <Pencil size={15} />
-              Edit
-            </Button>
+            </IconButton>
             ) : null}
-            <Button variant="secondary" size="sm" onClick={() => navigateToAppPath(`/cases/${row.id}`)}>
+            <IconButton
+              aria-label={`Open ${row.prId}`}
+              onClick={() => navigateToAppPath(`/cases/${row.id}`)}
+              tooltip="Open"
+            >
               <ExternalLink size={15} />
-              Open
-            </Button>
+            </IconButton>
           </span>
         ),
       },
