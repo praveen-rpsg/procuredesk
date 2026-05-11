@@ -294,9 +294,9 @@ export function CatalogAdminPage() {
               select.
             </h2>
             <p>
-              System categories are protected because forms and reports depend
-              on them. Tenant categories can be added, renamed, disabled, or
-              removed when none of their values are mapped to tenders.
+              System categories cannot be renamed because forms and reports
+              depend on them. Any category can be removed when none of its
+              values are mapped to tenders.
             </p>
           </div>
           {canManage ? (
@@ -436,17 +436,17 @@ export function CatalogAdminPage() {
                       >
                         {category.isActive ? "Active" : "Inactive"}
                       </StatusBadge>
-                      {category.isSystemCategory ? (
-                        <LockKeyhole className="choice-list-lock" size={17} />
-                      ) : canManage ? (
+                      {canManage ? (
                         <div className="row-actions">
-                          <IconButton
-                            aria-label={`Edit ${category.name}`}
-                            onClick={() => openCategoryEdit(category)}
-                            tooltip="Edit category"
-                          >
-                            <Pencil size={17} />
-                          </IconButton>
+                          {!category.isSystemCategory ? (
+                            <IconButton
+                              aria-label={`Edit ${category.name}`}
+                              onClick={() => openCategoryEdit(category)}
+                              tooltip="Edit category"
+                            >
+                              <Pencil size={17} />
+                            </IconButton>
+                          ) : null}
                           <IconButton
                             aria-label={`Delete ${category.name}`}
                             disabled={!canDeleteCategory}
@@ -461,6 +461,8 @@ export function CatalogAdminPage() {
                             <Trash2 size={17} />
                           </IconButton>
                         </div>
+                      ) : category.isSystemCategory ? (
+                        <LockKeyhole className="choice-list-lock" size={17} />
                       ) : null}
                     </div>
                   </div>
@@ -479,14 +481,14 @@ export function CatalogAdminPage() {
                       <strong>{categoryUsageCount}</strong>
                       {pluralize(categoryUsageCount, "tender")} mapped
                     </span>
-                    {!category.isSystemCategory && canManage ? (
+                    {canManage ? (
                       <span
                         className={`choice-list-delete-note ${
                           canDeleteCategory ? "is-ready" : "is-blocked"
                         }`}
                       >
                         {canDeleteCategory
-                          ? "Delete removes unused values"
+                          ? "Delete available"
                           : "Tender usage blocks delete"}
                       </span>
                     ) : null}

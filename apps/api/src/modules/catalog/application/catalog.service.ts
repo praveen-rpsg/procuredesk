@@ -81,7 +81,6 @@ export class CatalogService {
   async deleteReferenceCategory(actor: AuthenticatedUser, categoryId: string) {
     const tenantId = this.requireTenant(actor);
     const usageCount = await this.catalog.countReferenceCategoryUsage({
-      tenantId,
       categoryId,
     });
     if (usageCount > 0) {
@@ -96,7 +95,7 @@ export class CatalogService {
     });
     if (!deleted) {
       throw new BadRequestException(
-        "Only tenant-created choice categories can be deleted. System categories are protected.",
+        "This choice category cannot be deleted. It may already be removed or outside your tenant.",
       );
     }
     await this.cache.invalidateTenant(tenantId);

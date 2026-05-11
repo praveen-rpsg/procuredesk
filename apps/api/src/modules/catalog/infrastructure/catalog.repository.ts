@@ -305,32 +305,30 @@ export class CatalogRepository {
 
   async countReferenceCategoryUsage(input: {
     categoryId: string;
-    tenantId: string;
   }): Promise<number> {
     const row = await this.db.one<QueryResultRow & { usage_count: number }>(
       `
         with reference_usage_raw as (
           select pr_receiving_medium_id as reference_value_id
           from procurement.cases
-          where tenant_id = $1 and pr_receiving_medium_id is not null
+          where pr_receiving_medium_id is not null
           union all
           select budget_type_id as reference_value_id
           from procurement.cases
-          where tenant_id = $1 and budget_type_id is not null
+          where budget_type_id is not null
           union all
           select nature_of_work_id as reference_value_id
           from procurement.cases
-          where tenant_id = $1 and nature_of_work_id is not null
+          where nature_of_work_id is not null
         )
         select count(*)::integer as usage_count
         from reference_usage_raw ru
         join catalog.reference_values rv
           on rv.id = ru.reference_value_id
-        where rv.tenant_id = $1
-          and rv.category_id = $2
+        where rv.category_id = $1
           and rv.deleted_at is null
       `,
-      [input.tenantId, input.categoryId],
+      [input.categoryId],
     );
     return row?.usage_count ?? 0;
   }
@@ -341,7 +339,9 @@ export class CatalogRepository {
     tenantId: string;
   }): Promise<boolean> {
     return this.db.transaction(async (client) => {
-      const result = await this.db.query(
+      const category = await this.db.one<
+        QueryResultRow & { tenant_id: string | null }
+      >(
         `
           update catalog.reference_categories
           set is_active = false,
@@ -350,15 +350,15 @@ export class CatalogRepository {
               updated_at = now(),
               updated_by = $3
           where id = $1
-            and tenant_id = $2
-            and is_system_category = false
+            and (tenant_id = $2 or tenant_id is null)
             and deleted_at is null
+          returning tenant_id
         `,
         [input.categoryId, input.tenantId, input.deletedBy],
         client,
       );
 
-      if ((result.rowCount ?? 0) === 0) {
+      if (!category) {
         return false;
       }
 
@@ -370,11 +370,16 @@ export class CatalogRepository {
               deleted_by = $3,
               updated_at = now(),
               updated_by = $3
-          where tenant_id = $1
-            and category_id = $2
+          where category_id = $2
             and deleted_at is null
+            and ($4::boolean or tenant_id = $1)
         `,
-        [input.tenantId, input.categoryId, input.deletedBy],
+        [
+          input.tenantId,
+          input.categoryId,
+          input.deletedBy,
+          category.tenant_id === null,
+        ],
         client,
       );
 
