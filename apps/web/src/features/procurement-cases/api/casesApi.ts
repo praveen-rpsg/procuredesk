@@ -121,19 +121,35 @@ function setCaseListSearchParams(
   setStringParam(search, "valueSlab", params.valueSlab);
 }
 
-function setArrayParam(search: URLSearchParams, key: string, value: string[] | undefined): void {
+function setArrayParam(
+  search: URLSearchParams,
+  key: string,
+  value: string[] | undefined,
+): void {
   if (value?.length) search.set(key, value.join(","));
 }
 
-function setBooleanParam(search: URLSearchParams, key: string, value: boolean | undefined): void {
+function setBooleanParam(
+  search: URLSearchParams,
+  key: string,
+  value: boolean | undefined,
+): void {
   if (typeof value === "boolean") search.set(key, String(value));
 }
 
-function setNumberParam(search: URLSearchParams, key: string, value: number | undefined): void {
+function setNumberParam(
+  search: URLSearchParams,
+  key: string,
+  value: number | undefined,
+): void {
   if (value != null) search.set(key, String(value));
 }
 
-function setStringParam(search: URLSearchParams, key: string, value: string | undefined): void {
+function setStringParam(
+  search: URLSearchParams,
+  key: string,
+  value: string | undefined,
+): void {
   if (value) search.set(key, value);
 }
 
@@ -148,8 +164,6 @@ export function createCase(payload: {
   prDescription?: string | null;
   prId: string;
   prReceiptDate?: string | null;
-  prReceivingMediumId?: string | null | undefined;
-  prRemarks?: string | null | undefined;
   priorityCase?: boolean;
   tenderTypeId?: string | null | undefined;
   tentativeCompletionDate?: string | null;
@@ -175,7 +189,9 @@ export function listDeletedCases(params: {
   if (params.limit) search.set("limit", String(params.limit));
   if (params.q) search.set("q", params.q);
   if (params.status) search.set("status", params.status);
-  return apiRequest<DeletedCaseListItem[]>(`/admin/cases/deleted?${search.toString()}`);
+  return apiRequest<DeletedCaseListItem[]>(
+    `/admin/cases/deleted?${search.toString()}`,
+  );
 }
 
 export function deleteCase(caseId: string, deleteReason?: string | null) {
@@ -205,7 +221,10 @@ export function assignCaseOwner(caseId: string, ownerUserId: string) {
   });
 }
 
-export function updateMilestones(caseId: string, payload: Record<string, unknown>) {
+export function updateMilestones(
+  caseId: string,
+  payload: Record<string, unknown>,
+) {
   return apiRequest(`/cases/${caseId}/milestones`, {
     body: JSON.stringify(payload),
     method: "PATCH",

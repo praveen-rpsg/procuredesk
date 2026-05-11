@@ -29,8 +29,6 @@ type CreateCaseFormValues = {
   prDescription: string;
   prId: string;
   prReceiptDate: string;
-  prReceivingMediumId: string;
-  prRemarks: string;
   prValue: string;
   priorityCase: boolean;
   tenderTypeId: string;
@@ -47,7 +45,6 @@ type ParsedCreateCaseForm = {
 const categoryOptions = {
   budgetType: "budget_type",
   natureOfWork: "nature_of_work",
-  prReceivingMedium: "pr_receiving_medium",
 };
 
 const createCaseFormSchema = {
@@ -63,7 +60,6 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
   const [departmentId, setDepartmentId] = useState("");
   const [ownerUserId, setOwnerUserId] = useState("");
   const [tenderTypeId, setTenderTypeId] = useState("");
-  const [prReceivingMediumId, setPrReceivingMediumId] = useState("");
   const [budgetTypeId, setBudgetTypeId] = useState("");
   const [natureOfWorkId, setNatureOfWorkId] = useState("");
   const [cpcInvolved, setCpcInvolved] = useState("");
@@ -73,11 +69,13 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
   const [prReceiptDate, setPrReceiptDate] = useState("");
   const [tentativeCompletionDate, setTentativeCompletionDate] = useState("");
   const [prValue, setPrValue] = useState("");
-  const [prRemarks, setPrRemarks] = useState("");
   const [formErrors, setFormErrors] = useState<CreateCaseFormErrors>({});
 
   const entities = useQuery({ queryFn: listEntities, queryKey: ["entities"] });
-  const catalog = useQuery({ queryFn: getCatalogSnapshot, queryKey: ["catalog-snapshot"] });
+  const catalog = useQuery({
+    queryFn: getCatalogSnapshot,
+    queryKey: ["catalog-snapshot"],
+  });
   const departments = useQuery({
     enabled: Boolean(entityId),
     queryFn: () => listAdminDepartments(entityId),
@@ -90,26 +88,36 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
   });
 
   const selectedTenderType = useMemo(
-    () => catalog.data?.tenderTypes.find((tenderType) => tenderType.id === tenderTypeId) ?? null,
+    () =>
+      catalog.data?.tenderTypes.find(
+        (tenderType) => tenderType.id === tenderTypeId,
+      ) ?? null,
     [catalog.data?.tenderTypes, tenderTypeId],
   );
 
   const referenceValues = catalog.data?.referenceValues ?? [];
-  const prReceivingMedia = referenceValues.filter(
-    (value) => value.categoryCode === categoryOptions.prReceivingMedium && value.isActive,
-  );
   const budgetTypes = referenceValues.filter(
-    (value) => value.categoryCode === categoryOptions.budgetType && value.isActive,
+    (value) =>
+      value.categoryCode === categoryOptions.budgetType && value.isActive,
   );
   const natureOfWork = referenceValues.filter(
-    (value) => value.categoryCode === categoryOptions.natureOfWork && value.isActive,
+    (value) =>
+      value.categoryCode === categoryOptions.natureOfWork && value.isActive,
   );
-  const activeTenderTypes = (catalog.data?.tenderTypes ?? []).filter((tenderType) => tenderType.isActive);
+  const activeTenderTypes = (catalog.data?.tenderTypes ?? []).filter(
+    (tenderType) => tenderType.isActive,
+  );
   useEffect(() => {
-    if (!prReceiptDate || selectedTenderType?.completionDays === null || selectedTenderType?.completionDays === undefined) {
+    if (
+      !prReceiptDate ||
+      selectedTenderType?.completionDays === null ||
+      selectedTenderType?.completionDays === undefined
+    ) {
       return;
     }
-    setTentativeCompletionDate(addDaysToDateString(prReceiptDate, selectedTenderType.completionDays));
+    setTentativeCompletionDate(
+      addDaysToDateString(prReceiptDate, selectedTenderType.completionDays),
+    );
   }, [prReceiptDate, selectedTenderType?.completionDays]);
 
   const mutation = useMutation({
@@ -117,9 +125,15 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
     onSuccess: async (result) => {
       await queryClient.invalidateQueries({ queryKey: ["cases"] });
       await queryClient.invalidateQueries({ queryKey: ["case-summary"] });
-      await queryClient.invalidateQueries({ queryKey: ["dashboard-recent-cases"] });
-      await queryClient.invalidateQueries({ queryKey: ["dashboard-assigned-cases"] });
-      await queryClient.invalidateQueries({ queryKey: ["dashboard-priority-cases"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["dashboard-recent-cases"],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["dashboard-assigned-cases"],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["dashboard-priority-cases"],
+      });
       toast.notify({ message: "Case created.", tone: "success" });
       onCreated(result.id);
     },
@@ -137,8 +151,6 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
       prDescription,
       prId,
       prReceiptDate,
-      prReceivingMediumId,
-      prRemarks,
       prValue,
       priorityCase,
       tenderTypeId,
@@ -158,8 +170,6 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
       prDescription: prDescription || null,
       prId,
       prReceiptDate: prReceiptDate || null,
-      prReceivingMediumId: prReceivingMediumId || null,
-      prRemarks: prRemarks || null,
       priorityCase,
       tenderTypeId: tenderTypeId || null,
       tentativeCompletionDate: tentativeCompletionDate || null,
@@ -241,36 +251,47 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
         <p className="eyebrow">PR</p>
         <div className="two-column">
           <FormField error={formErrors.prId ?? ""} label="PR ID">
-            <TextInput maxLength={100} onChange={(event) => setPrId(event.target.value)} required value={prId} />
+            <TextInput
+              maxLength={100}
+              onChange={(event) => setPrId(event.target.value)}
+              required
+              value={prId}
+            />
           </FormField>
-          <FormField error={formErrors.prReceiptDate ?? ""} label="PR Receipt Date">
-            <TextInput onChange={(event) => setPrReceiptDate(event.target.value)} type="date" value={prReceiptDate} />
+          <FormField
+            error={formErrors.prReceiptDate ?? ""}
+            label="PR Receipt Date"
+          >
+            <TextInput
+              onChange={(event) => setPrReceiptDate(event.target.value)}
+              type="date"
+              value={prReceiptDate}
+            />
           </FormField>
-          <FormField label="PR Receiving Medium">
-            <select
-              className="text-input"
-              onChange={(event) => setPrReceivingMediumId(event.target.value)}
-              value={prReceivingMediumId}
-            >
-              <option value="">Select Medium</option>
-              {prReceivingMedia.map((value) => (
-                <option key={value.id} value={value.id}>
-                  {value.label}
-                </option>
-              ))}
-            </select>
-          </FormField>
-          <FormField error={formErrors.prValue ?? ""} helperText="INR amount, commas added automatically." label="PR Value">
+          <FormField
+            error={formErrors.prValue ?? ""}
+            helperText="INR amount, commas added automatically."
+            label="PR Value"
+          >
             <TextInput
               inputMode="decimal"
-              onChange={(event) => setPrValue(formatCurrencyInput(event.target.value))}
+              onChange={(event) =>
+                setPrValue(formatCurrencyInput(event.target.value))
+              }
               placeholder="0.00"
               value={prValue}
             />
           </FormField>
         </div>
-        <FormField error={formErrors.prDescription ?? ""} label="PR Description">
-          <TextArea maxLength={5000} onChange={(event) => setPrDescription(event.target.value)} value={prDescription} />
+        <FormField
+          error={formErrors.prDescription ?? ""}
+          label="PR Description"
+        >
+          <TextArea
+            maxLength={5000}
+            onChange={(event) => setPrDescription(event.target.value)}
+            value={prDescription}
+          />
         </FormField>
       </div>
 
@@ -297,7 +318,11 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
                 label: tenderType.name,
                 value: tenderType.id,
               }))}
-              placeholder={activeTenderTypes.length === 0 ? "No active tender types" : "Pick a Tender Type"}
+              placeholder={
+                activeTenderTypes.length === 0
+                  ? "No active tender types"
+                  : "Pick a Tender Type"
+              }
               searchPlaceholder="Search tender type..."
               value={tenderTypeId}
             />
@@ -308,13 +333,19 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
             label="Tentative Completion Date"
           >
             <TextInput
-              onChange={(event) => setTentativeCompletionDate(event.target.value)}
+              onChange={(event) =>
+                setTentativeCompletionDate(event.target.value)
+              }
               type="date"
               value={tentativeCompletionDate}
             />
           </FormField>
           <FormField label="Budget Type">
-            <select className="text-input" onChange={(event) => setBudgetTypeId(event.target.value)} value={budgetTypeId}>
+            <select
+              className="text-input"
+              onChange={(event) => setBudgetTypeId(event.target.value)}
+              value={budgetTypeId}
+            >
               <option value="">Select Budget Type</option>
               {budgetTypes.map((value) => (
                 <option key={value.id} value={value.id}>
@@ -338,24 +369,30 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
             </select>
           </FormField>
           <FormField label="CPC">
-            <select className="text-input" onChange={(event) => setCpcInvolved(event.target.value)} value={cpcInvolved}>
+            <select
+              className="text-input"
+              onChange={(event) => setCpcInvolved(event.target.value)}
+              value={cpcInvolved}
+            >
               <option value="">Not Set</option>
               <option value="true">Yes</option>
               <option value="false">No</option>
             </select>
           </FormField>
           <label className="checkbox-row">
-            <input checked={priorityCase} onChange={(event) => setPriorityCase(event.target.checked)} type="checkbox" />
+            <input
+              checked={priorityCase}
+              onChange={(event) => setPriorityCase(event.target.checked)}
+              type="checkbox"
+            />
             Priority Case
           </label>
         </div>
       </div>
 
-      <FormField error={formErrors.prRemarks ?? ""} label="Remarks">
-        <TextArea maxLength={5000} onChange={(event) => setPrRemarks(event.target.value)} value={prRemarks} />
-      </FormField>
-
-      {mutation.error ? <div className="form-error">{mutation.error.message}</div> : null}
+      {mutation.error ? (
+        <div className="form-error">{mutation.error.message}</div>
+      ) : null}
       <div className="sticky-form-footer">
         <Button disabled={mutation.isPending} type="submit">
           {mutation.isPending ? "Creating..." : "Create Case"}
@@ -365,7 +402,9 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
   );
 }
 
-function validateCreateCaseForm(values: CreateCaseFormValues): ParsedCreateCaseForm {
+function validateCreateCaseForm(
+  values: CreateCaseFormValues,
+): ParsedCreateCaseForm {
   const errors: CreateCaseFormErrors = {};
   const prValue = parseCurrencyAmount(values.prValue);
 
@@ -380,7 +419,10 @@ function validateCreateCaseForm(values: CreateCaseFormValues): ParsedCreateCaseF
   if (values.prReceiptDate && !isDateString(values.prReceiptDate)) {
     errors.prReceiptDate = "Use a valid PR receipt date.";
   }
-  if (values.tentativeCompletionDate && !isDateString(values.tentativeCompletionDate)) {
+  if (
+    values.tentativeCompletionDate &&
+    !isDateString(values.tentativeCompletionDate)
+  ) {
     errors.tentativeCompletionDate = "Use a valid completion date.";
   }
   if (
@@ -388,13 +430,11 @@ function validateCreateCaseForm(values: CreateCaseFormValues): ParsedCreateCaseF
     values.tentativeCompletionDate &&
     values.tentativeCompletionDate < values.prReceiptDate
   ) {
-    errors.tentativeCompletionDate = "Completion date cannot be before PR receipt date.";
+    errors.tentativeCompletionDate =
+      "Completion date cannot be before PR receipt date.";
   }
   if (values.prDescription.length > createCaseFormSchema.maxTextLength) {
     errors.prDescription = `Description must be ${createCaseFormSchema.maxTextLength} characters or less.`;
-  }
-  if (values.prRemarks.length > createCaseFormSchema.maxTextLength) {
-    errors.prRemarks = `Remarks must be ${createCaseFormSchema.maxTextLength} characters or less.`;
   }
   if (values.prValue && prValue == null) {
     errors.prValue = "Enter a valid non-negative INR amount.";
@@ -406,7 +446,10 @@ function validateCreateCaseForm(values: CreateCaseFormValues): ParsedCreateCaseF
 }
 
 function isDateString(value: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T00:00:00`).getTime());
+  return (
+    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    !Number.isNaN(new Date(`${value}T00:00:00`).getTime())
+  );
 }
 
 function addDaysToDateString(dateString: string, days: number) {
