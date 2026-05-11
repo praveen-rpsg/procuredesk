@@ -6,6 +6,7 @@ import { listAuditEvents } from "../../operations/api/operationsApi";
 import { deleteCase, getCase, type CaseDetail } from "../api/casesApi";
 import { useAuth } from "../../../shared/auth/AuthProvider";
 import { canDeleteCase, canReadAudit, canUpdateCase } from "../../../shared/auth/permissions";
+import { formatCaseStageTransition } from "../../../shared/utils/caseStage";
 import { formatDateOnly, toDateOnlyInputValue } from "../../../shared/utils/dateOnly";
 import { ActivityFeed } from "../../../shared/ui/activity-feed/ActivityFeed";
 import { Button } from "../../../shared/ui/button/Button";
@@ -128,7 +129,7 @@ export function CaseDetailPanel({ caseId, onDeleted, onEdit }: CaseDetailPanelPr
 
       <dl className="detail-grid case-preview-metrics">
         <Metric label="Case ID" value={kase.prId} />
-        <Metric label="Stage" value={`${kase.stageCode}${kase.desiredStageCode == null ? "" : ` / ${kase.desiredStageCode}`}`} />
+        <Metric label="Stage" value={formatCaseStageTransition(kase.stageCode, kase.desiredStageCode)} />
         <Metric label="PR Receipt" value={formatDate(kase.prReceiptDate)} />
         <Metric label="Target" value={formatDate(kase.tentativeCompletionDate)} />
         <Metric label="PR Value" value={formatMoney(kase.financials.prValue)} />

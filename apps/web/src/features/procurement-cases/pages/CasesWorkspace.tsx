@@ -35,6 +35,7 @@ import { useAuth } from "../../../shared/auth/AuthProvider";
 import { canCreateCase, canPotentiallyUpdateCaseFromList, canRestoreCase } from "../../../shared/auth/permissions";
 import { useDebouncedValue } from "../../../shared/hooks/useDebouncedValue";
 import { navigateToAppPath, useAppLocation } from "../../../shared/routing/appLocation";
+import { formatCaseStage } from "../../../shared/utils/caseStage";
 import { todayDateOnlyString, toDateOnlyInputValue } from "../../../shared/utils/dateOnly";
 import { Button } from "../../../shared/ui/button/Button";
 import { Drawer } from "../../../shared/ui/drawer/Drawer";
@@ -394,7 +395,7 @@ function CasesWorkspaceList() {
         header: "Status",
         render: (row) => <StatusBadge tone={row.status === "completed" ? "success" : "warning"}>{row.status}</StatusBadge>,
       },
-      { key: "stage", header: "Stage", render: (row) => `Stage ${row.stageCode}` },
+      { key: "stage", header: "Stage", render: (row) => formatCaseStage(row.stageCode) },
       {
         key: "flags",
         header: "Flags",
@@ -1019,7 +1020,7 @@ const caseExportValueByKey: Record<CaseColumnKey, (row: CaseListItem) => string>
   flags: (row) => caseExportFlags(row).join(" | "),
   prId: (row) => row.prId,
   select: () => "",
-  stage: (row) => `Stage ${row.stageCode}`,
+  stage: (row) => formatCaseStage(row.stageCode),
   status: (row) => row.status,
   updated: (row) => new Date(row.updatedAt).toLocaleDateString(),
 };

@@ -34,6 +34,10 @@ import {
   canUpdateCase,
 } from "../../../shared/auth/permissions";
 import {
+  formatCaseStage,
+  formatCaseStageTransition,
+} from "../../../shared/utils/caseStage";
+import {
   dateOnlyToLocalDate,
   formatDateOnly,
   parseDateOnlyParts,
@@ -246,7 +250,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
         {kase.desiredStageCode != null && (
           <div className="case-page-topbar-stage">
             <span className="case-topbar-stage-label">Target Stage</span>
-            <span className="case-topbar-stage-value">{kase.desiredStageCode}</span>
+            <span className="case-topbar-stage-value">{formatCaseStage(kase.desiredStageCode)}</span>
           </div>
         )}
 
@@ -297,11 +301,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
             <KpiCard
               icon={Layers}
               label="Current → Target"
-              value={
-                kase.desiredStageCode != null
-                  ? `${kase.stageCode} → ${kase.desiredStageCode}`
-                  : String(kase.stageCode)
-              }
+              value={formatCaseStageTransition(kase.stageCode, kase.desiredStageCode)}
               tone="brand"
             />
             <KpiCard
@@ -423,8 +423,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
               title="Milestone Timeline"
               badge={
                 <span className="case-stage-badge">
-                  Stage {kase.stageCode}
-                  {kase.desiredStageCode != null ? ` → ${kase.desiredStageCode}` : ""}
+                  {formatCaseStageTransition(kase.stageCode, kase.desiredStageCode)}
                 </span>
               }
             >

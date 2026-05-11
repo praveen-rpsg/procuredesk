@@ -23,6 +23,7 @@ import {
   canReadReports,
 } from "../../../shared/auth/permissions";
 import { formatDateOnly, todayDateOnlyString, toDateOnlyInputValue } from "../../../shared/utils/dateOnly";
+import { formatCaseStage } from "../../../shared/utils/caseStage";
 import { Button } from "../../../shared/ui/button/Button";
 import { ErrorState } from "../../../shared/ui/error-state/ErrorState";
 import { Checkbox } from "../../../shared/ui/form/Checkbox";
@@ -39,7 +40,7 @@ type DashboardPageProps = {
 const caseColumns: DataTableColumn<CaseListItem>[] = [
   { key: "pr", header: "Case ID", render: (row) => row.prId },
   { key: "description", header: "Description", render: (row) => row.prDescription ?? row.tenderName ?? "-" },
-  { key: "stage", header: "Stage", render: (row) => row.stageCode },
+  { key: "stage", header: "Stage", render: (row) => formatCaseStage(row.stageCode) },
   {
     key: "flags",
     header: "Flags",

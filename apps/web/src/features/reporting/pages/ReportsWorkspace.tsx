@@ -44,6 +44,7 @@ import {
 } from "../utils/reportUtils";
 import { useAuth } from "../../../shared/auth/AuthProvider";
 import { canExportReports } from "../../../shared/auth/permissions";
+import { formatCaseStage } from "../../../shared/utils/caseStage";
 import { Button } from "../../../shared/ui/button/Button";
 import { navigateToAppPath, useAppLocation } from "../../../shared/routing/appLocation";
 import { Drawer } from "../../../shared/ui/drawer/Drawer";
@@ -142,7 +143,7 @@ export function ReportsWorkspace() {
   );
   const stageOptions = useMemo(
     () =>
-      (data.filterMetadata.data?.stages ?? []).map((stage) => ({ label: `Stage ${stage}`, value: String(stage) })),
+      (data.filterMetadata.data?.stages ?? []).map((stage) => ({ label: formatCaseStage(stage), value: String(stage) })),
     [data.filterMetadata.data?.stages],
   );
   const completionFyOptions = useMemo(
@@ -182,7 +183,7 @@ export function ReportsWorkspace() {
           <StatusBadge tone={row.status === "completed" ? "success" : "warning"}>{row.status}</StatusBadge>
         ),
       },
-      { key: "stage", header: "Stage", render: (row) => `Stage ${row.stageCode}` },
+      { key: "stage", header: "Stage", render: (row) => formatCaseStage(row.stageCode) },
       {
         key: "award",
         header: "Awarded",
@@ -204,7 +205,7 @@ export function ReportsWorkspace() {
   );
   const stageColumns = useMemo<VirtualTableColumn<StageTimeRow>[]>(
     () => [
-      { key: "stage", header: "Stage", render: (row) => `Stage ${row.stageCode}` },
+      { key: "stage", header: "Stage", render: (row) => formatCaseStage(row.stageCode) },
       { key: "count", header: "Cases", render: (row) => row.caseCount },
       {
         key: "age",
@@ -700,7 +701,7 @@ function ReportAnalyticsDashboard({
     value: row.caseCount,
   }));
   const stageChartRows = (stageRows ?? []).map((row) => ({
-    label: `Stage ${row.stageCode}`,
+    label: formatCaseStage(row.stageCode),
     value: row.caseCount,
   }));
   const completedRatio = metrics?.totalCases ? Math.round(((metrics.completedCases ?? 0) / metrics.totalCases) * 100) : 0;
@@ -914,7 +915,7 @@ function ReportAnalyticsPanel({
         ) : (
           <ReportBarChart
             rows={(stageRows ?? []).map((row) => ({
-              label: `Stage ${row.stageCode}`,
+              label: formatCaseStage(row.stageCode),
               value: row.caseCount,
             }))}
           />
