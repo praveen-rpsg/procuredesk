@@ -217,12 +217,12 @@ export class CaseAwardRepository {
         update procurement.case_financials f
         set total_awarded_amount = $3,
             savings_wrt_pr = case
-              when f.pr_value is null then null
-              else f.pr_value - $3::numeric
+              when f.pr_value is null or f.approved_amount is null then null
+              else f.pr_value - f.approved_amount
             end,
             savings_wrt_estimate = case
-              when f.estimate_benchmark is null then null
-              else f.estimate_benchmark - $3::numeric
+              when f.estimate_benchmark is null or f.approved_amount is null then null
+              else f.estimate_benchmark - f.approved_amount
             end,
             updated_at = now()
         where f.tenant_id = $1
@@ -344,8 +344,14 @@ export class CaseAwardRepository {
           f.estimate_benchmark,
           f.approved_amount,
           f.total_awarded_amount,
-          f.savings_wrt_pr,
-          f.savings_wrt_estimate,
+          case
+            when f.pr_value is null or f.approved_amount is null then null
+            else f.pr_value - f.approved_amount
+          end,
+          case
+            when f.estimate_benchmark is null or f.approved_amount is null then null
+            else f.estimate_benchmark - f.approved_amount
+          end,
           now()
         from procurement.cases c
         left join procurement.case_financials f on f.case_id = c.id

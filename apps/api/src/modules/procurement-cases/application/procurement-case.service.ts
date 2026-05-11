@@ -55,6 +55,7 @@ export type UpdateCaseCommand = {
   priorityCase?: boolean;
   tenderName?: string | null;
   tenderNo?: string | null;
+  tentativeCompletionDate?: string | null;
   tmRemarks?: string | null;
 };
 
@@ -191,11 +192,16 @@ export class ProcurementCaseService {
   async updateCase(actor: AuthenticatedUser, caseId: string, command: UpdateCaseCommand) {
     const tenantId = this.requireTenant(actor);
     await this.assertCanUpdate(actor, caseId);
+    const kase = command.tentativeCompletionDate !== undefined ? await this.getCase(actor, caseId) : null;
+    const targetUpdate = kase
+      ? this.buildTentativeCompletionUpdate(actor, kase, command.tentativeCompletionDate ?? null)
+      : {};
     await this.db.transaction(async () => {
       await this.repository.updateCase({
         caseId,
         tenantId,
         updatedBy: actor.id,
+        ...targetUpdate,
         ...command,
       });
       await this.audit.write({
@@ -216,6 +222,7 @@ export class ProcurementCaseService {
   async assignOwner(actor: AuthenticatedUser, caseId: string, ownerUserId: string) {
     const tenantId = this.requireTenant(actor);
     const kase = await this.getCase(actor, caseId);
+    this.assertCanUpdateEntityManagedFields(actor, kase.entityId);
     await this.assertOwnerAssignmentAllowed(actor, kase.entityId, ownerUserId);
     await this.db.transaction(async () => {
       await this.repository.updateAssignment({
@@ -245,6 +252,7 @@ export class ProcurementCaseService {
     await this.assertCanUpdate(actor, caseId);
     const kase = await this.getCase(actor, caseId);
     const chronologyErrors = new CaseChronologyPolicy().validate({
+      estimateBenchmark: kase.financials.estimateBenchmark ?? null,
       milestones,
       prReceiptDate: kase.prReceiptDate,
     });
@@ -423,6 +431,35 @@ export class ProcurementCaseService {
       return;
     }
     throw new ForbiddenException("Case update denied.");
+  }
+
+  private buildTentativeCompletionUpdate(
+    actor: AuthenticatedUser,
+    kase: Awaited<ReturnType<ProcurementCaseService["getCase"]>>,
+    tentativeCompletionDate: string | null,
+  ) {
+    this.assertCanUpdateEntityManagedFields(actor, kase.entityId);
+    const stagePolicy = new CaseStagePolicy();
+    const desiredStageCode = stagePolicy.deriveDesiredStageCode({
+      prReceiptDate: kase.prReceiptDate,
+      status: kase.status,
+      tentativeCompletionDate,
+    });
+    return {
+      desiredStageCode,
+      isDelayed: stagePolicy.isDelayed(kase.stageCode, desiredStageCode),
+      tentativeCompletionDate,
+    };
+  }
+
+  private assertCanUpdateEntityManagedFields(actor: AuthenticatedUser, entityId: string) {
+    if (actor.isPlatformSuperAdmin || actor.permissions.includes("case.update.all")) return;
+    if (actor.permissions.includes("case.update.entity") && actor.entityIds.includes(entityId)) {
+      return;
+    }
+    throw new ForbiddenException(
+      "Only entity-level users for this entity can update Tender Owner or Tentative Completion Date.",
+    );
   }
 
   private async assertOwnerAssignmentAllowed(

@@ -33,7 +33,7 @@ const tenderColumns: VirtualTableColumn<TenderPlanCase>[] = [
   { key: "description", header: "Tender", render: (row) => row.tenderDescription ?? "-" },
   {
     key: "value",
-    header: "Value",
+    header: "Value [All Inclusive]",
     render: (row) => (row.valueRs == null ? "-" : row.valueRs.toLocaleString()),
   },
   { key: "planned", header: "Planned", render: (row) => formatDateOnly(row.plannedDate) },
@@ -376,7 +376,7 @@ export function PlanningWorkspace() {
                   onChange={(event) => setSelectedDepartmentId(event.target.value)}
                   value={selectedDepartmentId}
                 >
-                  <option value="">All Departments</option>
+                  <option value="">All</option>
                   {(formDepartments.data ?? [])
                     .filter((department) => department.isActive)
                     .map((department) => (
@@ -461,7 +461,7 @@ export function PlanningWorkspace() {
                   onChange={(event) => setSelectedDepartmentId(event.target.value)}
                   value={selectedDepartmentId}
                 >
-                  <option value="">All Departments</option>
+                  <option value="">All</option>
                   {(formDepartments.data ?? [])
                     .filter((department) => department.isActive)
                     .map((department) => (
@@ -478,7 +478,7 @@ export function PlanningWorkspace() {
                 <TextInput onChange={(event) => setAwardedVendors(event.target.value)} value={awardedVendors} />
               </FormField>
               <div className="two-column">
-                <FormField label="RC/PO Amount">
+                <FormField label="RC/PO Amount (Rs.) [All Inclusive]">
                   <TextInput
                     min="0"
                     onChange={(event) => setRcAmount(event.target.value)}
@@ -560,7 +560,7 @@ export function PlanningWorkspace() {
                   }}
                   value={filterEntityId}
                 >
-                  <option value="">All Entities</option>
+                  <option value="">All</option>
                   {activeEntities.map((entity) => (
                     <option key={entity.id} value={entity.id}>
                       {entity.code} - {entity.name}
@@ -575,7 +575,7 @@ export function PlanningWorkspace() {
                   onChange={(event) => setFilterDepartmentId(event.target.value)}
                   value={filterDepartmentId}
                 >
-                  <option value="">All Departments</option>
+                  <option value="">All</option>
                   {(filterDepartments.data ?? [])
                     .filter((department) => department.isActive)
                     .map((department) => (
@@ -605,7 +605,7 @@ export function PlanningWorkspace() {
                   <option value="90">Next 90 days</option>
                   <option value="180">Next 180 days</option>
                   <option value="365">Next 12 months</option>
-                  <option value="">All expiry dates</option>
+                  <option value="">All</option>
                 </select>
               </FormField>
               <div className="planning-filter-toggle">

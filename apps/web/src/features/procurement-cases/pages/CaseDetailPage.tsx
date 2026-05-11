@@ -328,19 +328,25 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
           <div className="case-kpi-group-cards">
             <KpiCard
               icon={DollarSign}
-              label="PR Value"
+              label="PR Value / Approved Budget [All Inclusive]"
               value={formatMoney(kase.financials.prValue)}
               tone="neutral"
             />
             <KpiCard
               icon={TrendingUp}
-              label="Savings vs PR"
+              label={`Savings wrt PR Value/Approved Budget (Rs) ${formatSavingsPctBracket(
+                kase.financials.savingsWrtPr,
+                kase.financials.prValue,
+              )}`}
               value={formatMoney(kase.financials.savingsWrtPr)}
               tone={savingsTone(kase.financials.savingsWrtPr)}
             />
             <KpiCard
               icon={PiggyBank}
-              label="Savings vs Estimate"
+              label={`Savings wrt Estimate/Benchmark (Rs) ${formatSavingsPctBracket(
+                kase.financials.savingsWrtEstimate,
+                kase.financials.estimateBenchmark,
+              )}`}
               value={formatMoney(kase.financials.savingsWrtEstimate)}
               tone={savingsTone(kase.financials.savingsWrtEstimate)}
             />
@@ -383,20 +389,25 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
 
             <SectionCard title="Financial Summary">
               <div className="case-financials-grid">
-                <FinancialCell label="PR Value" value={formatMoney(kase.financials.prValue)} sub="Requested budget" />
-                <FinancialCell label="Estimate / Benchmark" value={formatMoney(kase.financials.estimateBenchmark)} sub="Internal estimate" />
-                <FinancialCell label="Approved Amount" value={formatMoney(kase.financials.approvedAmount)} sub="NFA approved" />
-                <FinancialCell label="Total Awarded" value={formatMoney(kase.financials.totalAwardedAmount)} sub="RC/PO value" />
+                <FinancialCell label="PR Value / Approved Budget (Rs.) [All Inclusive]" value={formatMoney(kase.financials.prValue)} sub="Requested budget" />
+                <FinancialCell label="Estimate / Benchmark (Rs.) [All Inclusive]" value={formatMoney(kase.financials.estimateBenchmark)} sub="Internal estimate" />
+                <FinancialCell label="NFA Approved Amount (Rs.) [All Inclusive]" value={formatMoney(kase.financials.approvedAmount)} sub="NFA approved" />
+                <FinancialCell label="Total Awarded (Rs.) [All Inclusive]" value={formatMoney(kase.financials.totalAwardedAmount)} sub="RC/PO value" />
                 <FinancialCell
-                  label="Savings vs PR"
+                  label="Savings wrt PR Value/Approved Budget (Rs)"
+                  percent={formatSavingsPctBracket(kase.financials.savingsWrtPr, kase.financials.prValue)}
                   value={formatMoney(kase.financials.savingsWrtPr)}
-                  sub={formatSavingsPct(kase.financials.savingsWrtPr, kase.financials.prValue)}
+                  sub="PR Value / Approved Budget - NFA Approved Amount"
                   tone={savingsTone(kase.financials.savingsWrtPr)}
                 />
                 <FinancialCell
-                  label="Savings vs Estimate"
+                  label="Savings wrt Estimate/Benchmark (Rs)"
+                  percent={formatSavingsPctBracket(
+                    kase.financials.savingsWrtEstimate,
+                    kase.financials.estimateBenchmark,
+                  )}
                   value={formatMoney(kase.financials.savingsWrtEstimate)}
-                  sub={formatSavingsPct(kase.financials.savingsWrtEstimate, kase.financials.estimateBenchmark)}
+                  sub="Estimate / Benchmark - NFA Approved Amount"
                   tone={savingsTone(kase.financials.savingsWrtEstimate)}
                 />
               </div>
@@ -598,20 +609,25 @@ function KpiCard({
 
 function FinancialCell({
   label,
+  percent,
   sub,
   tone,
   value,
 }: {
   label: string;
+  percent?: string;
   sub?: string;
   tone?: KpiTone;
   value: string;
 }) {
   return (
     <div className={`case-financial-cell${tone ? ` case-financial-cell-${tone}` : ""}`}>
-      <dt>{label}</dt>
+      <dt>
+        <span>{label}</span>
+        {percent ? <em>{percent}</em> : null}
+      </dt>
       <dd>{value}</dd>
-      {sub && <span>{sub}</span>}
+      {sub && <span className="case-financial-formula">{sub}</span>}
     </div>
   );
 }
@@ -661,6 +677,12 @@ function formatSavingsPct(savings: number | null | undefined, base: number | nul
   if (savings == null || !base) return "";
   const pct = Math.round((savings / base) * 100);
   return `${pct >= 0 ? "+" : ""}${pct}% of base`;
+}
+
+function formatSavingsPctBracket(savings: number | null | undefined, base: number | null | undefined) {
+  if (savings == null || !base) return "";
+  const pct = (savings / base) * 100;
+  return `[${pct.toFixed(1)}%]`;
 }
 
 function runningAgeDays(prReceiptDate: string | null | undefined): string {

@@ -2,6 +2,7 @@ import type { CaseMilestones } from "./case-aggregate.js";
 
 export class CaseChronologyPolicy {
   validate(input: {
+    estimateBenchmark?: number | null;
     milestones: CaseMilestones;
     prReceiptDate?: string | null;
   }): string[] {
@@ -66,6 +67,7 @@ export class CaseChronologyPolicy {
         ["Commercial Evaluation", m.commercialEvaluationDate],
         ["Technical Evaluation", m.technicalEvaluationDate],
         ["Qualified Bidders", m.qualifiedBidders],
+        ["Estimate / Benchmark", input.estimateBenchmark],
       ]
         .filter(([, value]) => this.isBlank(value))
         .map(([label]) => label);

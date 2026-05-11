@@ -50,7 +50,7 @@ const columns = (
   { key: "po", header: "PO Number", render: (row) => row.poNumber ?? "-" },
   {
     key: "value",
-    header: "PO Value",
+    header: "PO Value [All Inclusive]",
     render: (row) => formatMoney(row.poValue),
   },
   { key: "awardDate", header: "Award Date", render: (row) => formatDateOnly(row.poAwardDate) },
@@ -205,7 +205,7 @@ export function AwardsPanel({ caseId, isCaseCompleted = false }: AwardsPanelProp
             value={form.poNumber}
           />
         </FormField>
-        <FormField label="PO Value">
+        <FormField label="PO Value (Rs.) [All Inclusive]">
           <TextInput
             min="0"
             onChange={(event) => setFormValue(setForm, "poValue", event.target.value)}

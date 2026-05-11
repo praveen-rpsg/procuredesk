@@ -5,9 +5,11 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
+  CalendarClock,
   CheckCircle2,
   Clock3,
   FilePlus2,
+  FilePenLine,
   FileText,
   Gauge,
   Zap,
@@ -41,7 +43,8 @@ type DashboardTarget =
   | "planning"
   | "priority-cases"
   | "reports"
-  | "running-cases";
+  | "running-cases"
+  | "update-case";
 
 type DashboardPageProps = {
   onNavigate?: (target: DashboardTarget) => void;
@@ -160,6 +163,42 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const runningRate = percentage(metrics.running, metrics.total);
   const riskCount = metrics.risk;
   const riskRate = percentage(riskCount, metrics.running);
+  const dashboardActions = [
+    {
+      icon: FilePlus2,
+      isVisible: hasCreateAccess,
+      label: "Add New Case",
+      target: "new-case",
+      tone: "primary",
+    },
+    {
+      icon: FilePenLine,
+      isVisible: hasCaseAccess,
+      label: "Update Existing Case",
+      target: "update-case",
+      tone: "neutral",
+    },
+    {
+      icon: CalendarClock,
+      isVisible: hasPlanningAccess,
+      label: "Tender Planning",
+      target: "planning",
+      tone: "planning",
+    },
+    {
+      icon: BarChart3,
+      isVisible: hasReportAccess,
+      label: "Reports",
+      target: "reports",
+      tone: "report",
+    },
+  ] satisfies Array<{
+    icon: typeof FilePlus2;
+    isVisible: boolean;
+    label: string;
+    target: DashboardTarget;
+    tone: "neutral" | "planning" | "primary" | "report";
+  }>;
   const dashboardMetrics = [
     {
       icon: FileText,
@@ -217,19 +256,24 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             {greeting}, {firstName}
           </h1>
           <p>{todayFormatted} · Track cases, risks, expiry exposure, and import operations from one focused workspace.</p>
-        <div className="dashboard-hero-actions">
-            {hasCreateAccess ? (
-            <Button onClick={() => onNavigate?.("new-case")}>
-              <FilePlus2 size={16} />
-              New Case
-            </Button>
-            ) : null}
-            {hasReportAccess ? (
-            <Button variant="secondary" onClick={() => onNavigate?.("reports")}>
-              <BarChart3 size={16} />
-              Open Reports
-            </Button>
-            ) : null}
+          <div className="dashboard-hero-actions" aria-label="Dashboard actions">
+            {dashboardActions
+              .filter((action) => action.isVisible)
+              .map((action) => {
+                const Icon = action.icon;
+                return (
+                  <Button
+                    className={`dashboard-command-button dashboard-command-button-${action.tone}`}
+                    key={action.target}
+                    onClick={() => onNavigate?.(action.target)}
+                    size="lg"
+                    variant={action.tone === "primary" ? "primary" : "secondary"}
+                  >
+                    <Icon size={18} />
+                    {action.label}
+                  </Button>
+                );
+              })}
           </div>
         </div>
         <div className="dashboard-hero-card" aria-label="Procurement health summary">

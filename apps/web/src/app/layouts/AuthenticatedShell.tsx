@@ -46,7 +46,8 @@ type DashboardTarget =
   | "planning"
   | "priority-cases"
   | "reports"
-  | "running-cases";
+  | "running-cases"
+  | "update-case";
 
 const navigation = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
@@ -194,6 +195,11 @@ export function AuthenticatedShell() {
     }
     if (target === "new-case") {
       navigateToAppPath("/cases?action=new");
+      setIsMobileNavOpen(false);
+      return;
+    }
+    if (target === "update-case") {
+      navigateToAppPath("/cases");
       setIsMobileNavOpen(false);
       return;
     }

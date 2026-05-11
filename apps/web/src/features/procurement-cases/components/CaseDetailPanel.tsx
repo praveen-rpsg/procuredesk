@@ -132,10 +132,16 @@ export function CaseDetailPanel({ caseId, onDeleted, onEdit }: CaseDetailPanelPr
         <Metric label="Stage" value={formatCaseStageTransition(kase.stageCode, kase.desiredStageCode)} />
         <Metric label="PR Receipt" value={formatDate(kase.prReceiptDate)} />
         <Metric label="Target" value={formatDate(kase.tentativeCompletionDate)} />
-        <Metric label="PR Value" value={formatMoney(kase.financials.prValue)} />
-        <Metric label="Approved" value={formatMoney(kase.financials.approvedAmount)} />
-        <Metric label="Awarded" value={formatMoney(kase.financials.totalAwardedAmount)} />
-        <Metric label="Savings" value={formatMoney(kase.financials.savingsWrtPr)} />
+        <Metric label="PR Value / Approved Budget [All Inclusive]" value={formatMoney(kase.financials.prValue)} />
+        <Metric label="NFA Approved [All Inclusive]" value={formatMoney(kase.financials.approvedAmount)} />
+        <Metric label="Awarded [All Inclusive]" value={formatMoney(kase.financials.totalAwardedAmount)} />
+        <Metric
+          label={`Savings wrt PR Value/Approved Budget (Rs) ${formatSavingsPctBracket(
+            kase.financials.savingsWrtPr,
+            kase.financials.prValue,
+          )}`}
+          value={formatMoney(kase.financials.savingsWrtPr)}
+        />
       </dl>
 
       <div className="case-preview-sections">
@@ -250,6 +256,12 @@ function formatMoney(value: number | null | undefined) {
 
 function formatDate(value: string | null | undefined) {
   return formatDateOnly(value, "-");
+}
+
+function formatSavingsPctBracket(savings: number | null | undefined, base: number | null | undefined) {
+  if (savings == null || !base) return "";
+  const pct = (savings / base) * 100;
+  return `[${pct.toFixed(1)}%]`;
 }
 
 function milestoneDate(kase: CaseDetail, key: string) {

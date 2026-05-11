@@ -22,7 +22,7 @@ type CreateCaseFormProps = {
 
 type CreateCaseFormValues = {
   budgetTypeId: string;
-  cpcInvolved: string;
+  cpcInvolved: boolean;
   departmentId: string;
   entityId: string;
   natureOfWorkId: string;
@@ -31,7 +31,7 @@ type CreateCaseFormValues = {
   prId: string;
   prReceiptDate: string;
   prValue: string;
-  priorityCase: string;
+  priorityCase: boolean;
   tenderTypeId: string;
   tentativeCompletionDate: string;
 };
@@ -63,8 +63,8 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
   const [tenderTypeId, setTenderTypeId] = useState("");
   const [budgetTypeId, setBudgetTypeId] = useState("");
   const [natureOfWorkId, setNatureOfWorkId] = useState("");
-  const [cpcInvolved, setCpcInvolved] = useState("");
-  const [priorityCase, setPriorityCase] = useState("");
+  const [cpcInvolved, setCpcInvolved] = useState(false);
+  const [priorityCase, setPriorityCase] = useState(false);
   const [prId, setPrId] = useState("");
   const [prDescription, setPrDescription] = useState("");
   const [prReceiptDate, setPrReceiptDate] = useState("");
@@ -172,7 +172,7 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
 
     mutation.mutate({
       budgetTypeId,
-      cpcInvolved: cpcInvolved === "true",
+      cpcInvolved,
       departmentId,
       entityId,
       financials: { prValue: parsed.prValue },
@@ -181,7 +181,7 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
       prDescription,
       prId,
       prReceiptDate,
-      priorityCase: priorityCase === "true",
+      priorityCase,
       tenderTypeId,
       tentativeCompletionDate,
     });
@@ -290,7 +290,7 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
           <FormField
             error={formErrors.prValue ?? ""}
             helperText="INR amount, commas added automatically."
-            label="PR Value"
+            label="PR Value / Approved Budget (Rs.) [All Inclusive]"
           >
             <TextInput
               inputMode="decimal"
@@ -393,30 +393,22 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
               ))}
             </select>
           </FormField>
-          <FormField error={formErrors.cpcInvolved ?? ""} label="CPC Involved?">
-            <select
-              className="text-input"
-              onChange={(event) => setCpcInvolved(event.target.value)}
-              required
-              value={cpcInvolved}
-            >
-              <option value="">Select CPC Involved</option>
-              <option value="true">Yes</option>
-              <option value="false">No</option>
-            </select>
-          </FormField>
-          <FormField error={formErrors.priorityCase ?? ""} label="Priority Case?">
-            <select
-              className="text-input"
-              onChange={(event) => setPriorityCase(event.target.value)}
-              required
-              value={priorityCase}
-            >
-              <option value="">Select Priority</option>
-              <option value="true">Yes</option>
-              <option value="false">No</option>
-            </select>
-          </FormField>
+          <label className="checkbox-row">
+            <input
+              checked={cpcInvolved}
+              onChange={(event) => setCpcInvolved(event.target.checked)}
+              type="checkbox"
+            />
+            CPC Involved?
+          </label>
+          <label className="checkbox-row">
+            <input
+              checked={priorityCase}
+              onChange={(event) => setPriorityCase(event.target.checked)}
+              type="checkbox"
+            />
+            Priority Case
+          </label>
         </div>
       </div>
 
@@ -491,13 +483,6 @@ function validateCreateCaseForm(
   if (!values.natureOfWorkId) {
     errors.natureOfWorkId = "Nature Of Work is required.";
   }
-  if (!values.cpcInvolved) {
-    errors.cpcInvolved = "CPC Involved is required.";
-  }
-  if (!values.priorityCase) {
-    errors.priorityCase = "Priority Case is required.";
-  }
-
   return { errors, prValue };
 }
 

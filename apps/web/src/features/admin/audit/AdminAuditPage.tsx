@@ -54,7 +54,7 @@ export function AdminAuditPage() {
   });
   const actionOptions = useMemo<ComboboxOption[]>(
     () => [
-      { label: "All actions", value: "" },
+      { label: "All", value: "" },
       ...(metadata.data?.actions ?? []).map((action) => ({
         description: describeAction(action),
         label: formatAuditLabel(action),
@@ -65,7 +65,7 @@ export function AdminAuditPage() {
   );
   const targetTypeOptions = useMemo<ComboboxOption[]>(
     () => [
-      { label: "All object types", value: "" },
+      { label: "All", value: "" },
       ...(metadata.data?.targetTypes ?? []).map((targetType) => ({
         label: formatAuditLabel(targetType),
         value: targetType,
@@ -130,7 +130,7 @@ export function AdminAuditPage() {
                 emptyMessage="No actions found."
                 onChange={(value) => setDraftFilters((current) => ({ ...current, action: value }))}
                 options={actionOptions}
-                placeholder="All actions"
+                placeholder="All"
                 searchPlaceholder="Search actions..."
                 value={draftFilters.action}
               />
@@ -140,7 +140,7 @@ export function AdminAuditPage() {
                 emptyMessage="No object types found."
                 onChange={(value) => setDraftFilters((current) => ({ ...current, targetType: value }))}
                 options={targetTypeOptions}
-                placeholder="All object types"
+                placeholder="All"
                 searchPlaceholder="Search object types..."
                 value={draftFilters.targetType}
               />

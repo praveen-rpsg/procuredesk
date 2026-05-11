@@ -150,7 +150,7 @@ export function canAssignCaseOwner(user: CurrentUser | null | undefined, kase: C
   if (user.isPlatformSuperAdmin || hasPermission(user, "case.update.all")) return true;
   return (
     isInUserEntityScope(user, kase.entityId) &&
-    (hasPermission(user, "case.update.entity") || hasPermission(user, "case.update.assigned"))
+    hasPermission(user, "case.update.entity")
   );
 }
 

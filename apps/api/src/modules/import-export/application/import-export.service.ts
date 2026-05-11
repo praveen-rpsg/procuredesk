@@ -602,7 +602,7 @@ function oldContractTemplateColumns(): TenderTemplateColumn[] {
     { label: "Tender Owner", type: "Dropdown", width: 24 },
     { label: "Tender Description", type: "Text", width: 38 },
     { label: "Awarded Vendors (comma separated)", type: "Text", width: 36 },
-    { label: "RC/PO Amount (Rs.)", type: "Number", width: 20 },
+    { label: "RC/PO Amount (Rs.) [All Inclusive]", type: "Number", width: 26 },
     { label: "RC/PO Award Date", type: "DD-MM-YYYY", width: 18 },
     { label: "RC/PO Validity Date", type: "DD-MM-YYYY", width: 20 },
   ];

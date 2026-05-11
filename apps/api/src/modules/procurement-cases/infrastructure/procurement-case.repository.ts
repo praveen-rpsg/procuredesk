@@ -151,6 +151,9 @@ export class ProcurementCaseRepository {
       tenderName?: string | null;
       tenderNo?: string | null;
       tmRemarks?: string | null;
+      tentativeCompletionDate?: string | null;
+      desiredStageCode?: number | null;
+      isDelayed?: boolean;
       financials?: CaseFinancials;
       priorityCase?: boolean;
     },
@@ -166,9 +169,12 @@ export class ProcurementCaseRepository {
             tender_no = coalesce($7, tender_no),
             tm_remarks = coalesce($8, tm_remarks),
             priority_case = coalesce($9, priority_case),
+            tentative_completion_date = coalesce($10, tentative_completion_date),
+            desired_stage_code = coalesce($11, desired_stage_code),
+            is_delayed = coalesce($12, is_delayed),
             version = version + 1,
             updated_at = now(),
-            updated_by = $10
+            updated_by = $13
         where id = $1
           and tenant_id = $2
           and deleted_at is null
@@ -183,6 +189,9 @@ export class ProcurementCaseRepository {
         input.tenderNo ?? null,
         input.tmRemarks ?? null,
         input.priorityCase ?? null,
+        input.tentativeCompletionDate ?? null,
+        input.desiredStageCode ?? null,
+        input.isDelayed ?? null,
         input.updatedBy,
       ],
       client,
@@ -573,9 +582,17 @@ export class ProcurementCaseRepository {
     await this.db.query(
       `
         insert into procurement.case_financials (
-          case_id, tenant_id, pr_value, estimate_benchmark, approved_amount
+          case_id, tenant_id, pr_value, estimate_benchmark, approved_amount, savings_wrt_pr, savings_wrt_estimate
         )
-        values ($1, $2, $3, $4, $5)
+        values (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          case when $3::numeric is null or $5::numeric is null then null else $3::numeric - $5::numeric end,
+          case when $4::numeric is null or $5::numeric is null then null else $4::numeric - $5::numeric end
+        )
         on conflict (case_id) do update
         set pr_value = coalesce(excluded.pr_value, procurement.case_financials.pr_value),
             estimate_benchmark = coalesce(
@@ -586,6 +603,20 @@ export class ProcurementCaseRepository {
               excluded.approved_amount,
               procurement.case_financials.approved_amount
             ),
+            savings_wrt_pr = case
+              when coalesce(excluded.pr_value, procurement.case_financials.pr_value) is null
+                or coalesce(excluded.approved_amount, procurement.case_financials.approved_amount) is null
+                then null
+              else coalesce(excluded.pr_value, procurement.case_financials.pr_value)
+                - coalesce(excluded.approved_amount, procurement.case_financials.approved_amount)
+            end,
+            savings_wrt_estimate = case
+              when coalesce(excluded.estimate_benchmark, procurement.case_financials.estimate_benchmark) is null
+                or coalesce(excluded.approved_amount, procurement.case_financials.approved_amount) is null
+                then null
+              else coalesce(excluded.estimate_benchmark, procurement.case_financials.estimate_benchmark)
+                - coalesce(excluded.approved_amount, procurement.case_financials.approved_amount)
+            end,
             updated_at = now()
       `,
       [
@@ -787,8 +818,8 @@ export class ProcurementCaseRepository {
         approvedAmount: this.numberOrNull(row.approved_amount),
         estimateBenchmark: this.numberOrNull(row.estimate_benchmark),
         prValue: this.numberOrNull(row.pr_value),
-        savingsWrtEstimate: this.numberOrNull(row.savings_wrt_estimate),
-        savingsWrtPr: this.numberOrNull(row.savings_wrt_pr),
+        savingsWrtEstimate: this.savingsWrtEstimate(row),
+        savingsWrtPr: this.savingsWrtPr(row),
         totalAwardedAmount: this.numberOrNull(row.total_awarded_amount),
       },
       milestones: {
@@ -845,6 +876,20 @@ export class ProcurementCaseRepository {
   private numberOrNull(value: string | number | null): number | null {
     if (value == null) return null;
     return typeof value === "number" ? value : Number(value);
+  }
+
+  private savingsWrtPr(row: CaseAggregateRow): number | null {
+    const prValue = this.numberOrNull(row.pr_value);
+    const approvedAmount = this.numberOrNull(row.approved_amount);
+    if (prValue == null || approvedAmount == null) return null;
+    return prValue - approvedAmount;
+  }
+
+  private savingsWrtEstimate(row: CaseAggregateRow): number | null {
+    const estimateBenchmark = this.numberOrNull(row.estimate_benchmark);
+    const approvedAmount = this.numberOrNull(row.approved_amount);
+    if (estimateBenchmark == null || approvedAmount == null) return null;
+    return estimateBenchmark - approvedAmount;
   }
 }
 

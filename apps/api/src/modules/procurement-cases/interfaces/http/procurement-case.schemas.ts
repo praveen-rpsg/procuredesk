@@ -73,6 +73,7 @@ export const UpdateCaseRequestSchema = z.object({
   priorityCase: z.boolean().optional(),
   tenderName: z.string().trim().max(500).nullable().optional(),
   tenderNo: z.string().trim().max(200).nullable().optional(),
+  tentativeCompletionDate: requiredDateString.optional(),
   tmRemarks: z.string().trim().max(5000).nullable().optional(),
 });
 

@@ -98,7 +98,7 @@ type SavedCaseView = {
 };
 
 const valueSlabOptions = [
-  { label: "All Values", value: "" },
+  { label: "All", value: "" },
   { label: "< 10L", value: "lt_10l" },
   { label: "10L - 1Cr", value: "10l_1cr" },
   { label: "1Cr - 10Cr", value: "1cr_10cr" },
@@ -614,7 +614,7 @@ function CasesWorkspaceList() {
                 { label: "Running", value: "running" },
                 { label: "Completed", value: "completed" },
               ]}
-              placeholder="All Statuses"
+              placeholder="All"
               value={status}
             />
           </FormField>
@@ -625,7 +625,7 @@ function CasesWorkspaceList() {
                 { label: "Priority Only", value: "true" },
                 { label: "Normal Only", value: "false" },
               ]}
-              placeholder="All Priorities"
+              placeholder="All"
               value={priorityCase}
             />
           </FormField>
@@ -636,7 +636,7 @@ function CasesWorkspaceList() {
                 { label: "Delayed", value: "true" },
                 { label: "On Track", value: "false" },
               ]}
-              placeholder="All Delay Statuses"
+              placeholder="All"
               value={isDelayed}
             />
           </FormField>
@@ -667,7 +667,7 @@ function CasesWorkspaceList() {
                 label: `${entity.code} - ${entity.name}`,
                 value: entity.id,
               }))}
-              placeholder="All Entities"
+              placeholder="All"
               value={entityId}
             />
           </FormField>
@@ -679,7 +679,7 @@ function CasesWorkspaceList() {
                 label: department.name,
                 value: department.id,
               }))}
-              placeholder={entityId ? "All Departments" : "Select Entity First"}
+              placeholder={entityId ? "All" : "Select Entity First"}
               value={departmentId}
             />
           </FormField>
@@ -688,7 +688,7 @@ function CasesWorkspaceList() {
               disabled={!entityId || assignableOwners.isLoading}
               onChange={(event) => setOwnerUserId(event.target.value)}
               options={ownerOptions}
-              placeholder={entityId ? "All Owners" : "Select Entity First"}
+              placeholder={entityId ? "All" : "Select Entity First"}
               value={ownerUserId}
             />
           </FormField>
@@ -704,7 +704,7 @@ function CasesWorkspaceList() {
                 label: tenderType.name,
                 value: tenderType.id,
               }))}
-              placeholder="All Tender Types"
+              placeholder="All"
               value={tenderTypeId}
             />
           </FormField>
@@ -713,7 +713,7 @@ function CasesWorkspaceList() {
               disabled={catalog.isLoading}
               onChange={(event) => setBudgetTypeId(event.target.value)}
               options={budgetTypes.map((value) => ({ label: value.label, value: value.id }))}
-              placeholder="All Budget Types"
+              placeholder="All"
               value={budgetTypeId}
             />
           </FormField>
@@ -722,7 +722,7 @@ function CasesWorkspaceList() {
               disabled={catalog.isLoading}
               onChange={(event) => setNatureOfWorkId(event.target.value)}
               options={natureOfWork.map((value) => ({ label: value.label, value: value.id }))}
-              placeholder="All Nature"
+              placeholder="All"
               value={natureOfWorkId}
             />
           </FormField>
@@ -742,7 +742,7 @@ function CasesWorkspaceList() {
             <Select
               onChange={(event) => setValueSlab(toValueSlabFilter(event.target.value))}
               options={valueSlabOptions.filter((option) => option.value)}
-              placeholder="All Values"
+              placeholder="All"
               value={valueSlab}
             />
           </FormField>

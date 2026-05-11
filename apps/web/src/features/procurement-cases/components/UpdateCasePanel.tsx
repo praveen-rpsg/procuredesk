@@ -97,6 +97,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
   const [milestones, setMilestones] =
     useState<MilestoneFormState>(emptyMilestones);
   const [ownerUserId, setOwnerUserId] = useState("");
+  const [tentativeCompletionDate, setTentativeCompletionDate] = useState("");
   const [showCaseErrors, setShowCaseErrors] = useState(false);
   const [showDelayErrors, setShowDelayErrors] = useState(false);
   const [showFinancialErrors, setShowFinancialErrors] = useState(false);
@@ -132,6 +133,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
     setTmRemarks(kase.tmRemarks ?? "");
     setPriorityCase(kase.priorityCase);
     setOwnerUserId(kase.ownerUserId ?? "");
+    setTentativeCompletionDate(milestoneString(kase.tentativeCompletionDate));
     setMilestones({
       bidReceiptDate: milestoneString(kase.milestones.bidReceiptDate),
       biddersParticipated: numberString(kase.milestones.biddersParticipated),
@@ -162,8 +164,13 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
   }, [detail.data]);
 
   const milestoneErrors = useMemo(
-    () => validateMilestones(milestones, detail.data?.prReceiptDate),
-    [detail.data?.prReceiptDate, milestones],
+    () =>
+      validateMilestones({
+        estimateBenchmark,
+        milestones,
+        prReceiptDate: detail.data?.prReceiptDate ?? null,
+      }),
+    [detail.data?.prReceiptDate, estimateBenchmark, milestones],
   );
   const caseErrors = useMemo(
     () =>
@@ -239,6 +246,12 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
   const ownerChanged = Boolean(
     canReassignOwner && detail.data && ownerUserId && ownerUserId !== (detail.data.ownerUserId ?? ""),
   );
+  const tentativeCompletionChanged = Boolean(
+    canReassignOwner &&
+      detail.data &&
+      tentativeCompletionDate &&
+      tentativeCompletionDate !== milestoneString(detail.data.tentativeCompletionDate),
+  );
   const milestoneChangedFields = useMemo(
     () => buildMilestoneChangedFields(detail.data, milestones),
     [detail.data, milestones],
@@ -258,6 +271,9 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
           priorityCase,
           tenderName: tenderName || null,
           tenderNo: tenderNo || null,
+          tentativeCompletionDate: tentativeCompletionChanged
+            ? tentativeCompletionDate
+            : undefined,
           tmRemarks: tmRemarks || null,
         });
         await updateMilestones(targetCaseId, milestonePayload(milestones));
@@ -316,7 +332,8 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
     financialChangedFields.length > 0 ||
     milestoneChangedFields.length > 0 ||
     delayChangedFields.length > 0 ||
-    ownerChanged;
+    ownerChanged ||
+    tentativeCompletionChanged;
 
   if (!caseId) {
     return null;
@@ -415,10 +432,10 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
             <FormField
               helperText={
                 canReassignOwner
-                  ? "Only users mapped to the case entity are available."
-                  : "Owner reassignment is locked for your role."
+                  ? "Editable only by entity-level users. Only users mapped to the case entity are available."
+                  : "Tender owner is locked for your role."
               }
-              label="Owner"
+              label="Tender Owner"
             >
               <Select
                 disabled={!canReassignOwner || assignableOwners.isLoading}
@@ -429,16 +446,22 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
               />
             </FormField>
             <FormField
-              helperText="Completion target is governed by tender type rule and is locked after intake."
-              label="Completion Target"
+              helperText="Editable only by entity-level users mapped to this case entity."
+              label="Tentative Completion Date"
             >
               <TextInput
-                disabled
+                disabled={!canReassignOwner}
+                onChange={(event) => setTentativeCompletionDate(event.target.value)}
                 type="date"
-                value={milestoneString(detail.data?.tentativeCompletionDate)}
+                value={tentativeCompletionDate}
               />
             </FormField>
-            <ChangedFields fields={ownerChanged ? ["Owner"] : []} />
+            <ChangedFields
+              fields={[
+                ...(ownerChanged ? ["Tender Owner"] : []),
+                ...(tentativeCompletionChanged ? ["Tentative Completion Date"] : []),
+              ]}
+            />
           </section>
         ) : null}
 
@@ -571,7 +594,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
             </FormField>
             <FormField
               error={visibleFinancialErrors.estimateBenchmark ?? ""}
-              label="Estimate / Benchmark (Rs.)"
+              label="Estimate / Benchmark (Rs.) [All Inclusive]"
             >
               <TextInput
                 inputMode="decimal"
@@ -597,7 +620,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
             <FormField
               error={visibleFinancialErrors.approvedAmount ?? ""}
               helperText="Required before NFA approval, LOI, or RC/PO award milestones are saved."
-              label="NFA Approved Amount (Rs.)"
+              label="NFA Approved Amount (Rs.) [All Inclusive]"
             >
               <TextInput
                 inputMode="decimal"
@@ -757,7 +780,7 @@ function buildFinancialChangedFields(
     parseMoneyInput(value.approvedAmount) !==
       (kase.financials.approvedAmount ?? null)
   ) {
-    fields.push("Approved Amount");
+    fields.push("NFA Approved Amount (Rs.) [All Inclusive]");
   }
   if (
     value.estimateBenchmark.trim() &&
@@ -765,7 +788,7 @@ function buildFinancialChangedFields(
     parseMoneyInput(value.estimateBenchmark) !==
       (kase.financials.estimateBenchmark ?? null)
   ) {
-    fields.push("Estimate / Benchmark");
+    fields.push("Estimate / Benchmark (Rs.) [All Inclusive]");
   }
   return fields;
 }
@@ -905,11 +928,13 @@ function validateDelayForm(input: {
   return errors;
 }
 
-function validateMilestones(
-  value: MilestoneFormState,
-  prReceiptDate?: string | null,
-): MilestoneErrors {
+function validateMilestones(input: {
+  estimateBenchmark: string;
+  milestones: MilestoneFormState;
+  prReceiptDate?: string | null;
+}): MilestoneErrors {
   const errors: MilestoneErrors = {};
+  const value = input.milestones;
   for (const key of dateMilestoneKeys) {
     if (value[key] && !isDateOnlyString(value[key])) {
       errors[key] = "Use a valid date.";
@@ -917,10 +942,10 @@ function validateMilestones(
   }
 
   if (
-    prReceiptDate &&
-    isDateOnlyString(prReceiptDate) &&
+    input.prReceiptDate &&
+    isDateOnlyString(input.prReceiptDate) &&
     isDateOnlyString(value.nitInitiationDate) &&
-    value.nitInitiationDate < prReceiptDate
+    value.nitInitiationDate < input.prReceiptDate
   ) {
     errors.nitInitiationDate =
       "NIT Initiation cannot be before PR Receipt Date.";
@@ -989,6 +1014,7 @@ function validateMilestones(
       ["technicalEvaluationDate", "Technical Evaluation"],
       ["qualifiedBidders", "Qualified Bidders"],
     ],
+    [[input.estimateBenchmark, "Estimate / Benchmark (Rs.) [All Inclusive]"]],
     "NFA Submission can be saved only after all prior milestone fields are filled.",
   );
   requireDateOrder(
@@ -1145,15 +1171,21 @@ function requireMilestonePrerequisites(
   shouldValidate: boolean,
   targetKey: keyof MilestoneFormState,
   prerequisites: Array<[keyof MilestoneFormState, string]>,
+  externalPrerequisites: Array<[string, string]>,
   summaryMessage: string,
 ) {
   if (!shouldValidate || errors[targetKey]) return;
-  const missingLabels = prerequisites
-    .filter(([key]) => {
-      const fieldValue = value[key];
-      return typeof fieldValue === "boolean" ? !fieldValue : !fieldValue;
-    })
-    .map(([, label]) => label);
+  const missingLabels = [
+    ...prerequisites
+      .filter(([key]) => {
+        const fieldValue = value[key];
+        return typeof fieldValue === "boolean" ? !fieldValue : !fieldValue;
+      })
+      .map(([, label]) => label),
+    ...externalPrerequisites
+      .filter(([fieldValue]) => !fieldValue.trim())
+      .map(([, label]) => label),
+  ];
   if (!missingLabels.length) return;
   errors[targetKey] = `${summaryMessage} Missing: ${missingLabels.join(", ")}.`;
 }

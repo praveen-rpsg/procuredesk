@@ -186,7 +186,7 @@ export function ReportsWorkspace() {
       { key: "stage", header: "Stage", render: (row) => formatCaseStage(row.stageCode) },
       {
         key: "award",
-        header: "Awarded",
+        header: "Awarded Amount [All Inclusive]",
         render: (row) => formatAmount(row.totalAwardedAmount, filters.amountUnit),
       },
     ],
@@ -197,7 +197,7 @@ export function ReportsWorkspace() {
       { key: "vendor", header: "Vendor", render: (row) => row.vendorName },
       { key: "pr", header: "Case ID", render: (row) => row.prId },
       { key: "po", header: "PO", render: (row) => row.poNumber ?? "-" },
-      { key: "value", header: "Value", render: (row) => formatAmount(row.poValue, filters.amountUnit) },
+      { key: "value", header: "PO Value [All Inclusive]", render: (row) => formatAmount(row.poValue, filters.amountUnit) },
       { key: "awardDate", header: "Award Date", render: (row) => row.poAwardDate ?? "-" },
       { key: "validity", header: "Validity", render: (row) => row.poValidityDate ?? "-" },
     ],
@@ -220,7 +220,7 @@ export function ReportsWorkspace() {
     () => [
       { key: "tender", header: "Tender", render: (row) => row.tenderDescription ?? "-" },
       { key: "vendors", header: "Vendors", render: (row) => row.awardedVendors ?? "-" },
-      { key: "amount", header: "Amount", render: (row) => formatAmount(row.rcPoAmount, filters.amountUnit) },
+      { key: "amount", header: "RC/PO Amount [All Inclusive]", render: (row) => formatAmount(row.rcPoAmount, filters.amountUnit) },
       { key: "validity", header: "Validity", render: (row) => row.rcPoValidityDate },
       {
         key: "days",
@@ -338,7 +338,7 @@ export function ReportsWorkspace() {
               onChange={(event) => filters.setStatusFilter(event.target.value as "all" | "running" | "completed")}
               value={filters.statusFilter}
             >
-              <option value="all">All Status</option>
+              <option value="all">All</option>
               <option value="running">Running</option>
               <option value="completed">Completed</option>
             </select>
@@ -499,9 +499,9 @@ export function ReportsWorkspace() {
               <KpiTile label="Running" value={metrics?.runningCases ?? 0} />
               <KpiTile label="Completed" value={metrics?.completedCases ?? 0} />
               <KpiTile label="Delayed" value={metrics?.delayedCases ?? 0} tone="danger" />
-              <KpiTile label="Awarded" value={formatAmount(metrics?.totalAwardedAmount ?? 0, filters.amountUnit)} />
+              <KpiTile label="Awarded [All Inclusive]" value={formatAmount(metrics?.totalAwardedAmount ?? 0, filters.amountUnit)} />
               <KpiTile
-                label="Savings WRT PR"
+                label="Savings wrt PR Value/Approved Budget (Rs)"
                 tone="success"
                 value={formatAmount(metrics?.savingsWrtPr ?? 0, filters.amountUnit)}
               />
@@ -726,7 +726,7 @@ function ReportAnalyticsDashboard({
               <strong>{delayedRatio}%</strong>
             </div>
             <div>
-              <span>Awarded</span>
+              <span>Awarded [All Inclusive]</span>
               <strong>{formatAmount(metrics?.totalAwardedAmount ?? 0, amountUnit)}</strong>
             </div>
           </div>

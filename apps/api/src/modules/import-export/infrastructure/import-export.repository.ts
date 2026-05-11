@@ -593,7 +593,7 @@ export class ImportExportRepository {
           returning id, pr_id
         )
         insert into procurement.case_financials (
-          case_id, tenant_id, pr_value, estimate_benchmark, approved_amount, updated_at
+          case_id, tenant_id, pr_value, estimate_benchmark, approved_amount, savings_wrt_pr, savings_wrt_estimate, updated_at
         )
         select
           u.id,
@@ -601,6 +601,14 @@ export class ImportExportRepository {
           r.pr_value,
           r.estimate_benchmark,
           r.approved_amount,
+          case
+            when r.pr_value is null or r.approved_amount is null then null
+            else r.pr_value - r.approved_amount
+          end,
+          case
+            when r.estimate_benchmark is null or r.approved_amount is null then null
+            else r.estimate_benchmark - r.approved_amount
+          end,
           now()
         from upserted u
         join resolved r on r.pr_id = u.pr_id
@@ -608,6 +616,8 @@ export class ImportExportRepository {
           pr_value = excluded.pr_value,
           estimate_benchmark = excluded.estimate_benchmark,
           approved_amount = excluded.approved_amount,
+          savings_wrt_pr = excluded.savings_wrt_pr,
+          savings_wrt_estimate = excluded.savings_wrt_estimate,
           updated_at = now()
       `,
       [input.tenantId, input.importJobId, input.committedBy],
