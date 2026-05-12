@@ -12,19 +12,23 @@ import type {
 
 export type CaseListFilters = {
   budgetTypeIds?: string[];
+  completionFys?: string[];
   cpcInvolved?: boolean;
   dateFrom?: string;
   dateTo?: string;
   departmentIds?: string[];
   entityIds?: string[];
   isDelayed?: boolean;
+  loiAwarded?: boolean;
   natureOfWorkIds?: string[];
   ownerUserId?: string;
   priorityCase?: boolean;
+  prReceiptMonths?: string[];
   q?: string;
   status?: "running" | "completed";
   tenderTypeIds?: string[];
   valueSlab?: "10l_1cr" | "1cr_10cr" | "gte_10cr" | "lt_10l";
+  valueSlabs?: Array<"10l_1cr" | "1cr_10cr" | "gte_10cr" | "lt_10l">;
 };
 
 export type CaseListScope = {
@@ -35,17 +39,31 @@ export type CaseListScope = {
 };
 
 export type CaseListItem = {
+  approvedAmount: number | null;
+  completionFy: string | null;
+  cycleTimeDays: number | null;
   cpcInvolved: boolean | null;
+  departmentName: string | null;
+  desiredStageCode: number | null;
   entityId: string;
   id: string;
   prDescription: string | null;
   prId: string;
   prReceiptDate: string | null;
+  prValue: number | null;
   priorityCase: boolean;
+  estimateBenchmark: number | null;
   isDelayed: boolean;
+  loiAwarded: boolean | null;
+  ownerFullName: string | null;
+  percentTimeElapsed: number | null;
+  runningAgeDays: number | null;
+  savingsWrtEstimate: number | null;
+  savingsWrtPr: number | null;
   status: string;
   stageCode: number;
   tenderName: string | null;
+  tenderTypeName: string | null;
   tentativeCompletionDate: string | null;
   updatedAt: string;
 };
@@ -371,7 +389,7 @@ export class ProcurementCaseRepository {
 
     applyCaseScope(where, values, input.scope, "c.entity_id", "c.owner_user_id");
     applyCaseListFilters(where, values, input.filters);
-    this.applyValueSlabFilter(where, values, input.filters.valueSlab);
+    this.applyValueSlabFilter(where, values, input.filters.valueSlab, input.filters.valueSlabs);
     applyCaseSearchFilter(where, values, input.filters.q);
     if (input.cursor) {
       values.push(input.cursor.timestamp);
@@ -387,21 +405,58 @@ export class ProcurementCaseRepository {
     const result = await this.db.query<QueryResultRow & CaseListRow>(
       `
         select
+          f.approved_amount,
+          case
+            when m.rc_po_award_date is null then null
+            when extract(month from m.rc_po_award_date) >= 4
+              then extract(year from m.rc_po_award_date)::int || '-' || (extract(year from m.rc_po_award_date)::int + 1)
+            else (extract(year from m.rc_po_award_date)::int - 1) || '-' || extract(year from m.rc_po_award_date)::int
+          end as completion_fy,
+          case
+            when c.status = 'completed' and c.pr_receipt_date is not null and m.rc_po_award_date is not null
+              then m.rc_po_award_date - c.pr_receipt_date
+            when c.pr_receipt_date is not null
+              then current_date - c.pr_receipt_date
+            else null
+          end as cycle_time_days,
           c.id,
           c.cpc_involved,
+          dep.name as department_name,
+          c.desired_stage_code,
           c.entity_id,
           c.pr_id,
           c.pr_description,
           c.pr_receipt_date,
+          f.pr_value,
+          f.estimate_benchmark,
           c.is_delayed,
+          m.loi_issued,
+          owner.full_name as owner_full_name,
+          case
+            when c.pr_receipt_date is null or c.tentative_completion_date is null then null
+            when c.tentative_completion_date <= c.pr_receipt_date then null
+            else round(((current_date - c.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - c.pr_receipt_date), 0)) * 100)
+          end as percent_time_elapsed,
           c.priority_case,
+          case
+            when c.status = 'running' and c.pr_receipt_date is not null
+              then current_date - c.pr_receipt_date
+            else null
+          end as running_age_days,
+          f.savings_wrt_estimate,
+          f.savings_wrt_pr,
           c.status,
           c.stage_code,
           c.tender_name,
+          tt.name as tender_type_name,
           c.tentative_completion_date,
           c.updated_at
         from procurement.cases c
         left join procurement.case_financials f on f.case_id = c.id and f.tenant_id = c.tenant_id
+        left join procurement.case_milestones m on m.case_id = c.id and m.tenant_id = c.tenant_id
+        left join org.departments dep on dep.id = c.department_id and dep.tenant_id = c.tenant_id
+        left join iam.users owner on owner.id = c.owner_user_id and owner.tenant_id = c.tenant_id
+        left join catalog.tender_types tt on tt.id = c.tender_type_id and tt.tenant_id = c.tenant_id
         where ${where.join(" and ")}
         order by c.updated_at desc, c.id desc
         limit $${limitPosition}
@@ -410,17 +465,31 @@ export class ProcurementCaseRepository {
     );
 
     return result.rows.map((row) => ({
+      approvedAmount: this.numberOrNull(row.approved_amount),
+      completionFy: row.completion_fy,
+      cycleTimeDays: this.numberOrNull(row.cycle_time_days),
       cpcInvolved: row.cpc_involved,
+      departmentName: row.department_name,
+      desiredStageCode: row.desired_stage_code,
       entityId: row.entity_id,
       id: row.id,
       prId: row.pr_id,
       prDescription: row.pr_description,
       prReceiptDate: this.dateOnly(row.pr_receipt_date),
+      prValue: this.numberOrNull(row.pr_value),
+      estimateBenchmark: this.numberOrNull(row.estimate_benchmark),
       isDelayed: row.is_delayed,
+      loiAwarded: row.loi_issued,
+      ownerFullName: row.owner_full_name,
+      percentTimeElapsed: this.numberOrNull(row.percent_time_elapsed),
       priorityCase: row.priority_case,
+      runningAgeDays: this.numberOrNull(row.running_age_days),
+      savingsWrtEstimate: this.numberOrNull(row.savings_wrt_estimate),
+      savingsWrtPr: this.numberOrNull(row.savings_wrt_pr),
       status: row.status,
       stageCode: row.stage_code,
       tenderName: row.tender_name,
+      tenderTypeName: row.tender_type_name,
       tentativeCompletionDate: this.dateOnly(row.tentative_completion_date),
       updatedAt: row.updated_at.toISOString(),
     }));
@@ -489,17 +558,31 @@ export class ProcurementCaseRepository {
     );
 
     return result.rows.map((row) => ({
+      approvedAmount: null,
+      completionFy: null,
+      cycleTimeDays: null,
       cpcInvolved: row.cpc_involved,
+      departmentName: null,
+      desiredStageCode: null,
       entityId: row.entity_id,
+      estimateBenchmark: null,
       id: row.id,
       prId: row.pr_id,
       prDescription: row.pr_description,
       prReceiptDate: this.dateOnly(row.pr_receipt_date),
       isDelayed: row.is_delayed,
+      loiAwarded: null,
+      ownerFullName: null,
+      percentTimeElapsed: null,
       priorityCase: row.priority_case,
+      prValue: null,
+      runningAgeDays: null,
+      savingsWrtEstimate: null,
+      savingsWrtPr: null,
       status: row.status,
       stageCode: row.stage_code,
       tenderName: row.tender_name,
+      tenderTypeName: null,
       tentativeCompletionDate: this.dateOnly(row.tentative_completion_date),
       updatedAt: row.updated_at.toISOString(),
       deletedAt: row.deleted_at.toISOString(),
@@ -853,24 +936,26 @@ export class ProcurementCaseRepository {
     where: string[],
     values: unknown[],
     valueSlab: CaseListFilters["valueSlab"],
+    valueSlabs: CaseListFilters["valueSlabs"],
   ) {
-    if (!valueSlab) return;
+    const slabs = valueSlabs?.length ? valueSlabs : valueSlab ? [valueSlab] : [];
+    if (!slabs.length) return;
     const column = "f.pr_value";
     where.push(`${column} is not null`);
-    if (valueSlab === "lt_10l") {
-      where.push(`${column} < 1000000`);
-      return;
+    const predicates: string[] = [];
+    if (slabs.includes("lt_10l")) {
+      predicates.push(`${column} < 1000000`);
     }
-    if (valueSlab === "10l_1cr") {
-      where.push(`${column} >= 1000000 and ${column} < 10000000`);
-      return;
+    if (slabs.includes("10l_1cr")) {
+      predicates.push(`(${column} >= 1000000 and ${column} < 10000000)`);
     }
-    if (valueSlab === "1cr_10cr") {
-      where.push(`${column} >= 10000000 and ${column} < 100000000`);
-      return;
+    if (slabs.includes("1cr_10cr")) {
+      predicates.push(`(${column} >= 10000000 and ${column} < 100000000)`);
     }
-    values.push(100000000);
-    where.push(`${column} >= $${values.length}`);
+    if (slabs.includes("gte_10cr")) {
+      predicates.push(`${column} >= 100000000`);
+    }
+    if (predicates.length) where.push(`(${predicates.join(" or ")})`);
   }
 
   private numberOrNull(value: string | number | null): number | null {
@@ -923,6 +1008,7 @@ function applyCaseListFilters(where: string[], values: unknown[], filters: CaseL
     { column: "c.priority_case", value: filters.priorityCase },
     { column: "c.is_delayed", value: filters.isDelayed },
     { column: "c.cpc_involved", value: filters.cpcInvolved },
+    { column: "m.loi_issued", value: filters.loiAwarded },
   ];
   const arrayFilters: Array<{ column: string; value: string[] | undefined }> = [
     { column: "c.entity_id", value: filters.entityIds },
@@ -940,6 +1026,21 @@ function applyCaseListFilters(where: string[], values: unknown[], filters: CaseL
   }
   for (const filter of arrayFilters) {
     appendOptionalArrayFilter(where, values, filter);
+  }
+  if (filters.prReceiptMonths?.length) {
+    values.push(filters.prReceiptMonths);
+    where.push(`to_char(c.pr_receipt_date, 'YYYY-MM') = any($${values.length}::text[])`);
+  }
+  if (filters.completionFys?.length) {
+    values.push(filters.completionFys);
+    where.push(`(
+      case
+        when m.rc_po_award_date is null then null
+        when extract(month from m.rc_po_award_date) >= 4
+          then extract(year from m.rc_po_award_date)::int || '-' || (extract(year from m.rc_po_award_date)::int + 1)
+        else (extract(year from m.rc_po_award_date)::int - 1) || '-' || extract(year from m.rc_po_award_date)::int
+      end
+    ) = any($${values.length}::text[])`);
   }
 }
 
@@ -999,17 +1100,31 @@ function appendWhere(
 }
 
 type CaseListRow = {
+  approved_amount: string | null;
+  completion_fy: string | null;
+  cycle_time_days: string | number | null;
   cpc_involved: boolean | null;
+  department_name: string | null;
+  desired_stage_code: number | null;
   entity_id: string;
+  estimate_benchmark: string | null;
   id: string;
   pr_description: string | null;
   pr_id: string;
   pr_receipt_date: Date | null;
+  pr_value: string | null;
   is_delayed: boolean;
+  loi_issued: boolean | null;
+  owner_full_name: string | null;
+  percent_time_elapsed: string | number | null;
   priority_case: boolean;
+  running_age_days: string | number | null;
+  savings_wrt_estimate: string | null;
+  savings_wrt_pr: string | null;
   status: string;
   stage_code: number;
   tender_name: string | null;
+  tender_type_name: string | null;
   tentative_completion_date: Date | null;
   updated_at: Date;
 };

@@ -7,16 +7,39 @@ export type ReportCode =
   | "vendor_awards";
 
 export type ReportCaseRow = {
+  approvedAmount: number | null;
+  biddersParticipated: number | null;
+  completedCycleTimeDays: number | null;
+  completionFy: string | null;
+  departmentName: string | null;
+  desiredStageCode: number | null;
   caseId: string;
   entityId: string;
+  entityCode: string | null;
+  entityName: string | null;
   isDelayed: boolean;
+  loiAwarded: boolean;
+  loiAwardDate: string | null;
+  nitPublishDate: string | null;
+  ownerFullName: string | null;
+  percentTimeElapsed: number | null;
   prId: string;
+  prDescription: string | null;
   prReceiptDate: string | null;
+  prRemarks: string | null;
+  prValue: number | null;
+  qualifiedBidders: number | null;
   rcPoAwardDate: string | null;
+  runningAgeDays: number | null;
+  savingsWrtEstimate: number | null;
+  savingsWrtPr: number | null;
   stageCode: number;
   status: string;
   tenderName: string | null;
+  tenderNo: string | null;
+  tenderTypeName: string | null;
   totalAwardedAmount: number | null;
+  uncontrollableDelayDays: number | null;
 };
 
 export type VendorAwardReportRow = {

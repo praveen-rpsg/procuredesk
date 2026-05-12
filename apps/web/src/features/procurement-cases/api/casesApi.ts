@@ -1,17 +1,31 @@
 import { apiRequest } from "../../../shared/api/client";
 
 export type CaseListItem = {
+  approvedAmount: number | null;
+  completionFy: string | null;
+  cycleTimeDays: number | null;
   cpcInvolved: boolean | null;
+  departmentName: string | null;
+  desiredStageCode: number | null;
   entityId: string;
+  estimateBenchmark: number | null;
   id: string;
   isDelayed: boolean;
+  loiAwarded: boolean | null;
+  ownerFullName: string | null;
+  percentTimeElapsed: number | null;
   prDescription: string | null;
   prId: string;
   prReceiptDate: string | null;
+  prValue: number | null;
   priorityCase: boolean;
+  runningAgeDays: number | null;
+  savingsWrtEstimate: number | null;
+  savingsWrtPr: number | null;
   status: string;
   stageCode: number;
   tenderName: string | null;
+  tenderTypeName: string | null;
   tentativeCompletionDate: string | null;
   updatedAt: string;
 };
@@ -79,6 +93,7 @@ export function getCaseSummary() {
 
 export function listCases(params: {
   budgetTypeIds?: string[] | undefined;
+  completionFys?: string[] | undefined;
   cpcInvolved?: boolean | undefined;
   cursor?: string | undefined;
   dateFrom?: string | undefined;
@@ -87,13 +102,16 @@ export function listCases(params: {
   entityIds?: string[] | undefined;
   isDelayed?: boolean | undefined;
   limit?: number | undefined;
+  loiAwarded?: boolean | undefined;
   natureOfWorkIds?: string[] | undefined;
   ownerUserId?: string | undefined;
   priorityCase?: boolean | undefined;
+  prReceiptMonths?: string[] | undefined;
   q?: string | undefined;
   status?: string | undefined;
   tenderTypeIds?: string[] | undefined;
   valueSlab?: string | undefined;
+  valueSlabs?: string[] | undefined;
 }) {
   const search = new URLSearchParams();
   setCaseListSearchParams(search, params);
@@ -105,6 +123,7 @@ function setCaseListSearchParams(
   params: Parameters<typeof listCases>[0],
 ): void {
   setArrayParam(search, "budgetTypeIds", params.budgetTypeIds);
+  setArrayParam(search, "completionFys", params.completionFys);
   setBooleanParam(search, "cpcInvolved", params.cpcInvolved);
   setStringParam(search, "cursor", params.cursor);
   setStringParam(search, "dateFrom", params.dateFrom);
@@ -112,14 +131,17 @@ function setCaseListSearchParams(
   setArrayParam(search, "departmentIds", params.departmentIds);
   setArrayParam(search, "entityIds", params.entityIds);
   setBooleanParam(search, "isDelayed", params.isDelayed);
+  setBooleanParam(search, "loiAwarded", params.loiAwarded);
   setNumberParam(search, "limit", params.limit);
   setArrayParam(search, "natureOfWorkIds", params.natureOfWorkIds);
   setStringParam(search, "ownerUserId", params.ownerUserId);
   setBooleanParam(search, "priorityCase", params.priorityCase);
+  setArrayParam(search, "prReceiptMonths", params.prReceiptMonths);
   setStringParam(search, "q", params.q);
   setStringParam(search, "status", params.status);
   setArrayParam(search, "tenderTypeIds", params.tenderTypeIds);
   setStringParam(search, "valueSlab", params.valueSlab);
+  setArrayParam(search, "valueSlabs", params.valueSlabs);
 }
 
 function setArrayParam(

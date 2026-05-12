@@ -1,4 +1,6 @@
 import { Queue, Worker } from "bullmq";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { Redis } from "ioredis";
 import pino from "pino";
 import { Pool } from "pg";
@@ -10,6 +12,8 @@ import { MicrosoftGraphClient } from "./notifications/microsoft-graph-client.js"
 import { processNotificationJob, type NotificationJobPayload } from "./notifications/notification-worker.js";
 import { processReportingProjection, type ReportingProjectionPayload } from "./reporting/reporting-projection-worker.js";
 import { createPrivateObjectStorageFromEnv } from "./storage/private-object-storage.js";
+
+loadEnvFiles([".env", "../../.env"]);
 
 const logger = pino({
   level: process.env.LOG_LEVEL ?? "info",
@@ -166,3 +170,21 @@ function windowedInterval(task: () => Promise<void>, intervalMs: number): void {
 }
 
 start();
+
+function loadEnvFiles(paths: string[]): void {
+  for (const path of paths) {
+    const resolved = resolve(process.cwd(), path);
+    if (!existsSync(resolved)) continue;
+    const contents = readFileSync(resolved, "utf8");
+    for (const line of contents.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const separator = trimmed.indexOf("=");
+      if (separator <= 0) continue;
+      const key = trimmed.slice(0, separator).trim();
+      const rawValue = trimmed.slice(separator + 1).trim();
+      if (process.env[key] !== undefined) continue;
+      process.env[key] = rawValue.replace(/^(['"])(.*)\1$/, "$2");
+    }
+  }
+}

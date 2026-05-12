@@ -17,7 +17,12 @@ import { CaseChronologyPolicy } from "../domain/case-chronology.policy.js";
 import { CaseDelayPolicy } from "../domain/case-delay.policy.js";
 import { CaseStagePolicy } from "../domain/case-stage.policy.js";
 import { CaseVisibilityPolicy } from "../domain/case-visibility.policy.js";
-import type { CaseDelay, CaseFinancials, CaseMilestones } from "../domain/case-aggregate.js";
+import type {
+  CaseDelay,
+  CaseFinancials,
+  CaseMilestones,
+  ProcurementCaseAggregate,
+} from "../domain/case-aggregate.js";
 import {
   ProcurementCaseRepository,
   type CaseListFilters,
@@ -186,7 +191,7 @@ export class ProcurementCaseService {
     if (!new CaseVisibilityPolicy().canReadCase(actor, kase)) {
       throw new ForbiddenException("Case access denied.");
     }
-    return kase;
+    return this.presentCaseForActor(actor, kase);
   }
 
   async updateCase(actor: AuthenticatedUser, caseId: string, command: UpdateCaseCommand) {
@@ -485,6 +490,29 @@ export class ProcurementCaseService {
     if (!actor.isPlatformSuperAdmin && !actor.permissions.includes(permission)) {
       throw new ForbiddenException("Missing required permission.");
     }
+  }
+
+  private canManageDelay(actor: AuthenticatedUser, kase: { entityId: string }) {
+    return (
+      actor.isPlatformSuperAdmin ||
+      actor.permissions.includes("case.update.all") ||
+      (actor.permissions.includes("case.delay.manage.entity") &&
+        actor.entityIds.includes(kase.entityId))
+    );
+  }
+
+  private presentCaseForActor(
+    actor: AuthenticatedUser,
+    kase: ProcurementCaseAggregate,
+  ): ProcurementCaseAggregate {
+    if (this.canManageDelay(actor, kase)) return kase;
+    return {
+      ...kase,
+      delay: {
+        delayExternalDays: null,
+        delayReason: null,
+      },
+    };
   }
 
   private requireTenant(actor: AuthenticatedUser): string {

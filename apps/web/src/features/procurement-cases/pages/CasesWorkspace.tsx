@@ -1,10 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArchiveRestore,
-  Download,
-  ExternalLink,
+  ChevronDown,
+  ChevronUp,
   PanelRightOpen,
-  Pencil,
   RotateCcw,
   Save,
   Search,
@@ -32,15 +31,13 @@ import {
 } from "../api/casesApi";
 import { CaseDetailPage } from "./CaseDetailPage";
 import { useAuth } from "../../../shared/auth/AuthProvider";
-import { canCreateCase, canPotentiallyUpdateCaseFromList, canRestoreCase } from "../../../shared/auth/permissions";
+import { canCreateCase, canRestoreCase } from "../../../shared/auth/permissions";
 import { useDebouncedValue } from "../../../shared/hooks/useDebouncedValue";
 import { navigateToAppPath, useAppLocation } from "../../../shared/routing/appLocation";
 import { formatCaseStage } from "../../../shared/utils/caseStage";
-import { todayDateOnlyString, toDateOnlyInputValue } from "../../../shared/utils/dateOnly";
 import { Button } from "../../../shared/ui/button/Button";
 import { Drawer } from "../../../shared/ui/drawer/Drawer";
 import { ErrorState } from "../../../shared/ui/error-state/ErrorState";
-import { FilterDrawer } from "../../../shared/ui/filter-drawer/FilterDrawer";
 import { Checkbox } from "../../../shared/ui/form/Checkbox";
 import { FormField, TextInput } from "../../../shared/ui/form/FormField";
 import { IconButton } from "../../../shared/ui/icon-button/IconButton";
@@ -54,12 +51,33 @@ import { type VirtualTableColumn, VirtualTable } from "../../../shared/ui/table/
 import { useToast } from "../../../shared/ui/toast/ToastProvider";
 
 type BooleanFilter = "" | "false" | "true";
-type CaseColumnKey = "actions" | "description" | "entity" | "flags" | "prId" | "select" | "stage" | "status" | "updated";
+type CaseColumnKey =
+  | "actions"
+  | "approvedAmount"
+  | "completionFy"
+  | "cycleTime"
+  | "department"
+  | "description"
+  | "entity"
+  | "normativeStage"
+  | "owner"
+  | "percentTimeElapsed"
+  | "prId"
+  | "prValue"
+  | "runAge"
+  | "savingsWrtEstimate"
+  | "savingsWrtPr"
+  | "stage"
+  | "status"
+  | "tenderType"
+  | "updated";
 type ValueSlabFilter = "" | "10l_1cr" | "1cr_10cr" | "gte_10cr" | "lt_10l";
+type StatusFilter = "completed" | "running";
+type ValueSlabOption = Exclude<ValueSlabFilter, "">;
 type CasesSectionKey = "active" | "recovery";
 
 const casesSections = [
-  { description: "Search, filter, export, and update live procurement cases.", icon: Table2, key: "active", label: "Active Cases" },
+  { description: "Search, filter, export, and update procurement cases.", icon: Table2, key: "active", label: "Cases" },
   { description: "Restore recently deleted cases.", icon: ArchiveRestore, key: "recovery", label: "Recovery" },
 ] satisfies Array<{
   description: string;
@@ -74,20 +92,23 @@ const casesSectionPaths: Record<CasesSectionKey, string> = {
 };
 
 type CaseViewState = {
-  budgetTypeId: string;
+  budgetTypeIds: string[];
+  completionFys: string[];
   cpcInvolved: BooleanFilter;
   dateFrom: string;
   dateTo: string;
-  departmentId: string;
-  entityId: string;
+  departmentIds: string[];
+  entityIds: string[];
   isDelayed: BooleanFilter;
-  natureOfWorkId: string;
+  loiAwarded: BooleanFilter;
+  natureOfWorkIds: string[];
   ownerUserId: string;
   priorityCase: BooleanFilter;
+  prReceiptMonths: string[];
   q: string;
-  status: string;
-  tenderTypeId: string;
-  valueSlab: ValueSlabFilter;
+  statusValues: StatusFilter[];
+  tenderTypeIds: string[];
+  valueSlabs: ValueSlabOption[];
   visibleColumnKeys: CaseColumnKey[];
 };
 
@@ -99,20 +120,30 @@ type SavedCaseView = {
 
 const valueSlabOptions = [
   { label: "All", value: "" },
-  { label: "< 10L", value: "lt_10l" },
-  { label: "10L - 1Cr", value: "10l_1cr" },
-  { label: "1Cr - 10Cr", value: "1cr_10cr" },
-  { label: "10Cr+", value: "gte_10cr" },
+  { label: "1. Below Rs. 10 Lakhs", value: "lt_10l" },
+  { label: "2. Rs. 10 Lakhs - <1 Cr", value: "10l_1cr" },
+  { label: "3. Rs. 1 Cr - <10 Cr", value: "1cr_10cr" },
+  { label: "4. Rs. 10 Cr and above", value: "gte_10cr" },
 ];
 
 const defaultVisibleColumnKeys: CaseColumnKey[] = [
-  "select",
   "prId",
-  "entity",
   "description",
-  "status",
+  "entity",
+  "tenderType",
+  "department",
+  "owner",
+  "prValue",
+  "approvedAmount",
+  "savingsWrtPr",
+  "savingsWrtEstimate",
   "stage",
-  "flags",
+  "normativeStage",
+  "percentTimeElapsed",
+  "runAge",
+  "cycleTime",
+  "status",
+  "completionFy",
   "updated",
   "actions",
 ];
@@ -141,104 +172,116 @@ function CasesWorkspaceList() {
   const { notify } = useToast();
   const location = useAppLocation();
   const activeSection = casesSectionFromPath(location.pathname) ?? "active";
-  const [budgetTypeId, setBudgetTypeId] = useState("");
+  const [budgetTypeIds, setBudgetTypeIds] = useState<string[]>([]);
+  const [completionFys, setCompletionFys] = useState<string[]>([]);
   const [cpcInvolved, setCpcInvolved] = useState<BooleanFilter>("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [departmentId, setDepartmentId] = useState("");
-  const [entityId, setEntityId] = useState("");
+  const [departmentIds, setDepartmentIds] = useState<string[]>([]);
+  const [entityIds, setEntityIds] = useState<string[]>([]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isColumnMenuOpen, setIsColumnMenuOpen] = useState(false);
   const [isDelayed, setIsDelayed] = useState<BooleanFilter>("");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [natureOfWorkId, setNatureOfWorkId] = useState("");
+  const [loiAwarded, setLoiAwarded] = useState<BooleanFilter>("");
+  const [natureOfWorkIds, setNatureOfWorkIds] = useState<string[]>([]);
   const [pageCursors, setPageCursors] = useState<string[]>([""]);
   const [ownerUserId, setOwnerUserId] = useState("");
   const [priorityCase, setPriorityCase] = useState<BooleanFilter>("");
+  const [prReceiptMonths, setPrReceiptMonths] = useState<string[]>([]);
   const [previewCaseId, setPreviewCaseId] = useState<string | null>(null);
   const [editCaseId, setEditCaseId] = useState<string | null>(null);
   const [q, setQ] = useState("");
-  const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
   const [savedViewName, setSavedViewName] = useState("");
   const [savedViews, setSavedViews] = useState<SavedCaseView[]>(readSavedCaseViews);
-  const [status, setStatus] = useState("");
-  const [tenderTypeId, setTenderTypeId] = useState("");
-  const [valueSlab, setValueSlab] = useState<ValueSlabFilter>("");
+  const [statusValues, setStatusValues] = useState<StatusFilter[]>([]);
+  const [tenderTypeIds, setTenderTypeIds] = useState<string[]>([]);
+  const [valueSlabs, setValueSlabs] = useState<ValueSlabOption[]>([]);
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<CaseColumnKey[]>(defaultVisibleColumnKeys);
   const debouncedQ = useDebouncedValue(q, 350);
   const currentCursor = pageCursors[pageCursors.length - 1] || undefined;
   const currentPageIndex = pageCursors.length - 1;
   const canCreate = canCreateCase(user);
   const canRestore = canRestoreCase(user);
+  const selectedStatus = statusValues.length === 1 ? statusValues[0] : "";
 
   const entities = useQuery({ queryFn: listAdminEntities, queryKey: ["case-filter-entities"] });
   const catalog = useQuery({ queryFn: getCatalogSnapshot, queryKey: ["case-filter-catalog"] });
   const departments = useQuery({
-    enabled: Boolean(entityId),
-    queryFn: () => listAdminDepartments(entityId),
-    queryKey: ["case-filter-departments", entityId],
+    enabled: entityIds.length === 1,
+    queryFn: () => listAdminDepartments(entityIds[0] ?? ""),
+    queryKey: ["case-filter-departments", entityIds[0] ?? ""],
   });
   const assignableOwners = useQuery({
-    enabled: Boolean(entityId),
-    queryFn: () => listAssignableOwners(entityId),
-    queryKey: ["case-filter-owners", entityId],
+    enabled: entityIds.length === 1,
+    queryFn: () => listAssignableOwners(entityIds[0] ?? ""),
+    queryKey: ["case-filter-owners", entityIds[0] ?? ""],
   });
 
   const caseFilters = useMemo(
     () => ({
-      budgetTypeIds: budgetTypeId ? [budgetTypeId] : undefined,
+      budgetTypeIds: budgetTypeIds.length ? budgetTypeIds : undefined,
+      completionFys: completionFys.length ? completionFys : undefined,
       cpcInvolved: booleanFilter(cpcInvolved),
       cursor: currentCursor,
       dateFrom: dateFrom || undefined,
       dateTo: dateTo || undefined,
-      departmentIds: departmentId ? [departmentId] : undefined,
-      entityIds: entityId ? [entityId] : undefined,
+      departmentIds: departmentIds.length ? departmentIds : undefined,
+      entityIds: entityIds.length ? entityIds : undefined,
       isDelayed: booleanFilter(isDelayed),
       limit: 25,
-      natureOfWorkIds: natureOfWorkId ? [natureOfWorkId] : undefined,
+      loiAwarded: booleanFilter(loiAwarded),
+      natureOfWorkIds: natureOfWorkIds.length ? natureOfWorkIds : undefined,
       ownerUserId: ownerUserId || undefined,
       priorityCase: booleanFilter(priorityCase),
+      prReceiptMonths: prReceiptMonths.length ? prReceiptMonths : undefined,
       q: debouncedQ || undefined,
-      status: status || undefined,
-      tenderTypeIds: tenderTypeId ? [tenderTypeId] : undefined,
-      valueSlab: valueSlab || undefined,
+      status: selectedStatus || undefined,
+      tenderTypeIds: tenderTypeIds.length ? tenderTypeIds : undefined,
+      valueSlabs: valueSlabs.length ? valueSlabs : undefined,
     }),
     [
-      budgetTypeId,
+      budgetTypeIds,
+      completionFys,
       cpcInvolved,
       currentCursor,
       dateFrom,
       dateTo,
       debouncedQ,
-      departmentId,
-      entityId,
+      departmentIds,
+      entityIds,
       isDelayed,
-      natureOfWorkId,
+      loiAwarded,
+      natureOfWorkIds,
       ownerUserId,
       priorityCase,
-      status,
-      tenderTypeId,
-      valueSlab,
+      prReceiptMonths,
+      selectedStatus,
+      tenderTypeIds,
+      valueSlabs,
     ],
   );
 
   useEffect(() => {
     setPageCursors([""]);
   }, [
-    budgetTypeId,
+    budgetTypeIds,
+    completionFys,
     cpcInvolved,
     dateFrom,
     dateTo,
     debouncedQ,
-    departmentId,
-    entityId,
+    departmentIds,
+    entityIds,
     isDelayed,
-    natureOfWorkId,
+    loiAwarded,
+    natureOfWorkIds,
     ownerUserId,
     priorityCase,
-    status,
-    tenderTypeId,
-    valueSlab,
+    prReceiptMonths,
+    selectedStatus,
+    tenderTypeIds,
+    valueSlabs,
   ]);
 
   useEffect(() => {
@@ -270,7 +313,7 @@ function CasesWorkspaceList() {
 
     if (!params.has("status") && !params.has("isDelayed") && !params.has("priorityCase")) return;
 
-    setStatus(nextStatus);
+    setStatusValues(nextStatus ? [nextStatus as StatusFilter] : []);
     setIsDelayed(nextIsDelayed);
     setPriorityCase(nextPriorityCase);
     setPageCursors([""]);
@@ -280,15 +323,6 @@ function CasesWorkspaceList() {
     queryFn: () => listCases(caseFilters),
     queryKey: ["cases", caseFilters],
   });
-  const selectedRows = useMemo(
-    () => (cases.data ?? []).filter((row) => selectedCaseIds.includes(row.id)),
-    [cases.data, selectedCaseIds],
-  );
-
-  useEffect(() => {
-    const visibleCaseIds = new Set((cases.data ?? []).map((row) => row.id));
-    setSelectedCaseIds((current) => current.filter((caseId) => visibleCaseIds.has(caseId)));
-  }, [cases.data]);
 
   const deletedCases = useQuery({
     enabled: canRestore,
@@ -334,96 +368,115 @@ function CasesWorkspaceList() {
     return options;
   }, [assignableOwners.data, ownerUserId, user?.id]);
   const activeFilterCount = countActiveFilters([
-    budgetTypeId,
+    ...budgetTypeIds,
+    ...completionFys,
     cpcInvolved,
     dateFrom,
     dateTo,
-    departmentId,
-    entityId,
+    ...departmentIds,
+    ...entityIds,
     isDelayed,
-    natureOfWorkId,
+    loiAwarded,
+    ...natureOfWorkIds,
     ownerUserId,
     priorityCase,
-    status,
-    tenderTypeId,
-    valueSlab,
+    ...prReceiptMonths,
+    ...statusValues,
+    ...tenderTypeIds,
+    ...valueSlabs,
   ]);
 
   const filterChips = useMemo(() => {
     const chips: Array<{ key: string; label: string; onClear: () => void }> = [];
-    if (status) chips.push({ key: "status", label: `Status: ${status}`, onClear: () => setStatus("") });
-    if (entityId) {
-      const entity = entities.data?.find((e) => e.id === entityId);
-      chips.push({ key: "entity", label: `Entity: ${entity?.code ?? entityId}`, onClear: () => { setEntityId(""); setDepartmentId(""); setOwnerUserId(""); } });
+    if (statusValues.length) chips.push({ key: "status", label: `Status: ${statusValues.join(", ")}`, onClear: () => setStatusValues([]) });
+    if (entityIds.length) {
+      chips.push({ key: "entity", label: `Entity: ${labelSelected(entityIds, entities.data?.map((e) => ({ label: e.code, value: e.id })) ?? [])}`, onClear: () => { setEntityIds([]); setDepartmentIds([]); setOwnerUserId(""); } });
     }
-    if (departmentId) {
-      const dept = departments.data?.find((d) => d.id === departmentId);
-      chips.push({ key: "dept", label: `Dept: ${dept?.name ?? departmentId}`, onClear: () => setDepartmentId("") });
+    if (departmentIds.length) {
+      chips.push({ key: "dept", label: `Dept: ${labelSelected(departmentIds, departments.data?.map((d) => ({ label: d.name, value: d.id })) ?? [])}`, onClear: () => setDepartmentIds([]) });
     }
     if (ownerUserId) {
       const owner = ownerOptions.find((o) => o.value === ownerUserId);
       chips.push({ key: "owner", label: `Owner: ${owner?.label ?? ownerUserId}`, onClear: () => setOwnerUserId("") });
     }
-    if (tenderTypeId) {
-      const tt = catalog.data?.tenderTypes.find((t) => t.id === tenderTypeId);
-      chips.push({ key: "tenderType", label: `Type: ${tt?.name ?? tenderTypeId}`, onClear: () => setTenderTypeId("") });
+    if (tenderTypeIds.length) {
+      chips.push({ key: "tenderType", label: `Type: ${labelSelected(tenderTypeIds, catalog.data?.tenderTypes.map((t) => ({ label: t.name, value: t.id })) ?? [])}`, onClear: () => setTenderTypeIds([]) });
     }
-    if (budgetTypeId) {
-      const bt = budgetTypes.find((b) => b.id === budgetTypeId);
-      chips.push({ key: "budget", label: `Budget: ${bt?.label ?? budgetTypeId}`, onClear: () => setBudgetTypeId("") });
+    if (budgetTypeIds.length) {
+      chips.push({ key: "budget", label: `Budget: ${labelSelected(budgetTypeIds, budgetTypes.map((b) => ({ label: b.label, value: b.id })))}`, onClear: () => setBudgetTypeIds([]) });
     }
-    if (natureOfWorkId) {
-      const nw = natureOfWork.find((n) => n.id === natureOfWorkId);
-      chips.push({ key: "nature", label: `Nature: ${nw?.label ?? natureOfWorkId}`, onClear: () => setNatureOfWorkId("") });
+    if (natureOfWorkIds.length) {
+      chips.push({ key: "nature", label: `Nature: ${labelSelected(natureOfWorkIds, natureOfWork.map((n) => ({ label: n.label, value: n.id })))}`, onClear: () => setNatureOfWorkIds([]) });
     }
     if (priorityCase) chips.push({ key: "priority", label: priorityCase === "true" ? "Priority" : "Not Priority", onClear: () => setPriorityCase("") });
     if (isDelayed) chips.push({ key: "delayed", label: isDelayed === "true" ? "Delayed" : "On Track", onClear: () => setIsDelayed("") });
     if (cpcInvolved) chips.push({ key: "cpc", label: cpcInvolved === "true" ? "CPC: Yes" : "CPC: No", onClear: () => setCpcInvolved("") });
+    if (loiAwarded) chips.push({ key: "loi", label: loiAwarded === "true" ? "LOI Awarded" : "LOI Not Awarded", onClear: () => setLoiAwarded("") });
     if (dateFrom) chips.push({ key: "dateFrom", label: `From: ${dateFrom}`, onClear: () => setDateFrom("") });
     if (dateTo) chips.push({ key: "dateTo", label: `To: ${dateTo}`, onClear: () => setDateTo("") });
-    if (valueSlab) {
-      const vsl = valueSlabOptions.find((o) => o.value === valueSlab);
-      chips.push({ key: "valueSlab", label: `Value: ${vsl?.label ?? valueSlab}`, onClear: () => setValueSlab("") });
-    }
+    if (prReceiptMonths.length) chips.push({ key: "prMonths", label: `PR Month: ${prReceiptMonths.join(", ")}`, onClear: () => setPrReceiptMonths([]) });
+    if (completionFys.length) chips.push({ key: "completionFy", label: `Comp. FY: ${completionFys.join(", ")}`, onClear: () => setCompletionFys([]) });
+    if (valueSlabs.length) chips.push({ key: "valueSlab", label: `Value: ${labelSelected(valueSlabs, valueSlabOptions.filter((o) => o.value) as Array<{ label: string; value: string }> )}`, onClear: () => setValueSlabs([]) });
     return chips;
-  }, [status, entityId, entities.data, departmentId, departments.data, ownerUserId, ownerOptions, tenderTypeId, catalog.data, budgetTypeId, budgetTypes, natureOfWorkId, natureOfWork, priorityCase, isDelayed, cpcInvolved, dateFrom, dateTo, valueSlab]);
+  }, [budgetTypeIds, budgetTypes, catalog.data, completionFys, cpcInvolved, dateFrom, dateTo, departmentIds, departments.data, entityIds, entities.data, isDelayed, loiAwarded, natureOfWork, natureOfWorkIds, ownerUserId, ownerOptions, prReceiptMonths, priorityCase, statusValues, tenderTypeIds, valueSlabs]);
+  const caseRows = cases.data ?? [];
+  const entityFilterOptions = useMemo(
+    () => uniqueFilterOptions(caseRows, (row) => entityNameById.get(row.entityId) ?? row.entityId),
+    [caseRows, entityNameById],
+  );
+  const tenderTypeFilterOptions = useMemo(
+    () => uniqueFilterOptions(caseRows, (row) => row.tenderTypeName ?? "-"),
+    [caseRows],
+  );
+  const departmentFilterOptions = useMemo(
+    () => uniqueFilterOptions(caseRows, (row) => row.departmentName ?? "-"),
+    [caseRows],
+  );
+  const ownerFilterOptions = useMemo(
+    () => uniqueFilterOptions(caseRows, (row) => row.ownerFullName ?? "-"),
+    [caseRows],
+  );
+  const stageFilterOptions = useMemo(
+    () => uniqueFilterOptions(caseRows, (row) => formatCaseStage(row.stageCode)),
+    [caseRows],
+  );
+  const normativeStageFilterOptions = useMemo(
+    () => uniqueFilterOptions(caseRows, (row) => row.desiredStageCode == null ? "-" : formatCaseStage(row.desiredStageCode)),
+    [caseRows],
+  );
+  const completionFyFilterOptions = useMemo(
+    () => uniqueFilterOptions(caseRows, (row) => row.completionFy ?? "-"),
+    [caseRows],
+  );
 
   const allColumns = useMemo<Array<VirtualTableColumn<CaseListItem> & { key: CaseColumnKey }>>(
     () => [
-      {
-        key: "select",
-        header: "",
-        render: (row) => (
-          <input
-            aria-label={`Select case ${row.prId}`}
-            checked={selectedCaseIds.includes(row.id)}
-            onChange={(event) => toggleCaseSelection(row.id, event.target.checked)}
-            type="checkbox"
-          />
-        ),
-      },
       { key: "prId", header: "Case ID", render: (row) => row.prId },
-      { key: "entity", header: "Entity", render: (row) => entityNameById.get(row.entityId) ?? row.entityId },
       { key: "description", header: "Description", render: (row) => row.prDescription ?? row.tenderName ?? "-" },
+      { key: "entity", filterOptions: entityFilterOptions, filterValue: (row) => entityNameById.get(row.entityId) ?? row.entityId, header: "Entity", render: (row) => entityNameById.get(row.entityId) ?? row.entityId },
+      { key: "tenderType", filterOptions: tenderTypeFilterOptions, filterValue: (row) => row.tenderTypeName ?? "-", header: "Type", render: (row) => row.tenderTypeName ?? "-" },
+      { key: "department", filterOptions: departmentFilterOptions, filterValue: (row) => row.departmentName ?? "-", header: "Dept", render: (row) => row.departmentName ?? "-" },
+      { key: "owner", filterOptions: ownerFilterOptions, filterValue: (row) => row.ownerFullName ?? "-", header: "Tender Owner", render: (row) => row.ownerFullName ?? "-" },
+      { key: "prValue", header: "PR Value / Approved Budget", render: (row) => formatMoney(row.prValue) },
+      { key: "approvedAmount", header: "NFA Approved", render: (row) => formatMoney(row.approvedAmount) },
+      { key: "savingsWrtPr", header: "Savings vs PR / Approved Budget", render: (row) => formatMoney(row.savingsWrtPr) },
+      { key: "savingsWrtEstimate", header: "Savings vs Estimate / Benchmark", render: (row) => formatMoney(row.savingsWrtEstimate) },
+      { key: "stage", filterOptions: stageFilterOptions, filterValue: (row) => formatCaseStage(row.stageCode), header: "Tender Stage", render: (row) => formatCaseStage(row.stageCode) },
+      { key: "normativeStage", filterOptions: normativeStageFilterOptions, filterValue: (row) => row.desiredStageCode == null ? "-" : formatCaseStage(row.desiredStageCode), header: "Normative Stage", render: (row) => row.desiredStageCode == null ? "-" : formatCaseStage(row.desiredStageCode) },
+      { key: "percentTimeElapsed", header: "% Time Elapsed", render: (row) => formatPercent(row.percentTimeElapsed) },
+      { key: "runAge", header: "Run Age", render: (row) => formatDays(row.runningAgeDays) },
+      { key: "cycleTime", header: "Cycle Time", render: (row) => formatDays(row.cycleTimeDays) },
       {
         key: "status",
+        filterOptions: [
+          { label: "Running", value: "running" },
+          { label: "Completed", value: "completed" },
+        ],
+        filterValue: (row) => row.status,
         header: "Status",
         render: (row) => <StatusBadge tone={row.status === "completed" ? "success" : "warning"}>{row.status}</StatusBadge>,
       },
-      { key: "stage", header: "Stage", render: (row) => formatCaseStage(row.stageCode) },
-      {
-        key: "flags",
-        header: "Flags",
-        render: (row) => (
-          <span className="row-actions">
-            {isCaseOverdue(row) ? <StatusBadge tone="danger">Overdue</StatusBadge> : null}
-            {row.priorityCase ? <StatusBadge tone="warning">Priority</StatusBadge> : null}
-            {row.isDelayed ? <StatusBadge tone="danger">Delayed</StatusBadge> : null}
-            {row.cpcInvolved ? <StatusBadge>CPC</StatusBadge> : null}
-            {!isCaseOverdue(row) && !row.priorityCase && !row.isDelayed && !row.cpcInvolved ? "-" : null}
-          </span>
-        ),
-      },
+      { key: "completionFy", filterOptions: completionFyFilterOptions, filterValue: (row) => row.completionFy ?? "-", header: "Comp. FY", render: (row) => row.completionFy ?? "-" },
       { key: "updated", header: "Updated", render: (row) => new Date(row.updatedAt).toLocaleDateString() },
       {
         key: "actions",
@@ -432,37 +485,26 @@ function CasesWorkspaceList() {
           <span className="row-actions case-grid-actions">
             <IconButton
               aria-label={`Preview ${row.prId}`}
-              onClick={() => setPreviewCaseId(row.id)}
-              tooltip="Preview"
+              onClick={(event) => {
+                event.stopPropagation();
+                setPreviewCaseId(row.id);
+              }}
+              tooltip="Preview case"
             >
               <PanelRightOpen size={15} />
-            </IconButton>
-            {canPotentiallyUpdateCaseFromList(user, row) ? (
-            <IconButton
-              aria-label={`Edit ${row.prId}`}
-              onClick={() => setEditCaseId(row.id)}
-              tooltip="Edit"
-            >
-              <Pencil size={15} />
-            </IconButton>
-            ) : null}
-            <IconButton
-              aria-label={`Open ${row.prId}`}
-              onClick={() => navigateToAppPath(`/cases/${row.id}`)}
-              tooltip="Open"
-            >
-              <ExternalLink size={15} />
             </IconButton>
           </span>
         ),
       },
     ],
-    [entityNameById, selectedCaseIds, user],
+    [completionFyFilterOptions, departmentFilterOptions, entityFilterOptions, entityNameById, normativeStageFilterOptions, ownerFilterOptions, stageFilterOptions, tenderTypeFilterOptions],
   );
   const columns = useMemo(
     () => allColumns.filter((column) => visibleColumnKeys.includes(column.key)),
     [allColumns, visibleColumnKeys],
   );
+  const prReceiptMonthOptions = useMemo(() => buildRecentMonthOptions(), []);
+  const completionFyOptions = useMemo(() => buildCompletionFyOptions(), []);
   const deletedCaseColumns = useMemo<Array<VirtualTableColumn<DeletedCaseListItem>>>(
     () => [
       { key: "prId", header: "Case ID", render: (row) => row.prId },
@@ -494,24 +536,13 @@ function CasesWorkspaceList() {
       <PageHeader
         actions={
           <>
-            <Button onClick={() => setIsFilterOpen(true)}>
+            <Button onClick={() => setIsFilterOpen((open) => !open)}>
               <SlidersHorizontal size={16} />
               Filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
+              {isFilterOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
             </Button>
             <Button variant="secondary" onClick={() => setIsColumnMenuOpen(true)}>
               Columns
-            </Button>
-            <Button variant="secondary" onClick={() => exportCurrentView(cases.data ?? [], columns)}>
-              <Download size={16} />
-              Export Page
-            </Button>
-            <Button
-              disabled={selectedRows.length === 0}
-              variant="secondary"
-              onClick={() => exportCurrentView(selectedRows, columns)}
-            >
-              <Download size={16} />
-              Export Selected{selectedRows.length ? ` (${selectedRows.length})` : ""}
             </Button>
             {canCreate ? <Button onClick={() => setIsCreateOpen(true)}>New Case</Button> : null}
           </>
@@ -568,169 +599,113 @@ function CasesWorkspaceList() {
         </div>
       ) : null}
 
-      <FilterDrawer
-        actions={
-          <>
-            <Button variant="secondary" onClick={clearFilters}>
-              Clear All
-            </Button>
-            <Button onClick={() => setIsFilterOpen(false)}>Done</Button>
-          </>
-        }
-        isOpen={isFilterOpen}
-        onClose={() => setIsFilterOpen(false)}
-        title="Case Filters"
-      >
-        <section className="filter-drawer-section">
-          <h3>Saved Views</h3>
-          <FormField label="Apply View">
-            <Select
-              onChange={(event) => {
-                const view = savedViews.find((item) => item.id === event.target.value);
-                if (view) applySavedView(view);
-              }}
-              options={savedViews.map((view) => ({ label: view.name, value: view.id }))}
-              placeholder="Select Saved View"
-              value=""
-            />
-          </FormField>
-          <div className="form-action-inline">
-            <FormField label="View Name">
-              <TextInput onChange={(event) => setSavedViewName(event.target.value)} value={savedViewName} />
-            </FormField>
-            <Button disabled={!savedViewName.trim()} onClick={saveCurrentView} size="sm">
-              <Save size={14} />
-              Save
-            </Button>
+      {isFilterOpen ? (
+        <section className="state-panel case-filter-panel" aria-label="Case filters">
+          <div className="case-filter-panel-header">
+            <div>
+              <p className="eyebrow">Filters</p>
+              <h2>Cases</h2>
+            </div>
+            <div className="case-filter-panel-actions">
+              <Button variant="secondary" onClick={clearFilters}>Clear</Button>
+              <Button onClick={() => setIsFilterOpen(false)}>Apply</Button>
+            </div>
           </div>
-        </section>
 
-        <section className="filter-drawer-section">
-          <h3>Status &amp; Flags</h3>
-          <FormField label="Status">
-            <Select
-              onChange={(event) => setStatus(event.target.value)}
-              options={[
-                { label: "Running", value: "running" },
-                { label: "Completed", value: "completed" },
-              ]}
-              placeholder="All"
-              value={status}
-            />
-          </FormField>
-          <FormField label="Priority">
-            <Select
-              onChange={(event) => setPriorityCase(toBooleanFilter(event.target.value))}
-              options={[
-                { label: "Priority Only", value: "true" },
-                { label: "Normal Only", value: "false" },
-              ]}
-              placeholder="All"
-              value={priorityCase}
-            />
-          </FormField>
-          <FormField label="Delay Status">
-            <Select
-              onChange={(event) => setIsDelayed(toBooleanFilter(event.target.value))}
-              options={[
-                { label: "Delayed", value: "true" },
-                { label: "On Track", value: "false" },
-              ]}
-              placeholder="All"
-              value={isDelayed}
-            />
-          </FormField>
-          <FormField label="CPC Involvement">
-            <Select
-              onChange={(event) => setCpcInvolved(toBooleanFilter(event.target.value))}
-              options={[
-                { label: "Yes", value: "true" },
-                { label: "No", value: "false" },
-              ]}
-              placeholder="All"
-              value={cpcInvolved}
-            />
-          </FormField>
-        </section>
-
-        <section className="filter-drawer-section">
-          <h3>People &amp; Location</h3>
-          <FormField label="Entity">
-            <Select
+          <div className="case-filter-grid">
+            <MultiSelectFilter
               disabled={entities.isLoading}
-              onChange={(event) => {
-                setEntityId(event.target.value);
-                setDepartmentId("");
+              label="Entity"
+              onChange={(values) => {
+                setEntityIds(values);
+                setDepartmentIds([]);
                 setOwnerUserId("");
               }}
-              options={(entities.data ?? []).map((entity) => ({
-                label: `${entity.code} - ${entity.name}`,
-                value: entity.id,
-              }))}
-              placeholder="All"
-              value={entityId}
+              options={(entities.data ?? []).map((entity) => ({ label: `${entity.code} - ${entity.name}`, value: entity.id }))}
+              value={entityIds}
             />
-          </FormField>
-          <FormField label="Department">
-            <Select
-              disabled={!entityId || departments.isLoading}
-              onChange={(event) => setDepartmentId(event.target.value)}
-              options={(departments.data ?? []).map((department) => ({
-                label: department.name,
-                value: department.id,
-              }))}
-              placeholder={entityId ? "All" : "Select Entity First"}
-              value={departmentId}
+            <MultiSelectFilter
+              disabled={entityIds.length !== 1 || departments.isLoading}
+              label="Department"
+              onChange={setDepartmentIds}
+              options={(departments.data ?? []).map((department) => ({ label: department.name, value: department.id }))}
+              value={departmentIds}
             />
-          </FormField>
-          <FormField label="Case Owner">
-            <Select
-              disabled={!entityId || assignableOwners.isLoading}
-              onChange={(event) => setOwnerUserId(event.target.value)}
-              options={ownerOptions}
-              placeholder={entityId ? "All" : "Select Entity First"}
-              value={ownerUserId}
-            />
-          </FormField>
-        </section>
-
-        <section className="filter-drawer-section">
-          <h3>Classification</h3>
-          <FormField label="Tender Type">
-            <Select
+            <MultiSelectFilter
               disabled={catalog.isLoading}
-              onChange={(event) => setTenderTypeId(event.target.value)}
-              options={(catalog.data?.tenderTypes ?? []).map((tenderType) => ({
-                label: tenderType.name,
-                value: tenderType.id,
-              }))}
-              placeholder="All"
-              value={tenderTypeId}
+              label="Tender Type"
+              onChange={setTenderTypeIds}
+              options={(catalog.data?.tenderTypes ?? []).map((tenderType) => ({ label: tenderType.name, value: tenderType.id }))}
+              value={tenderTypeIds}
             />
-          </FormField>
-          <FormField label="Budget Type">
-            <Select
+            <MultiSelectFilter
               disabled={catalog.isLoading}
-              onChange={(event) => setBudgetTypeId(event.target.value)}
-              options={budgetTypes.map((value) => ({ label: value.label, value: value.id }))}
-              placeholder="All"
-              value={budgetTypeId}
-            />
-          </FormField>
-          <FormField label="Nature of Work">
-            <Select
-              disabled={catalog.isLoading}
-              onChange={(event) => setNatureOfWorkId(event.target.value)}
+              label="Nature of Work"
+              onChange={setNatureOfWorkIds}
               options={natureOfWork.map((value) => ({ label: value.label, value: value.id }))}
-              placeholder="All"
-              value={natureOfWorkId}
+              value={natureOfWorkIds}
             />
-          </FormField>
-        </section>
-
-        <section className="filter-drawer-section" style={{ borderBottom: 0, paddingBottom: 0 }}>
-          <h3>Date &amp; Value</h3>
-          <div className="two-column">
+            <MultiSelectFilter
+              disabled={catalog.isLoading}
+              label="Budget Type"
+              onChange={setBudgetTypeIds}
+              options={budgetTypes.map((value) => ({ label: value.label, value: value.id }))}
+              value={budgetTypeIds}
+            />
+            <MultiSelectFilter
+              label="PR Receipt Month"
+              onChange={setPrReceiptMonths}
+              options={prReceiptMonthOptions}
+              value={prReceiptMonths}
+            />
+            <MultiSelectFilter
+              label="Completion FY"
+              onChange={setCompletionFys}
+              options={completionFyOptions}
+              value={completionFys}
+            />
+            <MultiSelectFilter
+              label="Value Slab"
+              onChange={(values) => setValueSlabs(values as ValueSlabOption[])}
+              options={valueSlabOptions.filter((option) => option.value) as Array<{ label: string; value: string }>}
+              value={valueSlabs}
+            />
+            <FormField label="Status">
+              <div className="case-filter-checks">
+                <Checkbox checked={statusValues.includes("running")} label="Running" onChange={(event) => setStatusValues(toggleArrayValue(statusValues, "running", event.target.checked))} />
+                <Checkbox checked={statusValues.includes("completed")} label="Completed" onChange={(event) => setStatusValues(toggleArrayValue(statusValues, "completed", event.target.checked))} />
+              </div>
+            </FormField>
+            <FormField label="Delay Status">
+              <Select
+                onChange={(event) => setIsDelayed(toBooleanFilter(event.target.value))}
+                options={[{ label: "Delayed", value: "true" }, { label: "On Time", value: "false" }]}
+                placeholder="All"
+                value={isDelayed}
+              />
+            </FormField>
+            <FormField label="Routed Through CPC">
+              <Select
+                onChange={(event) => setCpcInvolved(toBooleanFilter(event.target.value))}
+                options={[{ label: "Yes", value: "true" }, { label: "No", value: "false" }]}
+                placeholder="Any"
+                value={cpcInvolved}
+              />
+            </FormField>
+            <FormField label="LOI Awarded?">
+              <Select
+                onChange={(event) => setLoiAwarded(toBooleanFilter(event.target.value))}
+                options={[{ label: "Yes", value: "true" }, { label: "No", value: "false" }]}
+                placeholder="All"
+                value={loiAwarded}
+              />
+            </FormField>
+            <FormField label="Priority">
+              <Checkbox checked={priorityCase === "true"} label="Priority cases only" onChange={(event) => setPriorityCase(event.target.checked ? "true" : "")} />
+            </FormField>
+            <FormField label="Assigned to me">
+              <Checkbox checked={ownerUserId === user?.id} label="Assigned to me" onChange={(event) => setOwnerUserId(event.target.checked && user?.id ? user.id : "")} />
+            </FormField>
             <FormField label="PR Date From">
               <TextInput onChange={(event) => setDateFrom(event.target.value)} type="date" value={dateFrom} />
             </FormField>
@@ -738,23 +713,38 @@ function CasesWorkspaceList() {
               <TextInput onChange={(event) => setDateTo(event.target.value)} type="date" value={dateTo} />
             </FormField>
           </div>
-          <FormField label="Value Slab">
-            <Select
-              onChange={(event) => setValueSlab(toValueSlabFilter(event.target.value))}
-              options={valueSlabOptions.filter((option) => option.value)}
-              placeholder="All"
-              value={valueSlab}
-            />
-          </FormField>
+
+          <div className="case-saved-view-row">
+            <FormField label="Saved View">
+              <Select
+                onChange={(event) => {
+                  const view = savedViews.find((item) => item.id === event.target.value);
+                  if (view) applySavedView(view);
+                }}
+                options={savedViews.map((view) => ({ label: view.name, value: view.id }))}
+                placeholder="Select Saved View"
+                value=""
+              />
+            </FormField>
+            <div className="case-filter-save-view">
+              <FormField label="View Name">
+                <TextInput onChange={(event) => setSavedViewName(event.target.value)} value={savedViewName} />
+              </FormField>
+              <Button disabled={!savedViewName.trim()} onClick={saveCurrentView} size="sm">
+                <Save size={14} />
+                Save
+              </Button>
+            </div>
+          </div>
         </section>
-      </FilterDrawer>
+      ) : null}
 
       <Drawer isOpen={isColumnMenuOpen} onClose={() => setIsColumnMenuOpen(false)} title="Columns">
         <div className="filter-drawer-content">
           {allColumns.map((column) => (
             <Checkbox
               checked={visibleColumnKeys.includes(column.key)}
-              disabled={column.key === "prId" || column.key === "actions" || column.key === "select"}
+              disabled={column.key === "prId" || column.key === "actions"}
               key={column.key}
               label={column.header}
               onChange={(event) => toggleColumn(column.key, event.target.checked)}
@@ -792,12 +782,12 @@ function CasesWorkspaceList() {
             columns={columns}
             emptyMessage="No cases match the current filters."
             getRowKey={(row) => row.id}
+            onRowClick={(row) => navigateToAppPath(`/cases/${row.id}`)}
             rows={cases.data ?? []}
           />
           <div className="pagination-bar">
             <span className="pagination-info">
               Showing {(cases.data ?? []).length} cases
-              {selectedRows.length ? ` · ${selectedRows.length} selected` : ""}
             </span>
             <Button
               variant="secondary"
@@ -864,10 +854,16 @@ function CasesWorkspaceList() {
       <Drawer isOpen={Boolean(previewCaseId)} onClose={() => setPreviewCaseId(null)} title="Case Preview">
         <CaseDetailPanel
           caseId={previewCaseId}
+          onAward={() => {
+            if (previewCaseId) navigateToAppPath(`/cases/${previewCaseId}?tab=awards`);
+          }}
           onDeleted={() => setPreviewCaseId(null)}
           onEdit={() => {
             setEditCaseId(previewCaseId);
             setPreviewCaseId(null);
+          }}
+          onOpenFull={() => {
+            if (previewCaseId) navigateToAppPath(`/cases/${previewCaseId}`);
           }}
         />
       </Drawer>
@@ -875,38 +871,44 @@ function CasesWorkspaceList() {
   );
 
   function clearFilters() {
-    setBudgetTypeId("");
+    setBudgetTypeIds([]);
+    setCompletionFys([]);
     setCpcInvolved("");
     setDateFrom("");
     setDateTo("");
-    setDepartmentId("");
-    setEntityId("");
+    setDepartmentIds([]);
+    setEntityIds([]);
     setIsDelayed("");
-    setNatureOfWorkId("");
+    setLoiAwarded("");
+    setNatureOfWorkIds([]);
     setOwnerUserId("");
     setPriorityCase("");
+    setPrReceiptMonths([]);
     setQ("");
-    setStatus("");
-    setTenderTypeId("");
-    setValueSlab("");
+    setStatusValues([]);
+    setTenderTypeIds([]);
+    setValueSlabs([]);
   }
 
   function currentViewState(): CaseViewState {
     return {
-      budgetTypeId,
+      budgetTypeIds,
+      completionFys,
       cpcInvolved,
       dateFrom,
       dateTo,
-      departmentId,
-      entityId,
+      departmentIds,
+      entityIds,
       isDelayed,
-      natureOfWorkId,
+      loiAwarded,
+      natureOfWorkIds,
       ownerUserId,
       priorityCase,
+      prReceiptMonths,
       q,
-      status,
-      tenderTypeId,
-      valueSlab,
+      statusValues,
+      tenderTypeIds,
+      valueSlabs,
       visibleColumnKeys,
     };
   }
@@ -922,35 +924,130 @@ function CasesWorkspaceList() {
   }
 
   function applySavedView(view: SavedCaseView) {
-    setBudgetTypeId(view.state.budgetTypeId);
+    setBudgetTypeIds(view.state.budgetTypeIds ?? []);
+    setCompletionFys(view.state.completionFys ?? []);
     setCpcInvolved(view.state.cpcInvolved);
     setDateFrom(view.state.dateFrom);
     setDateTo(view.state.dateTo);
-    setDepartmentId(view.state.departmentId);
-    setEntityId(view.state.entityId);
+    setDepartmentIds(view.state.departmentIds ?? []);
+    setEntityIds(view.state.entityIds ?? []);
     setIsDelayed(view.state.isDelayed);
-    setNatureOfWorkId(view.state.natureOfWorkId);
+    setLoiAwarded(view.state.loiAwarded ?? "");
+    setNatureOfWorkIds(view.state.natureOfWorkIds ?? []);
     setOwnerUserId(view.state.ownerUserId);
     setPriorityCase(view.state.priorityCase);
+    setPrReceiptMonths(view.state.prReceiptMonths ?? []);
     setQ(view.state.q);
-    setStatus(view.state.status);
-    setTenderTypeId(view.state.tenderTypeId);
-    setValueSlab(view.state.valueSlab);
+    setStatusValues(view.state.statusValues ?? []);
+    setTenderTypeIds(view.state.tenderTypeIds ?? []);
+    setValueSlabs(view.state.valueSlabs ?? []);
     setVisibleColumnKeys(normalizeColumnKeys(view.state.visibleColumnKeys));
   }
 
   function toggleColumn(columnKey: CaseColumnKey, isVisible: boolean) {
-    if (columnKey === "prId" || columnKey === "actions" || columnKey === "select") return;
+    if (columnKey === "prId" || columnKey === "actions") return;
     setVisibleColumnKeys((current) =>
       isVisible ? [...current, columnKey] : current.filter((key) => key !== columnKey),
     );
   }
+}
 
-  function toggleCaseSelection(caseId: string, isSelected: boolean) {
-    setSelectedCaseIds((current) =>
-      isSelected ? [...new Set([...current, caseId])] : current.filter((id) => id !== caseId),
-    );
-  }
+type FilterOption = {
+  label: string;
+  value: string;
+};
+
+function MultiSelectFilter({
+  disabled,
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  disabled?: boolean;
+  label: string;
+  onChange: (value: string[]) => void;
+  options: FilterOption[];
+  value: string[];
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const selectedLabel = selectedFilterLabel(value, options);
+  const visibleOptions = options.filter((option) => option.label.toLowerCase().includes(query.trim().toLowerCase()));
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen]);
+
+  return (
+    <FormField label={label}>
+      <div className="multi-select-dropdown">
+        <button
+          aria-expanded={isOpen}
+          className="multi-select-trigger"
+          disabled={disabled}
+          onBlur={(event) => {
+            if (!event.currentTarget.parentElement?.contains(event.relatedTarget as Node | null)) {
+              setIsOpen(false);
+            }
+          }}
+          onClick={() => setIsOpen((open) => !open)}
+          type="button"
+        >
+          <span>{selectedLabel}</span>
+          <ChevronDown size={16} />
+        </button>
+        {isOpen ? (
+          <div
+            className="multi-select-menu"
+            onBlur={(event) => {
+              if (!event.currentTarget.parentElement?.contains(event.relatedTarget as Node | null)) {
+                setIsOpen(false);
+              }
+            }}
+          >
+            <div className="multi-select-menu-actions">
+              <button disabled={options.length === 0} onClick={() => onChange(options.map((option) => option.value))} type="button">
+                Select all
+              </button>
+              <button disabled={value.length === 0} onClick={() => onChange([])} type="button">
+                Clear
+              </button>
+              <span>{value.length ? `${value.length} selected` : "All"}</span>
+            </div>
+            {options.length > 6 ? (
+              <TextInput
+                autoFocus
+                aria-label={`Search ${label}`}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search..."
+                value={query}
+              />
+            ) : null}
+            <div className="multi-select-options">
+              {visibleOptions.length ? (
+                visibleOptions.map((option) => (
+                  <Checkbox
+                    checked={value.includes(option.value)}
+                    key={option.value}
+                    label={option.label}
+                    onChange={(event) => onChange(toggleArrayValue(value, option.value, event.target.checked))}
+                  />
+                ))
+              ) : (
+                <span className="multi-select-empty">No options found.</span>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </FormField>
+  );
 }
 
 function booleanFilter(value: BooleanFilter) {
@@ -967,12 +1064,68 @@ function toStatusFilter(value: string | null): string {
   return value === "running" || value === "completed" ? value : "";
 }
 
-function toValueSlabFilter(value: string): ValueSlabFilter {
-  return value === "lt_10l" || value === "10l_1cr" || value === "1cr_10cr" || value === "gte_10cr" ? value : "";
-}
-
 function countActiveFilters(values: string[]) {
   return values.filter(Boolean).length;
+}
+
+function toggleArrayValue<T extends string>(values: T[], value: T, checked: boolean): T[] {
+  return checked ? [...new Set([...values, value])] : values.filter((item) => item !== value);
+}
+
+function labelSelected(values: string[], options: FilterOption[]): string {
+  if (values.length === 0) return "All";
+  if (values.length === options.length && options.length > 0) return "All";
+  const labels = values.map((value) => options.find((option) => option.value === value)?.label ?? value);
+  return labels.length > 2 ? `${labels.slice(0, 2).join(", ")} +${labels.length - 2}` : labels.join(", ");
+}
+
+function selectedFilterLabel(values: string[], options: FilterOption[]): string {
+  if (!values.length) return "All";
+  if (values.length === options.length && options.length > 0) return "All selected";
+  const labels = values.map((selected) => options.find((option) => option.value === selected)?.label ?? selected);
+  if (labels.length > 2) return `${labels.length} selected`;
+  return labels.join(", ");
+}
+
+function uniqueFilterOptions<TRow>(rows: TRow[], getValue: (row: TRow) => string): FilterOption[] {
+  return [...new Set(rows.map((row) => getValue(row)).filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" }))
+    .map((value) => ({ label: value, value: value.toLowerCase() }));
+}
+
+function formatMoney(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) return "-";
+  return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(value);
+}
+
+function formatDays(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) return "-";
+  return String(Math.round(value));
+}
+
+function formatPercent(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) return "-";
+  return `${Math.round(value)}%`;
+}
+
+function buildRecentMonthOptions(): FilterOption[] {
+  const options: FilterOption[] = [];
+  const current = new Date();
+  for (let index = 0; index < 18; index += 1) {
+    const date = new Date(current.getFullYear(), current.getMonth() - index, 1);
+    const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    options.push({ label: value, value });
+  }
+  return options;
+}
+
+function buildCompletionFyOptions(): FilterOption[] {
+  const year = new Date().getFullYear();
+  return Array.from({ length: 6 }, (_, index) => {
+    const start = year - 2 + index;
+    const value = `${start}-${start + 1}`;
+    return { label: value, value };
+  });
 }
 
 function buildCaseCursor(row: CaseListItem) {
@@ -1008,71 +1161,11 @@ function normalizeColumnKeys(value: unknown): CaseColumnKey[] {
   const allowedKeys = new Set(defaultVisibleColumnKeys);
   if (!Array.isArray(value)) return defaultVisibleColumnKeys;
   const keys = value.filter((key): key is CaseColumnKey => typeof key === "string" && allowedKeys.has(key as CaseColumnKey));
-  const requiredKeys = ["select", "prId", "actions"] satisfies CaseColumnKey[];
+  const requiredKeys = ["prId", "actions"] satisfies CaseColumnKey[];
   for (const key of requiredKeys) {
     if (!keys.includes(key)) keys.push(key);
   }
   return keys.length ? keys : defaultVisibleColumnKeys;
-}
-
-function exportCurrentView(
-  rows: CaseListItem[],
-  columns: Array<VirtualTableColumn<CaseListItem> & { key: CaseColumnKey }>,
-) {
-  const exportColumns = columns.filter((column) => column.key !== "actions" && column.key !== "select");
-  const csvRows = [
-    exportColumns.map((column) => escapeCsvValue(column.header)).join(","),
-    ...rows.map((row) =>
-      exportColumns
-        .map((column) => escapeCsvValue(caseExportValue(row, column.key)))
-        .join(","),
-    ),
-  ];
-  const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `procuredesk-cases-${todayDateOnlyString()}.csv`;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
-
-function caseExportValue(row: CaseListItem, key: CaseColumnKey) {
-  return caseExportValueByKey[key](row);
-}
-
-const caseExportValueByKey: Record<CaseColumnKey, (row: CaseListItem) => string> = {
-  actions: () => "",
-  description: (row) => row.prDescription ?? row.tenderName ?? "",
-  entity: (row) => row.entityId,
-  flags: (row) => caseExportFlags(row).join(" | "),
-  prId: (row) => row.prId,
-  select: () => "",
-  stage: (row) => formatCaseStage(row.stageCode),
-  status: (row) => row.status,
-  updated: (row) => new Date(row.updatedAt).toLocaleDateString(),
-};
-
-function caseExportFlags(row: CaseListItem): string[] {
-  return [
-    isCaseOverdue(row) ? "Overdue" : "",
-    row.priorityCase ? "Priority" : "",
-    row.isDelayed ? "Delayed" : "",
-    row.cpcInvolved ? "CPC" : "",
-  ].filter(Boolean);
-}
-
-function isCaseOverdue(row: Pick<CaseListItem, "status" | "tentativeCompletionDate">) {
-  const targetDate = toDateOnlyInputValue(row.tentativeCompletionDate);
-  return Boolean(
-    row.status === "running" &&
-      targetDate &&
-      targetDate < todayDateOnlyString(),
-  );
-}
-
-function escapeCsvValue(value: string) {
-  return `"${value.replace(/"/g, '""')}"`;
 }
 
 function parseCaseIdFromPath(pathname: string): string | null {

@@ -26,6 +26,7 @@ import { AwardsPanel } from "../../awards/components/AwardsPanel";
 import { UpdateCasePanel } from "../components/UpdateCasePanel";
 import { deleteCase, getCase, type CaseDetail } from "../api/casesApi";
 import { useAuth } from "../../../shared/auth/AuthProvider";
+import { useAppLocation } from "../../../shared/routing/appLocation";
 import {
   canAssignCaseOwner,
   canDeleteCase,
@@ -84,9 +85,11 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { notify } = useToast();
+  const location = useAppLocation();
   const [deleteReason, setDeleteReason] = useState("");
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<CaseDetailTabKey>("overview");
+  const requestedTab = caseDetailTabFromSearch(location.search);
+  const [activeTab, setActiveTab] = useState<CaseDetailTabKey>(requestedTab ?? "overview");
 
   const canDelete = canDeleteCase(user);
   const hasAuditAccess = canReadAudit(user);
@@ -109,6 +112,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
         canManageCaseDelay(user, detail.data) ||
         canAssignCaseOwner(user, detail.data)),
   );
+  const canViewDelay = Boolean(detail.data && canManageCaseDelay(user, detail.data));
   const isCompletedCase = detail.data?.status === "completed";
   const visibleTabs = useMemo<Array<SecondaryNavItem<CaseDetailTabKey>>>(
     () =>
@@ -134,6 +138,10 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
       setActiveTab("overview");
     }
   }, [activeTab, detail.data, visibleTabs]);
+
+  useEffect(() => {
+    if (requestedTab) setActiveTab(requestedTab);
+  }, [requestedTab]);
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteCase(caseId, deleteReason.trim() || null),
@@ -456,24 +464,26 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
               />
             </SectionCard>
 
-            <SectionCard
-              title="Delay Tracking"
-              badge={
-                kase.isDelayed ? (
-                  <StatusBadge tone="danger">
-                    <TriangleAlert size={11} />
-                    {kase.delay.delayExternalDays ? `${kase.delay.delayExternalDays}d delay` : "Delayed"}
-                  </StatusBadge>
-                ) : (
-                  <StatusBadge tone="success">On Track</StatusBadge>
-                )
-              }
-            >
-              <div className="case-info-list">
-                <InfoRow label="External Delay Days" value={String(kase.delay.delayExternalDays ?? 0)} />
-                <InfoRow label="Delay Reason" value={kase.delay.delayReason ?? "—"} />
-              </div>
-            </SectionCard>
+            {canViewDelay ? (
+              <SectionCard
+                title="Delay Tracking"
+                badge={
+                  kase.isDelayed ? (
+                    <StatusBadge tone="danger">
+                      <TriangleAlert size={11} />
+                      {kase.delay.delayExternalDays ? `${kase.delay.delayExternalDays}d delay` : "Delayed"}
+                    </StatusBadge>
+                  ) : (
+                    <StatusBadge tone="success">On Track</StatusBadge>
+                  )
+                }
+              >
+                <div className="case-info-list">
+                  <InfoRow label="External Delay Days" value={String(kase.delay.delayExternalDays ?? 0)} />
+                  <InfoRow label="Delay Reason" value={kase.delay.delayReason ?? "—"} />
+                </div>
+              </SectionCard>
+            ) : null}
           </div>
         ) : null}
 
@@ -743,6 +753,13 @@ function activityTone(action: string): "danger" | "neutral" | "success" | "warni
   if (action.includes("restore") || action.includes("create")) return "success";
   if (action.includes("delay")) return "warning";
   return "neutral";
+}
+
+function caseDetailTabFromSearch(search: string): CaseDetailTabKey | null {
+  const value = new URLSearchParams(search).get("tab");
+  return value === "activity" || value === "awards" || value === "overview" || value === "timeline" || value === "update"
+    ? value
+    : null;
 }
 
 function isOverdue(kase: CaseDetail) {

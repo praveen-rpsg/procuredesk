@@ -26,6 +26,7 @@ import {
 } from "../../../shared/auth/permissions";
 import { formatDateOnly, todayDateOnlyString, toDateOnlyInputValue } from "../../../shared/utils/dateOnly";
 import { formatCaseStage } from "../../../shared/utils/caseStage";
+import { navigateToAppPath } from "../../../shared/routing/appLocation";
 import { Button } from "../../../shared/ui/button/Button";
 import { ErrorState } from "../../../shared/ui/error-state/ErrorState";
 import { Checkbox } from "../../../shared/ui/form/Checkbox";
@@ -50,31 +51,19 @@ type DashboardPageProps = {
   onNavigate?: (target: DashboardTarget) => void;
 };
 
-const caseColumns: DataTableColumn<CaseListItem>[] = [
-  { key: "pr", header: "Case ID", render: (row) => row.prId },
-  { key: "description", header: "Description", render: (row) => row.prDescription ?? row.tenderName ?? "-" },
-  { key: "stage", header: "Stage", render: (row) => formatCaseStage(row.stageCode) },
-  {
-    key: "flags",
-    header: "Flags",
-    render: (row) => (
-      <div className="row-actions">
-        {isCaseOverdue(row) ? <StatusBadge tone="danger">Overdue</StatusBadge> : null}
-        {row.isDelayed ? <StatusBadge tone="danger">Delayed</StatusBadge> : null}
-        {row.priorityCase ? <StatusBadge tone="warning">Priority</StatusBadge> : null}
-        {!isCaseOverdue(row) && !row.isDelayed && !row.priorityCase ? <StatusBadge>Normal</StatusBadge> : null}
-      </div>
-    ),
-  },
-  { key: "updated", header: "Updated", render: (row) => new Date(row.updatedAt).toLocaleDateString() },
-];
-
 const expiryColumns: DataTableColumn<RcPoExpiryRow>[] = [
   { key: "contract", header: "Contract", render: (row) => row.tenderDescription ?? row.sourceId },
   { key: "vendors", header: "Vendors", render: (row) => row.awardedVendors ?? "-" },
   { key: "validity", header: "Valid Till", render: (row) => formatDateOnly(row.rcPoValidityDate) },
   {
     key: "urgency",
+    filterOptions: [
+      { label: "Critical", value: "critical" },
+      { label: "Expired", value: "expired" },
+      { label: "Warning", value: "warning" },
+      { label: "Normal", value: "normal" },
+    ],
+    filterValue: (row) => row.urgency,
     header: "Urgency",
     render: (row) => <StatusBadge tone={urgencyTone(row.urgency)}>{row.urgency}</StatusBadge>,
   },
@@ -104,6 +93,19 @@ function getGreeting(hour: number): string {
 function percentage(value: number, total: number): number {
   if (!total) return 0;
   return Math.round((value / total) * 100);
+}
+
+function caseFlagLabel(row: CaseListItem): string {
+  if (isCaseOverdue(row)) return "Overdue";
+  if (row.isDelayed) return "Delayed";
+  if (row.priorityCase) return "Priority";
+  return "Normal";
+}
+
+function uniqueFilterOptions<TRow>(rows: TRow[], getValue: (row: TRow) => string) {
+  return [...new Set(rows.map((row) => getValue(row)).filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" }))
+    .map((value) => ({ label: value, value: value.toLowerCase() }));
 }
 
 function TableSkeleton({ rows = 4 }: { rows?: number }) {
@@ -163,8 +165,36 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const runningRate = percentage(metrics.running, metrics.total);
   const riskCount = metrics.risk;
   const riskRate = percentage(riskCount, metrics.running);
+  const focusedCaseRows = focusedCases.data ?? [];
+  const caseColumns: DataTableColumn<CaseListItem>[] = [
+    { key: "pr", header: "Case ID", render: (row) => row.prId },
+    { key: "description", header: "Description", render: (row) => row.prDescription ?? row.tenderName ?? "-" },
+    {
+      key: "stage",
+      filterOptions: uniqueFilterOptions(focusedCaseRows, (row) => formatCaseStage(row.stageCode)),
+      filterValue: (row) => formatCaseStage(row.stageCode),
+      header: "Stage",
+      render: (row) => formatCaseStage(row.stageCode),
+    },
+    {
+      key: "flags",
+      filterOptions: uniqueFilterOptions(focusedCaseRows, caseFlagLabel),
+      filterValue: caseFlagLabel,
+      header: "Flags",
+      render: (row) => (
+        <div className="row-actions">
+          {isCaseOverdue(row) ? <StatusBadge tone="danger">Overdue</StatusBadge> : null}
+          {row.isDelayed ? <StatusBadge tone="danger">Delayed</StatusBadge> : null}
+          {row.priorityCase ? <StatusBadge tone="warning">Priority</StatusBadge> : null}
+          {!isCaseOverdue(row) && !row.isDelayed && !row.priorityCase ? <StatusBadge>Normal</StatusBadge> : null}
+        </div>
+      ),
+    },
+    { key: "updated", header: "Updated", render: (row) => new Date(row.updatedAt).toLocaleDateString() },
+  ];
   const dashboardActions = [
     {
+      description: "Create a fresh PR allocation with the core case details.",
       icon: FilePlus2,
       isVisible: hasCreateAccess,
       label: "Add New Case",
@@ -172,6 +202,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       tone: "primary",
     },
     {
+      description: "Open the case list and update milestones, allocations, or awards.",
       icon: FilePenLine,
       isVisible: hasCaseAccess,
       label: "Update Existing Case",
@@ -179,6 +210,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       tone: "neutral",
     },
     {
+      description: "Manage RC/PO expiry, bulk upload, and planned tenders.",
       icon: CalendarClock,
       isVisible: hasPlanningAccess,
       label: "Tender Planning",
@@ -186,6 +218,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       tone: "planning",
     },
     {
+      description: "Review portfolio reports and export procurement data.",
       icon: BarChart3,
       isVisible: hasReportAccess,
       label: "Reports",
@@ -193,6 +226,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       tone: "report",
     },
   ] satisfies Array<{
+    description: string;
     icon: typeof FilePlus2;
     isVisible: boolean;
     label: string;
@@ -256,24 +290,29 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             {greeting}, {firstName}
           </h1>
           <p>{todayFormatted} · Track cases, risks, expiry exposure, and import operations from one focused workspace.</p>
-          <div className="dashboard-hero-actions" aria-label="Dashboard actions">
-            {dashboardActions
-              .filter((action) => action.isVisible)
-              .map((action) => {
-                const Icon = action.icon;
-                return (
-                  <Button
-                    className={`dashboard-command-button dashboard-command-button-${action.tone}`}
-                    key={action.target}
-                    onClick={() => onNavigate?.(action.target)}
-                    size="lg"
-                    variant={action.tone === "primary" ? "primary" : "secondary"}
-                  >
-                    <Icon size={18} />
-                    {action.label}
-                  </Button>
-                );
-              })}
+          <div className="dashboard-hero-metrics" aria-label="Case summary">
+            {dashboardMetrics.map((metric) => {
+              const Icon = metric.icon;
+              return (
+                <button
+                  aria-label={`Open ${metric.label} cases`}
+                  className={`metric-card dashboard-metric-card dashboard-metric-card-clickable metric-card-${metric.tone}`}
+                  disabled={!hasCaseAccess}
+                  key={metric.label}
+                  onClick={() => onNavigate?.(metric.target)}
+                  type="button"
+                >
+                  <div className="dashboard-metric-topline">
+                    <div className="metric-card-icon">
+                      <Icon size={15} />
+                    </div>
+                    {metric.progress != null ? <span className="dashboard-metric-percent">{metric.progress}%</span> : null}
+                  </div>
+                  <span>{metric.label}</span>
+                  <strong>{summary.isLoading ? <Skeleton height={22} width="60%" /> : metric.value}</strong>
+                </button>
+              );
+            })}
           </div>
         </div>
         <div className="dashboard-hero-card" aria-label="Procurement health summary">
@@ -299,35 +338,26 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         </div>
       </section>
 
-      <div className="dashboard-metrics-row">
-        {dashboardMetrics.map((metric) => {
-          const Icon = metric.icon;
-          return (
-            <button
-              aria-label={`Open ${metric.label} cases`}
-              className={`metric-card dashboard-metric-card dashboard-metric-card-clickable metric-card-${metric.tone}`}
-              disabled={!hasCaseAccess}
-              key={metric.label}
-              onClick={() => onNavigate?.(metric.target)}
-              type="button"
-            >
-              <div className="dashboard-metric-topline">
-                <div className="metric-card-icon">
-                  <Icon size={16} />
-                </div>
-                {metric.progress != null ? <span className="dashboard-metric-percent">{metric.progress}%</span> : null}
-              </div>
-              <span>{metric.label}</span>
-              <strong>{summary.isLoading ? <Skeleton height={26} width="60%" /> : metric.value}</strong>
-              <small>{metric.subLabel}</small>
-              {metric.progress != null ? (
-                <div className="dashboard-metric-bar" aria-hidden="true">
-                  <i style={{ width: `${Math.min(metric.progress, 100)}%` }} />
-                </div>
-              ) : null}
-            </button>
-          );
-        })}
+      <div className="dashboard-actions-grid" aria-label="Dashboard actions">
+        {dashboardActions
+          .filter((action) => action.isVisible)
+          .map((action) => {
+            const Icon = action.icon;
+            return (
+              <button
+                className={`dashboard-action-card dashboard-action-card-${action.tone}`}
+                key={action.target}
+                onClick={() => onNavigate?.(action.target)}
+                type="button"
+              >
+                <span className="dashboard-action-icon" aria-hidden="true">
+                  <Icon size={42} strokeWidth={1.8} />
+                </span>
+                <strong>{action.label}</strong>
+                <span>{action.description}</span>
+              </button>
+            );
+          })}
       </div>
 
       {/* Priority cases */}
@@ -358,6 +388,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             columns={caseColumns}
             emptyMessage={showDelayedCases ? "No delayed running cases." : "No priority running cases."}
             getRowKey={(row) => row.id}
+            onRowClick={(row) => navigateToAppPath(`/cases/${row.id}`)}
             rows={focusedCases.data ?? []}
           />
         )}

@@ -3,22 +3,29 @@ import {
   BarChart3,
   CalendarClock,
   CheckCircle2,
+  ChevronDown,
+  CircleDollarSign,
   Download,
   FileSpreadsheet,
   Filter,
+  Gauge,
+  Landmark,
   RefreshCw,
   Save,
   Search,
   SlidersHorizontal,
   Star,
+  TrendingUp,
+  UsersRound,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
 
 import {
   getExportDownloadUrl,
   refreshReportProjections,
   type ContractExpiryReportRow,
+  type ExportJobListItem,
   type ExportJobStatus,
   type ReportCaseRow,
   type ReportingAnalytics,
@@ -47,11 +54,10 @@ import { canExportReports } from "../../../shared/auth/permissions";
 import { formatCaseStage } from "../../../shared/utils/caseStage";
 import { Button } from "../../../shared/ui/button/Button";
 import { navigateToAppPath, useAppLocation } from "../../../shared/routing/appLocation";
-import { Drawer } from "../../../shared/ui/drawer/Drawer";
 import { ErrorState } from "../../../shared/ui/error-state/ErrorState";
-import { CheckboxList } from "../../../shared/ui/form/CheckboxList";
+import { Checkbox } from "../../../shared/ui/form/Checkbox";
 import { FormField, TextInput } from "../../../shared/ui/form/FormField";
-import { KpiTile } from "../../../shared/ui/kpi-tile/KpiTile";
+import { Select } from "../../../shared/ui/form/Select";
 import { PageHeader } from "../../../shared/ui/page-header/PageHeader";
 import { SecondaryNav } from "../../../shared/ui/secondary-nav/SecondaryNav";
 import { Skeleton } from "../../../shared/ui/skeleton/Skeleton";
@@ -94,6 +100,7 @@ export function ReportsWorkspace() {
     savedViewName,
     setSavedViewName,
     {
+      enabled: canExport,
       initialExportJobId,
       onExportCreated: (job) => navigateToAppPath(`/reports/export-jobs?jobId=${job.id}`),
     },
@@ -137,9 +144,21 @@ export function ReportsWorkspace() {
       })),
     [data.filterMetadata.data?.owners],
   );
+  const departmentOptions = useMemo(
+    () => (data.filterMetadata.data?.departments ?? []).map((department) => ({ label: department.name, value: department.id })),
+    [data.filterMetadata.data?.departments],
+  );
   const tenderTypeOptions = useMemo(
     () => (data.filterMetadata.data?.tenderTypes ?? []).map((type) => ({ label: type.name, value: type.id })),
     [data.filterMetadata.data?.tenderTypes],
+  );
+  const natureOfWorkOptions = useMemo(
+    () => (data.filterMetadata.data?.natureOfWorks ?? []).map((item) => ({ label: item.name, value: item.id })),
+    [data.filterMetadata.data?.natureOfWorks],
+  );
+  const budgetTypeOptions = useMemo(
+    () => (data.filterMetadata.data?.budgetTypes ?? []).map((item) => ({ label: item.name, value: item.id })),
+    [data.filterMetadata.data?.budgetTypes],
   );
   const stageOptions = useMemo(
     () =>
@@ -160,52 +179,161 @@ export function ReportsWorkspace() {
       (data.filterMetadata.data?.completionMonths ?? []).map((month) => ({ label: formatMonth(month), value: month })),
     [data.filterMetadata.data?.completionMonths],
   );
+  const valueSlabOptions = useMemo(
+    () => (data.filterMetadata.data?.valueSlabs ?? []).map((slab) => ({ label: slab, value: slab })),
+    [data.filterMetadata.data?.valueSlabs],
+  );
   const activeFilterCount = countActiveReportFilters(filters, statusFilterApplies);
   const activeFilterChips = buildActiveReportFilterChips(filters, {
     completionFyOptions,
     completionMonthOptions,
+    departmentOptions,
     entityOptions,
+    budgetTypeOptions,
+    natureOfWorkOptions,
     ownerOptions,
     prReceiptMonthOptions,
     stageOptions,
     statusFilterApplies,
     tenderTypeOptions,
+    valueSlabOptions,
   });
+  const caseRowsForColumnFilters = useMemo(() => {
+    if (reportCode === "running") return data.running.data ?? [];
+    if (reportCode === "completed") return data.completed.data ?? [];
+    return data.tenderDetails.data ?? [];
+  }, [data.completed.data, data.running.data, data.tenderDetails.data, reportCode]);
+  const caseColumnFilterOptions = useMemo(
+    () => ({
+      completionFy: uniqueReportFilterOptions(caseRowsForColumnFilters, (row) => row.completionFy ?? "-"),
+      department: uniqueReportFilterOptions(caseRowsForColumnFilters, (row) => row.departmentName ?? "-"),
+      entity: uniqueReportFilterOptions(caseRowsForColumnFilters, (row) => row.entityCode ?? row.entityName ?? row.entityId),
+      loi: [
+        { label: "Yes", value: "Yes" },
+        { label: "No", value: "No" },
+      ],
+      normativeStage: uniqueReportFilterOptions(caseRowsForColumnFilters, (row) =>
+        row.desiredStageCode == null ? "-" : formatCaseStage(row.desiredStageCode),
+      ),
+      owner: uniqueReportFilterOptions(caseRowsForColumnFilters, (row) => row.ownerFullName ?? "-"),
+      stage: uniqueReportFilterOptions(caseRowsForColumnFilters, (row) => formatCaseStage(row.stageCode)),
+      status: [
+        { label: "Running", value: "running" },
+        { label: "Completed", value: "completed" },
+      ],
+      tenderType: uniqueReportFilterOptions(caseRowsForColumnFilters, (row) => row.tenderTypeName ?? "-"),
+    }),
+    [caseRowsForColumnFilters],
+  );
 
   const caseColumns = useMemo<VirtualTableColumn<ReportCaseRow>[]>(
     () => [
-      { key: "pr", header: "Case ID", render: (row) => row.prId },
-      { key: "tender", header: "Tender", render: (row) => row.tenderName ?? "-" },
+      { key: "tenderNo", header: "Tender No.", render: (row) => row.tenderNo ?? row.prId },
+      { key: "description", header: "Tender Description", render: (row) => row.prDescription ?? row.tenderName ?? "-" },
+      {
+        key: "entity",
+        filterOptions: caseColumnFilterOptions.entity,
+        filterValue: (row) => row.entityCode ?? row.entityName ?? row.entityId,
+        header: "Entity",
+        render: (row) => row.entityCode ?? row.entityName ?? row.entityId,
+      },
+      {
+        key: "department",
+        filterOptions: caseColumnFilterOptions.department,
+        filterValue: (row) => row.departmentName ?? "-",
+        header: "Department",
+        render: (row) => row.departmentName ?? "-",
+      },
+      { key: "prValue", header: `PR Value / Approved Budget (${amountUnitLabel(filters.amountUnit)}) [All Inclusive]`, render: (row) => formatAmount(row.prValue, filters.amountUnit) },
+      {
+        key: "type",
+        filterOptions: caseColumnFilterOptions.tenderType,
+        filterValue: (row) => row.tenderTypeName ?? "-",
+        header: "Tender Type",
+        render: (row) => row.tenderTypeName ?? "-",
+      },
+      {
+        key: "stage",
+        filterOptions: caseColumnFilterOptions.stage,
+        filterValue: (row) => formatCaseStage(row.stageCode),
+        header: "Tender Stage",
+        render: (row) => formatCaseStage(row.stageCode),
+      },
+      {
+        key: "normativeStage",
+        filterOptions: caseColumnFilterOptions.normativeStage,
+        filterValue: (row) => row.desiredStageCode == null ? "-" : formatCaseStage(row.desiredStageCode),
+        header: "Normative Tender Stage",
+        render: (row) => row.desiredStageCode == null ? "-" : formatCaseStage(row.desiredStageCode),
+      },
+      { key: "elapsed", header: "% Time Elapsed", render: (row) => row.percentTimeElapsed == null ? "-" : `${row.percentTimeElapsed}%` },
+      { key: "age", header: "Running Tender Age (Days)", render: (row) => row.runningAgeDays ?? "-" },
+      { key: "nit", header: "NIT Publish Date", render: (row) => formatDateCell(row.nitPublishDate) },
+      { key: "bidders", header: "Bidder Participated Count", render: (row) => row.biddersParticipated ?? "-" },
+      { key: "qualified", header: "Qualified Bidders Count", render: (row) => row.qualifiedBidders ?? "-" },
+      { key: "cycle", header: "Completed Cycle Time (Days)", render: (row) => row.completedCycleTimeDays ?? "-" },
+      { key: "award", header: `Total Award Amt (${amountUnitLabel(filters.amountUnit)}) [All Inclusive]`, render: (row) => formatAmount(row.totalAwardedAmount, filters.amountUnit) },
+      { key: "savingsPr", header: `Savings vs PR Value / Approved Budget (${amountUnitLabel(filters.amountUnit)}) [All Inclusive]`, render: (row) => formatAmount(row.savingsWrtPr, filters.amountUnit) },
+      { key: "savingsEstimate", header: `Savings vs Estimate / Benchmark (${amountUnitLabel(filters.amountUnit)}) [All Inclusive]`, render: (row) => formatAmount(row.savingsWrtEstimate, filters.amountUnit) },
+      {
+        key: "owner",
+        filterOptions: caseColumnFilterOptions.owner,
+        filterValue: (row) => row.ownerFullName ?? "-",
+        header: "Tender Owner",
+        render: (row) => row.ownerFullName ?? "-",
+      },
+      { key: "delay", header: "Uncontrollable Delay (Days)", render: (row) => row.uncontrollableDelayDays ?? "-" },
+      {
+        key: "loi",
+        filterOptions: caseColumnFilterOptions.loi,
+        filterValue: (row) => row.loiAwarded ? "Yes" : "No",
+        header: "LOI Awarded?",
+        render: (row) => row.loiAwarded ? "Yes" : "No",
+      },
+      { key: "loiDate", header: "LOI Award Date", render: (row) => formatDateCell(row.loiAwardDate) },
+      { key: "remarks", header: "PR Remarks", render: (row) => row.prRemarks ?? "-" },
       {
         key: "status",
+        filterOptions: caseColumnFilterOptions.status,
+        filterValue: (row) => row.status,
         header: "Status",
         render: (row) => (
           <StatusBadge tone={row.status === "completed" ? "success" : "warning"}>{row.status}</StatusBadge>
         ),
       },
-      { key: "stage", header: "Stage", render: (row) => formatCaseStage(row.stageCode) },
       {
-        key: "award",
-        header: "Awarded Amount [All Inclusive]",
-        render: (row) => formatAmount(row.totalAwardedAmount, filters.amountUnit),
+        key: "completionFy",
+        filterOptions: caseColumnFilterOptions.completionFy,
+        filterValue: (row) => row.completionFy ?? "-",
+        header: "Completion FY",
+        render: (row) => row.completionFy ?? "-",
       },
     ],
-    [filters.amountUnit],
+    [caseColumnFilterOptions, filters.amountUnit],
   );
   const vendorColumns = useMemo<VirtualTableColumn<VendorAwardReportRow>[]>(
-    () => [
-      { key: "vendor", header: "Vendor", render: (row) => row.vendorName },
+    () => {
+      const vendorOptions = uniqueReportFilterOptions(data.vendorAwards.data ?? [], (row) => row.vendorName);
+      return [
+      { key: "vendor", filterOptions: vendorOptions, filterValue: (row) => row.vendorName, header: "Vendor", render: (row) => row.vendorName },
       { key: "pr", header: "Case ID", render: (row) => row.prId },
       { key: "po", header: "PO", render: (row) => row.poNumber ?? "-" },
       { key: "value", header: "PO Value [All Inclusive]", render: (row) => formatAmount(row.poValue, filters.amountUnit) },
       { key: "awardDate", header: "Award Date", render: (row) => row.poAwardDate ?? "-" },
       { key: "validity", header: "Validity", render: (row) => row.poValidityDate ?? "-" },
-    ],
-    [filters.amountUnit],
+      ];
+    },
+    [data.vendorAwards.data, filters.amountUnit],
   );
   const stageColumns = useMemo<VirtualTableColumn<StageTimeRow>[]>(
     () => [
-      { key: "stage", header: "Stage", render: (row) => formatCaseStage(row.stageCode) },
+      {
+        key: "stage",
+        filterOptions: uniqueReportFilterOptions(data.stageTime.data ?? [], (row) => formatCaseStage(row.stageCode)),
+        filterValue: (row) => formatCaseStage(row.stageCode),
+        header: "Stage",
+        render: (row) => formatCaseStage(row.stageCode),
+      },
       { key: "count", header: "Cases", render: (row) => row.caseCount },
       {
         key: "age",
@@ -214,7 +342,7 @@ export function ReportsWorkspace() {
           row.averageRunningAgeDays == null ? "-" : `${Math.round(row.averageRunningAgeDays)}d`,
       },
     ],
-    [],
+    [data.stageTime.data],
   );
   const rcPoColumns = useMemo<VirtualTableColumn<ContractExpiryReportRow>[]>(
     () => [
@@ -233,6 +361,11 @@ export function ReportsWorkspace() {
       },
       {
         key: "floated",
+        filterOptions: [
+          { label: "Yes", value: "Yes" },
+          { label: "No", value: "No" },
+        ],
+        filterValue: (row) => (row.tenderFloatedOrNotRequired ? "Yes" : "No"),
         header: "Floated",
         render: (row) => (row.tenderFloatedOrNotRequired ? "Yes" : "No"),
       },
@@ -244,17 +377,25 @@ export function ReportsWorkspace() {
     navigateToAppPath(reportPathForKey(view.reportCode as ReportViewKey));
     applySavedView(view, {
       setAmountUnit: filters.setAmountUnit,
+      setBudgetTypeIds: filters.setSelectedBudgetTypeIds,
       setCompletionFys: filters.setSelectedCompletionFys,
       setCompletionMonths: filters.setSelectedCompletionMonths,
+      setCpcInvolved: filters.setCpcInvolved,
       setDateFrom: filters.setDateFrom,
       setDateTo: filters.setDateTo,
+      setDelayStatus: filters.setDelayStatus,
+      setDepartmentIds: filters.setSelectedDepartmentIds,
       setEntityIds: filters.setSelectedEntityIds,
+      setLoiAwarded: filters.setLoiAwarded,
+      setNatureOfWorkIds: filters.setSelectedNatureOfWorkIds,
       setOwnerUserIds: filters.setSelectedOwnerUserIds,
       setPrReceiptMonths: filters.setSelectedPrReceiptMonths,
+      setPriorityCase: filters.setPriorityCase,
       setSearchTerm: filters.setSearchTerm,
       setStageCodes: filters.setSelectedStageCodes,
       setStatusFilter: filters.setStatusFilter,
       setTenderTypeIds: filters.setSelectedTenderTypeIds,
+      setValueSlabs: filters.setSelectedValueSlabs,
     });
     notify({ message: `Applied view: ${view.name}`, tone: "success" });
   }
@@ -361,9 +502,9 @@ export function ReportsWorkspace() {
             type="date"
             value={filters.dateTo}
           />
-          <Button onClick={() => setIsAdvancedFiltersOpen(true)} variant="secondary">
+          <Button onClick={() => setIsAdvancedFiltersOpen((value) => !value)} variant="secondary">
             <SlidersHorizontal size={17} />
-            More Filters
+            {isAdvancedFiltersOpen ? "Hide Filters" : "More Filters"}
             {activeFilterCount ? <span className="button-count-badge">{activeFilterCount}</span> : null}
           </Button>
           <Button onClick={() => setIsSavedViewsOpen((value) => !value)} variant="secondary">
@@ -390,11 +531,7 @@ export function ReportsWorkspace() {
         ) : null}
 
         {!isExportJobsView && !isSavedViewsView && isSavedViewsOpen ? (
-          <section className="report-saved-views-popover">
-            <div>
-              <p className="eyebrow">Saved Views</p>
-              <h2>Reusable report presets</h2>
-            </div>
+          <section className="report-saved-view-row">
             <form
               className="report-save-view-inline"
               onSubmit={(event) => {
@@ -402,6 +539,19 @@ export function ReportsWorkspace() {
                 if (savedViewName.trim()) exportState.savedViewMutation.mutate();
               }}
             >
+              <FormField label="Saved View">
+                <Select
+                  disabled={data.savedViews.isLoading}
+                  onChange={(event) => {
+                    const view = (data.savedViews.data ?? []).find((item) => item.id === event.target.value);
+                    if (view) handleApplySavedView(view);
+                  }}
+                  options={(data.savedViews.data ?? []).map((view) => ({ label: view.name, value: view.id }))}
+                  placeholder={data.savedViews.isLoading ? "Loading views..." : "Select Saved View"}
+                  value=""
+                />
+              </FormField>
+              {data.savedViews.error ? <p className="inline-error">{data.savedViews.error.message}</p> : null}
               <TextInput
                 aria-label="Saved view name"
                 onChange={(event) => setSavedViewName(event.target.value)}
@@ -413,46 +563,30 @@ export function ReportsWorkspace() {
                 Save
               </Button>
             </form>
-            {data.savedViews.isLoading ? (
-              <Skeleton height={20} />
-            ) : data.savedViews.error ? (
-              <p className="inline-error">{data.savedViews.error.message}</p>
-            ) : (
-              <div className="saved-view-list">
-                {(data.savedViews.data ?? []).map((view) => (
-                  <button
-                    className="saved-view-chip"
-                    key={view.id}
-                    onClick={() => handleApplySavedView(view)}
-                    type="button"
-                  >
-                    {view.name}
-                  </button>
-                ))}
-              </div>
-            )}
           </section>
         ) : null}
+        {!isExportJobsView && !isSavedViewsView && isAdvancedFiltersOpen ? (
+          <ReportFilterPanel
+            activeFilterCount={activeFilterCount}
+            budgetTypeOptions={budgetTypeOptions}
+            completionFyOptions={completionFyOptions}
+            completionMonthOptions={completionMonthOptions}
+            dataIsLoading={data.filterMetadata.isLoading}
+            departmentOptions={departmentOptions}
+            entityOptions={entityOptions}
+            exportFormat={exportState.exportFormat}
+            filters={filters}
+            natureOfWorkOptions={natureOfWorkOptions}
+            onClose={() => setIsAdvancedFiltersOpen(false)}
+            ownerOptions={ownerOptions}
+            prReceiptMonthOptions={prReceiptMonthOptions}
+            setExportFormat={exportState.setExportFormat}
+            stageOptions={stageOptions}
+            tenderTypeOptions={tenderTypeOptions}
+            valueSlabOptions={valueSlabOptions}
+          />
+        ) : null}
       </section>
-
-      {!isExportJobsView && !isSavedViewsView ? (
-      <ReportFilterDrawer
-        activeFilterCount={activeFilterCount}
-        completionFyOptions={completionFyOptions}
-        completionMonthOptions={completionMonthOptions}
-        dataIsLoading={data.filterMetadata.isLoading}
-        entityOptions={entityOptions}
-        exportFormat={exportState.exportFormat}
-        filters={filters}
-        isOpen={isAdvancedFiltersOpen}
-        onClose={() => setIsAdvancedFiltersOpen(false)}
-        ownerOptions={ownerOptions}
-        prReceiptMonthOptions={prReceiptMonthOptions}
-        setExportFormat={exportState.setExportFormat}
-        stageOptions={stageOptions}
-        tenderTypeOptions={tenderTypeOptions}
-      />
-      ) : null}
 
       {isSavedViewsView ? (
         <ReportSavedViewsWorkspace
@@ -466,6 +600,9 @@ export function ReportsWorkspace() {
           <ReportExportStatusPanel
             canDownloadExport={exportState.canDownloadExport}
             exportJobId={exportState.exportJobId}
+            exportJobs={exportState.exportJobs.data ?? []}
+            exportJobsError={exportState.exportJobs.error}
+            exportJobsIsLoading={exportState.exportJobs.isLoading}
             exportStatus={exportState.exportStatus.data}
             exportStatusError={exportState.exportStatus.error}
             exportStatusIsLoading={exportState.exportStatus.isLoading}
@@ -475,14 +612,6 @@ export function ReportsWorkspace() {
         </section>
       ) : isAnalyticsView ? (
         <>
-          <div className="report-section-heading">
-            <div>
-              <p className="eyebrow">Overview</p>
-              <h2>Procurement reporting health</h2>
-            </div>
-            <span>{activeFilterCount ? `${activeFilterCount} filters applied` : "Default view"}</span>
-          </div>
-
           {data.analytics.isLoading ? (
             <section className="state-panel">
               <div style={{ display: "flex", gap: "var(--space-4)", flexWrap: "wrap" }}>
@@ -494,51 +623,34 @@ export function ReportsWorkspace() {
           ) : data.analytics.error ? (
             <ErrorState message={data.analytics.error.message} title="Could not load analytics" />
           ) : (
-            <section className="grid report-kpi-grid">
-              <KpiTile label="Total" value={metrics?.totalCases ?? 0} />
-              <KpiTile label="Running" value={metrics?.runningCases ?? 0} />
-              <KpiTile label="Completed" value={metrics?.completedCases ?? 0} />
-              <KpiTile label="Delayed" value={metrics?.delayedCases ?? 0} tone="danger" />
-              <KpiTile label="Awarded [All Inclusive]" value={formatAmount(metrics?.totalAwardedAmount ?? 0, filters.amountUnit)} />
-              <KpiTile
-                label="Savings wrt PR Value/Approved Budget (Rs)"
-                tone="success"
-                value={formatAmount(metrics?.savingsWrtPr ?? 0, filters.amountUnit)}
-              />
-              <KpiTile label="Avg Bidders" value={formatDecimal(metrics?.averageBiddersParticipated)} />
-              <KpiTile label="Avg Qualified" value={formatDecimal(metrics?.averageQualifiedBidders)} />
-            </section>
+            <ReportAnalyticsDashboard
+              activeFilterCount={activeFilterCount}
+              amountUnit={filters.amountUnit}
+              metrics={metrics}
+              stageError={data.stageTime.error}
+              stageIsLoading={data.stageTime.isLoading}
+              stageRows={data.stageTime.data}
+            />
           )}
-
-          <ReportAnalyticsDashboard
-            amountUnit={filters.amountUnit}
-            metrics={metrics}
-            stageError={data.stageTime.error}
-            stageIsLoading={data.stageTime.isLoading}
-            stageRows={data.stageTime.data}
-          />
         </>
       ) : (
         <section className="report-detail-workspace">
           <section className="state-panel report-main-panel">
-            <div className="detail-header">
-              <div>
-                <p className="eyebrow">Active Report</p>
-                <h2>{selectedReportLabel}</h2>
-              </div>
-            </div>
             {reportCode === "tender_details" ? (
-              <ReportTable
-                columns={caseColumns}
-                data={data.tenderDetails.data}
-                emptyMessage="No tender details match the current filters."
-                error={data.tenderDetails.error}
-                getRowKey={(row) => row.caseId}
-                isLoading={data.tenderDetails.isLoading}
-                isSelectionEnabled={canExport}
-                onSelectedRowIdsChange={setSelectedReportRows}
-                selectedRowIds={selectedExportIds}
-              />
+              <>
+                <TenderDetailsKpis amountUnit={filters.amountUnit} metrics={metrics} />
+                <ReportTable
+                  columns={caseColumns}
+                  data={data.tenderDetails.data}
+                  emptyMessage="No tender details match the current filters."
+                  error={data.tenderDetails.error}
+                  getRowKey={(row) => row.caseId}
+                  isLoading={data.tenderDetails.isLoading}
+                  isSelectionEnabled={canExport}
+                  onSelectedRowIdsChange={setSelectedReportRows}
+                  selectedRowIds={selectedExportIds}
+                />
+              </>
             ) : null}
             {reportCode === "running" ? (
               <ReportTable
@@ -670,13 +782,44 @@ function ReportSavedViewsWorkspace({
   );
 }
 
+function TenderDetailsKpis({
+  amountUnit,
+  metrics,
+}: {
+  amountUnit: AmountUnit;
+  metrics: ReportingAnalytics | undefined;
+}) {
+  return (
+    <section className="report-tender-kpi-grid">
+      <article>
+        <span>Total Tenders</span>
+        <strong>{formatInteger(metrics?.totalCases ?? 0)}</strong>
+      </article>
+      <article>
+        <span>PR Value / Approved Budget ({amountUnitLabel(amountUnit)}) [All Inclusive]</span>
+        <strong>{formatAmount(metrics?.totalPrValue ?? 0, amountUnit)}</strong>
+      </article>
+      <article>
+        <span>NFA Approved ({amountUnitLabel(amountUnit)}) [All Inclusive]</span>
+        <strong>{formatAmount(metrics?.totalApprovedAmount ?? 0, amountUnit)}</strong>
+      </article>
+      <article className="report-tender-kpi-positive">
+        <span>Savings vs PR Value / Approved Budget ({amountUnitLabel(amountUnit)}) [All Inclusive]</span>
+        <strong>{formatAmount(metrics?.savingsWrtPr ?? 0, amountUnit)}</strong>
+      </article>
+    </section>
+  );
+}
+
 function ReportAnalyticsDashboard({
+  activeFilterCount,
   amountUnit,
   metrics,
   stageError,
   stageIsLoading,
   stageRows,
 }: {
+  activeFilterCount: number;
   amountUnit: AmountUnit;
   metrics: ReportingAnalytics | undefined;
   stageError: Error | null;
@@ -706,33 +849,111 @@ function ReportAnalyticsDashboard({
   }));
   const completedRatio = metrics?.totalCases ? Math.round(((metrics.completedCases ?? 0) / metrics.totalCases) * 100) : 0;
   const delayedRatio = metrics?.totalCases ? Math.round(((metrics.delayedCases ?? 0) / metrics.totalCases) * 100) : 0;
+  const runningRatio = metrics?.totalCases ? Math.round(((metrics.runningCases ?? 0) / metrics.totalCases) * 100) : 0;
+  const bidderCoverage = metrics?.totalCases ? Math.round(((metrics.bidderCaseCount ?? 0) / metrics.totalCases) * 100) : 0;
+  const kpiTiles = [
+    {
+      icon: BarChart3,
+      label: "Tenders Count",
+      meta: `${metrics?.runningCases ?? 0} running`,
+      tone: "neutral",
+      value: formatInteger(metrics?.totalCases ?? 0),
+    },
+    {
+      icon: CircleDollarSign,
+      label: `Tender Value (${amountUnitLabel(amountUnit)})`,
+      meta: "PR value / budget",
+      tone: "brand",
+      value: formatAmount(metrics?.totalPrValue ?? 0, amountUnit),
+    },
+    {
+      icon: Landmark,
+      label: `NFA Approved (${amountUnitLabel(amountUnit)})`,
+      meta: "All inclusive",
+      tone: "success",
+      value: formatAmount(metrics?.totalApprovedAmount ?? 0, amountUnit),
+    },
+    {
+      icon: TrendingUp,
+      label: `Savings vs PR (${amountUnitLabel(amountUnit)})`,
+      meta: "Approved budget delta",
+      tone: "success",
+      value: formatAmount(metrics?.savingsWrtPr ?? 0, amountUnit),
+    },
+    {
+      icon: TrendingUp,
+      label: `Savings vs Estimate (${amountUnitLabel(amountUnit)})`,
+      meta: "Benchmark delta",
+      tone: "success",
+      value: formatAmount(metrics?.savingsWrtEstimate ?? 0, amountUnit),
+    },
+    {
+      icon: UsersRound,
+      label: "Avg Bidder Participation",
+      meta: `${bidderCoverage}% coverage`,
+      tone: "warning",
+      value: formatNullableDecimal(metrics?.averageBiddersParticipated),
+    },
+    {
+      icon: CheckCircle2,
+      label: "Avg Qualified Bidders",
+      meta: `${metrics?.bidderCaseCount ?? 0} case(s)`,
+      tone: "brand",
+      value: formatNullableDecimal(metrics?.averageQualifiedBidders),
+    },
+    {
+      icon: Gauge,
+      label: "Avg Cycle Time",
+      meta: "Days",
+      tone: delayedRatio > 0 ? "danger" : "success",
+      value: formatNullableDays(metrics?.averageCycleTimeDays),
+    },
+  ];
+  const filterLabel = activeFilterCount ? `${activeFilterCount} filters applied` : "Default view";
 
   return (
     <section className="report-analytics-dashboard">
-      <section className="state-panel report-analytics-hero">
-        <div className="report-analytics-hero-copy">
-          <p className="eyebrow">Analytics Summary</p>
-          <h2>How procurement is performing</h2>
-          <p>
-            Start with workload status, then scan where cases and award value are concentrated.
-          </p>
-          <div className="report-analytics-hero-metrics">
-            <div>
-              <span>Completion</span>
-              <strong>{completedRatio}%</strong>
-            </div>
-            <div>
-              <span>Delayed</span>
-              <strong>{delayedRatio}%</strong>
-            </div>
-            <div>
-              <span>Awarded [All Inclusive]</span>
-              <strong>{formatAmount(metrics?.totalAwardedAmount ?? 0, amountUnit)}</strong>
-            </div>
+      <section className="state-panel report-analytics-overview">
+        <div className="report-analytics-overview-heading">
+          <div>
+            <p className="eyebrow">Overview</p>
+            <h2>Procurement reporting health</h2>
           </div>
+          <span>{filterLabel}</span>
         </div>
-        <div className="report-analytics-hero-chart">
-          <ReportDonutChart rows={statusRows} total={metrics?.totalCases ?? 0} />
+        <div className="report-analytics-overview-grid">
+          <div className="report-analytics-kpi-strip">
+            {kpiTiles.map((tile) => (
+              <article className={`report-analytics-kpi report-analytics-kpi-${tile.tone}`} key={tile.label}>
+                <div className="report-analytics-kpi-icon">
+                  <tile.icon size={18} />
+                </div>
+                <div>
+                  <span>{tile.label}</span>
+                  <strong>{tile.value}</strong>
+                  <small>{tile.meta}</small>
+                </div>
+              </article>
+            ))}
+          </div>
+          <aside className="report-analytics-status-panel">
+            <ReportChartHeader
+              eyebrow="Workload Mix"
+              subtitle={`${completedRatio}% complete`}
+              title="Status split"
+            />
+            <ReportDonutChart rows={statusRows} total={metrics?.totalCases ?? 0} />
+            <div className="report-analytics-status-rates">
+              <div>
+                <span>Running</span>
+                <strong>{runningRatio}%</strong>
+              </div>
+              <div>
+                <span>Delayed</span>
+                <strong>{delayedRatio}%</strong>
+              </div>
+            </div>
+          </aside>
         </div>
       </section>
 
@@ -768,8 +989,92 @@ function ReportAnalyticsDashboard({
           <ReportStageBreakdown rows={stageChartRows} />
         )}
       </section>
+
+      <section className="state-panel report-analytics-wide report-analytics-insights">
+        <ReportChartHeader
+          eyebrow="Control signals"
+          subtitle="Operational read"
+          title="What needs attention"
+        />
+        <div className="report-insight-grid">
+          <ReportInsightCard
+            label="Completion posture"
+            meta={`${metrics?.completedCases ?? 0} completed of ${metrics?.totalCases ?? 0}`}
+            tone="success"
+            value={`${completedRatio}%`}
+          />
+          <ReportInsightCard
+            label="Delay density"
+            meta={`${metrics?.delayedCases ?? 0} delayed case(s)`}
+            tone={delayedRatio > 0 ? "danger" : "success"}
+            value={`${delayedRatio}%`}
+          />
+          <ReportInsightCard
+            label="Award conversion"
+            meta="Awarded vs approved"
+            tone="brand"
+            value={formatAmount(metrics?.totalAwardedAmount ?? 0, amountUnit)}
+          />
+          <ReportInsightCard
+            label="Bidder strength"
+            meta={`${metrics?.bidderCaseCount ?? 0} case(s) with bidder data`}
+            tone="warning"
+            value={formatNullableDecimal(metrics?.averageQualifiedBidders)}
+          />
+        </div>
+      </section>
     </section>
   );
+}
+
+function ReportInsightCard({
+  label,
+  meta,
+  tone,
+  value,
+}: {
+  label: string;
+  meta: string;
+  tone: "brand" | "danger" | "success" | "warning";
+  value: string;
+}) {
+  return (
+    <article className={`report-insight-card report-insight-${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{meta}</small>
+    </article>
+  );
+}
+
+function formatInteger(value: number) {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
+function formatNullableDecimal(value: number | null | undefined) {
+  return value == null ? "-" : formatDecimal(value);
+}
+
+function formatNullableDays(value: number | null | undefined) {
+  if (value == null) return "-";
+  const days = Object.is(Math.round(value), -0) ? 0 : Math.round(value);
+  return `${days.toLocaleString()}d`;
+}
+
+function formatDateCell(value: string | null | undefined) {
+  return value ?? "-";
+}
+
+function toggleReportFilterValue(values: string[], value: string, checked: boolean): string[] {
+  return checked ? [...new Set([...values, value])] : values.filter((item) => item !== value);
+}
+
+function selectedReportFilterLabel(values: string[], options: ReportOption[]): string {
+  if (!values.length) return "All";
+  if (values.length === options.length && options.length > 0) return "All selected";
+  const labels = values.map((selected) => options.find((option) => option.value === selected)?.label ?? selected);
+  if (labels.length > 2) return `${labels.length} selected`;
+  return labels.join(", ");
 }
 
 function ReportChartHeader({ eyebrow, subtitle, title }: { eyebrow: string; subtitle: string; title: string }) {
@@ -792,30 +1097,43 @@ function ReportPremiumBarChart({
   rows: Array<{ amount: number; label: string; secondaryValue: number; value: number }>;
 }) {
   const max = Math.max(1, ...rows.map((row) => row.value));
+  const total = rows.reduce((sum, row) => sum + row.value, 0);
 
   if (rows.length === 0) {
     return <p className="hero-copy">No chart data for the current filters.</p>;
   }
 
   return (
-    <div className="report-premium-bar-list">
+    <div className="report-distribution-card-grid">
       {rows.map((row, index) => (
-        <div className="report-premium-bar-row" key={row.label}>
-          <div className="report-premium-bar-rank">{index + 1}</div>
-          <div className="report-premium-bar-body">
-            <div className="report-premium-bar-label">
+        <article className="report-distribution-card" key={row.label}>
+          <div
+            className="report-distribution-ring"
+            style={{ "--progress": `${total > 0 ? Math.round((row.value / total) * 100) : 0}%` } as CSSProperties}
+          >
+            <strong>{total > 0 ? Math.round((row.value / total) * 100) : 0}%</strong>
+          </div>
+          <div className="report-distribution-content">
+            <div className="report-distribution-heading">
+              <span>#{index + 1}</span>
               <strong>{row.label}</strong>
-              <span>{formatAmount(row.amount, amountUnit)} awarded</span>
             </div>
-            <div className="report-premium-bar-track">
-              <span style={{ width: `${Math.max(5, (row.value / max) * 100)}%` }} />
+            <p>{formatAmount(row.amount, amountUnit)} awarded</p>
+            <div className="report-distribution-meter">
+              <span style={{ width: `${Math.max(7, (row.value / max) * 100)}%` }} />
             </div>
+            <dl>
+              <div>
+                <dt>Cases</dt>
+                <dd>{row.value}</dd>
+              </div>
+              <div>
+                <dt>Delayed</dt>
+                <dd>{row.secondaryValue}</dd>
+              </div>
+            </dl>
           </div>
-          <div className="report-premium-bar-values">
-            <strong>{row.value}</strong>
-            <span>{row.secondaryValue} delayed</span>
-          </div>
-        </div>
+        </article>
       ))}
     </div>
   );
@@ -979,6 +1297,9 @@ function ReportDonutChart({
 function ReportExportStatusPanel({
   canDownloadExport,
   exportJobId,
+  exportJobs,
+  exportJobsError,
+  exportJobsIsLoading,
   exportStatus,
   exportStatusError,
   exportStatusIsLoading,
@@ -987,206 +1308,363 @@ function ReportExportStatusPanel({
 }: {
   canDownloadExport: boolean;
   exportJobId: string;
+  exportJobs: ExportJobListItem[];
+  exportJobsError: Error | null;
+  exportJobsIsLoading: boolean;
   exportStatus: ExportJobStatus | undefined;
   exportStatusError: Error | null;
   exportStatusIsLoading: boolean;
   onExportJobIdChange: (jobId: string) => void;
   reportLabel: string;
 }) {
+  const columns = useMemo<VirtualTableColumn<ExportJobListItem>[]>(
+    () => [
+      {
+        enableFilter: true,
+        enableSort: true,
+        filterOptions: reportFilterOptions(["Tender Details", "Running Tender", "Completed Tender", "Vendor Awards", "Stage-Time Lapsed", "RC/PO Expiry"]),
+        filterValue: (job) => getReportLabel(job.reportCode),
+        header: "Report",
+        key: "report",
+        render: (job) => getReportLabel(job.reportCode),
+        sortValue: (job) => getReportLabel(job.reportCode),
+      },
+      {
+        enableFilter: true,
+        enableSort: true,
+        filterOptions: reportFilterOptions(["XLSX", "CSV"]),
+        filterValue: (job) => job.format.toUpperCase(),
+        header: "Format",
+        key: "format",
+        render: (job) => job.format.toUpperCase(),
+        sortValue: (job) => job.format,
+      },
+      {
+        enableFilter: true,
+        enableSort: true,
+        filterOptions: reportFilterOptions(["queued", "running", "completed", "failed", "expired"]),
+        filterValue: (job) => job.status,
+        header: "Status",
+        key: "status",
+        render: (job) => <StatusBadge tone={exportStatusTone(job.status)}>{job.status}</StatusBadge>,
+        sortValue: (job) => job.status,
+      },
+      {
+        enableSort: true,
+        header: "Progress",
+        key: "progress",
+        render: (job) => `${job.progressPercent}%`,
+        sortValue: (job) => job.progressPercent,
+      },
+      {
+        enableSort: true,
+        header: "Selected",
+        key: "selected",
+        render: (job) => (job.selectedCount ? job.selectedCount : "All"),
+        sortValue: (job) => job.selectedCount,
+      },
+      {
+        enableSort: true,
+        header: "Created",
+        key: "created",
+        render: (job) => formatDateTime(job.createdAt),
+        sortValue: (job) => job.createdAt,
+      },
+      {
+        enableSort: true,
+        header: "Expires",
+        key: "expires",
+        render: (job) => (job.expiresAt ? formatDateTime(job.expiresAt) : "-"),
+        sortValue: (job) => job.expiresAt ?? "",
+      },
+      {
+        header: "Actions",
+        key: "actions",
+        render: (job) => (
+          <div className="report-export-grid-actions">
+            <Button onClick={() => onExportJobIdChange(job.id)} size="sm" variant={job.id === exportJobId ? "primary" : "secondary"}>
+              View
+            </Button>
+            {job.status === "completed" && job.fileAssetId ? (
+              <Button href={getExportDownloadUrl(job.id)} size="sm" variant="secondary">
+                <Download size={14} />
+                Download
+              </Button>
+            ) : null}
+          </div>
+        ),
+      },
+    ],
+    [exportJobId, onExportJobIdChange],
+  );
+
   return (
     <section className="state-panel report-export-panel">
       <div className="detail-header">
         <div>
           <p className="eyebrow">Exports</p>
-          <h2>Export Status</h2>
+          <h2>Export jobs</h2>
         </div>
         <FileSpreadsheet aria-hidden="true" className="report-panel-icon" size={18} />
       </div>
-      <FormField label="Export Job ID">
-        <TextInput
-          onChange={(event) => onExportJobIdChange(event.target.value)}
-          placeholder="Paste an export job ID"
-          value={exportJobId}
-        />
-      </FormField>
-      {exportStatusIsLoading ? (
-        <div className="report-export-skeleton">
-          <Skeleton height={18} />
-          <Skeleton height={72} />
+      <div className="report-export-layout">
+        <div className="report-export-list-panel">
+          {exportJobsIsLoading ? (
+            <div className="report-table-skeleton">
+              {[1, 2, 3].map((item) => (
+                <div key={item}>
+                  <Skeleton height={13} width="16%" />
+                  <Skeleton height={13} width="10%" />
+                  <Skeleton height={13} width="18%" />
+                  <Skeleton height={13} width="12%" />
+                </div>
+              ))}
+            </div>
+          ) : exportJobsError ? (
+            <p className="inline-error">{exportJobsError.message}</p>
+          ) : exportJobs.length ? (
+            <VirtualTable
+              columns={columns}
+              emptyMessage="No export jobs found."
+              getRowKey={(job) => job.id}
+              maxHeight={560}
+              onRowClick={(job) => onExportJobIdChange(job.id)}
+              rowHeight={48}
+              rows={exportJobs}
+            />
+          ) : (
+            <div className="report-export-empty">
+              <FileSpreadsheet aria-hidden="true" size={22} />
+              <strong>No exports yet</strong>
+              <p>Run an export for {reportLabel}. Your XLSX and CSV jobs will appear here.</p>
+            </div>
+          )}
         </div>
-      ) : exportStatusError ? (
-        <p className="inline-error">{exportStatusError.message}</p>
-      ) : exportStatus ? (
-        <div className="report-export-status-card">
-          <div className="report-export-status-head">
-            <CheckCircle2 aria-hidden="true" size={18} />
-            <div>
-              <strong>{exportStatus.status}</strong>
-              <span>{exportStatus.progressMessage ?? "Export job is being processed."}</span>
+        <div className="report-export-detail-panel">
+          {exportStatusIsLoading ? (
+            <div className="report-export-skeleton">
+              <Skeleton height={18} />
+              <Skeleton height={72} />
             </div>
-          </div>
-          <div className="report-export-progress">
-            <div>
-              <span>Progress</span>
-              <strong>{exportStatus.progressPercent}%</strong>
+          ) : exportStatusError ? (
+            <p className="inline-error">{exportStatusError.message}</p>
+          ) : exportStatus ? (
+            <div className="report-export-status-card">
+              <div className="report-export-status-head">
+                <CheckCircle2 aria-hidden="true" size={18} />
+                <div>
+                  <strong>{exportStatus.status}</strong>
+                  <span>{exportStatus.progressMessage ?? "Export job is being processed."}</span>
+                </div>
+              </div>
+              <div className="report-export-progress">
+                <div>
+                  <span>Progress</span>
+                  <strong>{exportStatus.progressPercent}%</strong>
+                </div>
+                <progress max={100} value={exportStatus.progressPercent} />
+              </div>
+              <dl className="report-export-meta">
+                <div>
+                  <dt>Format</dt>
+                  <dd>{exportStatus.format.toUpperCase()}</dd>
+                </div>
+                <div>
+                  <dt>Expires</dt>
+                  <dd>{exportStatus.expiresAt ? new Date(exportStatus.expiresAt).toLocaleDateString() : "-"}</dd>
+                </div>
+              </dl>
+              {exportStatus.status === "queued" || exportStatus.status === "running" ? (
+                <p className="report-export-help">
+                  This page refreshes automatically while the worker prepares the file. The download button appears after
+                  the export reaches Completed.
+                </p>
+              ) : null}
+              {exportStatus.status === "failed" ? (
+                <p className="inline-error">
+                  Export failed. Check the worker logs, then run the export again after the issue is resolved.
+                </p>
+              ) : null}
+              {canDownloadExport ? (
+                <Button className="report-download-link" href={getExportDownloadUrl(exportJobId)} variant="secondary">
+                  <Download size={16} />
+                  Download File
+                </Button>
+              ) : null}
             </div>
-            <progress max={100} value={exportStatus.progressPercent} />
-          </div>
-          <dl className="report-export-meta">
-            <div>
-              <dt>Format</dt>
-              <dd>{exportStatus.format.toUpperCase()}</dd>
+          ) : (
+            <div className="report-export-empty">
+              <FileSpreadsheet aria-hidden="true" size={22} />
+              <strong>No export selected</strong>
+              <p>Select a row to inspect progress and download the completed file.</p>
             </div>
-            <div>
-              <dt>Expires</dt>
-              <dd>{exportStatus.expiresAt ? new Date(exportStatus.expiresAt).toLocaleDateString() : "-"}</dd>
-            </div>
-          </dl>
-          {exportStatus.status === "queued" || exportStatus.status === "running" ? (
-            <p className="report-export-help">
-              This page refreshes automatically while the worker prepares the file. The download button appears after
-              the export reaches Completed.
-            </p>
-          ) : null}
-          {exportStatus.status === "failed" ? (
-            <p className="inline-error">
-              Export failed. Check the worker logs, then run the export again after the issue is resolved.
-            </p>
-          ) : null}
-          {canDownloadExport ? (
-            <Button className="report-download-link" href={getExportDownloadUrl(exportJobId)} variant="secondary">
-              <Download size={16} />
-              Download File
-            </Button>
-          ) : null}
+          )}
         </div>
-      ) : (
-        <div className="report-export-empty">
-          <FileSpreadsheet aria-hidden="true" size={22} />
-          <strong>No export selected</strong>
-          <p>Run an export for {reportLabel}, then track progress and download the file here.</p>
-        </div>
-      )}
+      </div>
     </section>
   );
 }
 
-function ReportFilterDrawer({
+function ReportFilterPanel({
   activeFilterCount,
+  budgetTypeOptions,
   completionFyOptions,
   completionMonthOptions,
   dataIsLoading,
+  departmentOptions,
   entityOptions,
   exportFormat,
   filters,
-  isOpen,
+  natureOfWorkOptions,
   onClose,
   ownerOptions,
   prReceiptMonthOptions,
   setExportFormat,
   stageOptions,
   tenderTypeOptions,
+  valueSlabOptions,
 }: {
   activeFilterCount: number;
+  budgetTypeOptions: ReportOption[];
   completionFyOptions: ReportOption[];
   completionMonthOptions: ReportOption[];
   dataIsLoading: boolean;
+  departmentOptions: ReportOption[];
   entityOptions: ReportOption[];
   exportFormat: "csv" | "xlsx";
   filters: ReturnType<typeof useReportFilters>;
-  isOpen: boolean;
+  natureOfWorkOptions: ReportOption[];
   onClose: () => void;
   ownerOptions: ReportOption[];
   prReceiptMonthOptions: ReportOption[];
   setExportFormat: (format: "csv" | "xlsx") => void;
   stageOptions: ReportOption[];
   tenderTypeOptions: ReportOption[];
+  valueSlabOptions: ReportOption[];
 }) {
   return (
-    <Drawer isOpen={isOpen} onClose={onClose} title="Report Filters">
-      <div className="report-filter-drawer">
-        <div className="report-filter-drawer-summary">
-          <Filter aria-hidden="true" size={18} />
-          <span>{activeFilterCount} active filters</span>
+    <section className="report-filter-panel" aria-label="Advanced report filters">
+      <div className="report-filter-panel-header">
+        <div>
+          <p className="eyebrow">Filters</p>
+          <h2>Refine report data</h2>
         </div>
-        <section aria-label="Advanced report filters" className="report-filter-matrix report-filter-matrix-compact">
-          <FormField label="Entities">
-            <CheckboxList
-              ariaLabel="Entity report filter"
-              disabled={dataIsLoading}
-              emptyMessage="No entities found."
-              onChange={filters.setSelectedEntityIds}
-              options={entityOptions}
-              searchPlaceholder="Search entities..."
-              value={filters.selectedEntityIds}
+        <div className="report-filter-panel-summary">
+          <Filter aria-hidden="true" size={18} />
+          <span>{activeFilterCount} active</span>
+        </div>
+      </div>
+      <div className="report-filter-panel-body">
+        <section className="report-filter-matrix report-filter-matrix-compact">
+          <ReportMultiSelectFilter
+            disabled={dataIsLoading}
+            label="Entity"
+            onChange={filters.setSelectedEntityIds}
+            options={entityOptions}
+            value={filters.selectedEntityIds}
+          />
+          <ReportMultiSelectFilter
+            disabled={dataIsLoading}
+            label="User Department"
+            onChange={filters.setSelectedDepartmentIds}
+            options={departmentOptions}
+            value={filters.selectedDepartmentIds}
+          />
+          <ReportMultiSelectFilter
+            disabled={dataIsLoading}
+            label="Tender Owner"
+            onChange={filters.setSelectedOwnerUserIds}
+            options={ownerOptions}
+            value={filters.selectedOwnerUserIds}
+          />
+          <ReportMultiSelectFilter
+            disabled={dataIsLoading}
+            label="Tender Types"
+            onChange={filters.setSelectedTenderTypeIds}
+            options={tenderTypeOptions}
+            value={filters.selectedTenderTypeIds}
+          />
+          <ReportMultiSelectFilter
+            disabled={dataIsLoading}
+            label="Tender Stage"
+            onChange={filters.setSelectedStageCodes}
+            options={stageOptions}
+            value={filters.selectedStageCodes}
+          />
+          <ReportMultiSelectFilter
+            disabled={dataIsLoading}
+            label="Nature of Work"
+            onChange={filters.setSelectedNatureOfWorkIds}
+            options={natureOfWorkOptions}
+            value={filters.selectedNatureOfWorkIds}
+          />
+          <ReportMultiSelectFilter
+            disabled={dataIsLoading}
+            label="Budget Type"
+            onChange={filters.setSelectedBudgetTypeIds}
+            options={budgetTypeOptions}
+            value={filters.selectedBudgetTypeIds}
+          />
+          <ReportMultiSelectFilter
+            disabled={dataIsLoading}
+            label="Value Slab"
+            onChange={filters.setSelectedValueSlabs}
+            options={valueSlabOptions}
+            value={filters.selectedValueSlabs}
+          />
+          <ReportMultiSelectFilter
+            disabled={dataIsLoading}
+            label="Completion FY"
+            onChange={filters.setSelectedCompletionFys}
+            options={completionFyOptions}
+            value={filters.selectedCompletionFys}
+          />
+          <ReportMultiSelectFilter
+            disabled={dataIsLoading}
+            label="PR Receipt Month"
+            onChange={filters.setSelectedPrReceiptMonths}
+            options={prReceiptMonthOptions}
+            value={filters.selectedPrReceiptMonths}
+          />
+          <ReportMultiSelectFilter
+            disabled={dataIsLoading}
+            label="Completion Month"
+            onChange={filters.setSelectedCompletionMonths}
+            options={completionMonthOptions}
+            value={filters.selectedCompletionMonths}
+          />
+          <FormField label="LOI Awarded?">
+            <Select
+              onChange={(event) => filters.setLoiAwarded(event.target.value as "all" | "false" | "true")}
+              options={[{ label: "Yes", value: "true" }, { label: "No", value: "false" }]}
+              placeholder="All"
+              value={filters.loiAwarded === "all" ? "" : filters.loiAwarded}
             />
           </FormField>
-          <FormField label="Tender Owners">
-            <CheckboxList
-              ariaLabel="Tender owner report filter"
-              disabled={dataIsLoading}
-              emptyMessage="No owners found."
-              onChange={filters.setSelectedOwnerUserIds}
-              options={ownerOptions}
-              searchPlaceholder="Search owners..."
-              value={filters.selectedOwnerUserIds}
+          <FormField label="Delay Status">
+            <Select
+              onChange={(event) => filters.setDelayStatus((event.target.value || "all") as "all" | "delayed" | "on_time")}
+              options={[{ label: "Delayed", value: "delayed" }, { label: "On Time", value: "on_time" }]}
+              placeholder="All"
+              value={filters.delayStatus === "all" ? "" : filters.delayStatus}
             />
           </FormField>
-          <FormField label="Tender Types">
-            <CheckboxList
-              ariaLabel="Tender type report filter"
-              disabled={dataIsLoading}
-              emptyMessage="No tender types found."
-              onChange={filters.setSelectedTenderTypeIds}
-              options={tenderTypeOptions}
-              searchPlaceholder="Search tender types..."
-              value={filters.selectedTenderTypeIds}
+          <FormField label="Routed Through CPC">
+            <Select
+              onChange={(event) => filters.setCpcInvolved((event.target.value || "any") as "any" | "false" | "true")}
+              options={[{ label: "Yes", value: "true" }, { label: "No", value: "false" }]}
+              placeholder="Any"
+              value={filters.cpcInvolved === "any" ? "" : filters.cpcInvolved}
             />
           </FormField>
-          <FormField label="Stages">
-            <CheckboxList
-              ariaLabel="Stage report filter"
-              disabled={dataIsLoading}
-              emptyMessage="No stages found."
-              onChange={filters.setSelectedStageCodes}
-              options={stageOptions}
-              searchPlaceholder="Search stages..."
-              value={filters.selectedStageCodes}
+          <label className="report-inline-check">
+            <input
+              checked={filters.priorityCase}
+              onChange={(event) => filters.setPriorityCase(event.target.checked)}
+              type="checkbox"
             />
-          </FormField>
-          <FormField label="Completion FY">
-            <CheckboxList
-              ariaLabel="Completion financial year report filter"
-              disabled={dataIsLoading}
-              emptyMessage="No completion years found."
-              onChange={filters.setSelectedCompletionFys}
-              options={completionFyOptions}
-              searchPlaceholder="Search FY..."
-              value={filters.selectedCompletionFys}
-            />
-          </FormField>
-          <FormField label="PR Receipt Month">
-            <CheckboxList
-              ariaLabel="PR receipt month report filter"
-              disabled={dataIsLoading}
-              emptyMessage="No receipt months found."
-              onChange={filters.setSelectedPrReceiptMonths}
-              options={prReceiptMonthOptions}
-              searchPlaceholder="Search months..."
-              value={filters.selectedPrReceiptMonths}
-            />
-          </FormField>
-          <FormField label="Completion Month">
-            <CheckboxList
-              ariaLabel="Completion month report filter"
-              disabled={dataIsLoading}
-              emptyMessage="No completion months found."
-              onChange={filters.setSelectedCompletionMonths}
-              options={completionMonthOptions}
-              searchPlaceholder="Search months..."
-              value={filters.selectedCompletionMonths}
-            />
-          </FormField>
+            <span>Priority cases only</span>
+          </label>
         </section>
         <div className="report-actions-row report-drawer-actions">
           <div aria-label="Amount display unit" className="segmented-control" role="group">
@@ -1220,7 +1698,103 @@ function ReportFilterDrawer({
           <Button onClick={onClose}>Apply Filters</Button>
         </div>
       </div>
-    </Drawer>
+    </section>
+  );
+}
+
+function ReportMultiSelectFilter({
+  disabled,
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  disabled?: boolean;
+  label: string;
+  onChange: (value: string[]) => void;
+  options: ReportOption[];
+  value: string[];
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const selectedLabel = selectedReportFilterLabel(value, options);
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleOptions = normalizedQuery
+    ? options.filter((option) => option.label.toLowerCase().includes(normalizedQuery))
+    : options;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen]);
+
+  return (
+    <FormField label={label}>
+      <div className="multi-select-dropdown report-filter-dropdown">
+        <button
+          aria-expanded={isOpen}
+          className="multi-select-trigger"
+          disabled={disabled}
+          onBlur={(event) => {
+            if (!event.currentTarget.parentElement?.contains(event.relatedTarget as Node | null)) {
+              setIsOpen(false);
+            }
+          }}
+          onClick={() => setIsOpen((open) => !open)}
+          type="button"
+        >
+          <span>{selectedLabel}</span>
+          <ChevronDown size={16} />
+        </button>
+        {isOpen ? (
+          <div
+            className="multi-select-menu report-filter-dropdown-menu"
+            onBlur={(event) => {
+              if (!event.currentTarget.parentElement?.contains(event.relatedTarget as Node | null)) {
+                setIsOpen(false);
+              }
+            }}
+          >
+            <div className="multi-select-menu-actions">
+              <button disabled={options.length === 0} onClick={() => onChange(options.map((option) => option.value))} type="button">
+                Select all
+              </button>
+              <button disabled={value.length === 0} onClick={() => onChange([])} type="button">
+                Clear
+              </button>
+              <span>{value.length ? `${value.length} selected` : "All"}</span>
+            </div>
+            {options.length > 6 ? (
+              <TextInput
+                autoFocus
+                aria-label={`Search ${label}`}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={`Search ${label.toLowerCase()}...`}
+                value={query}
+              />
+            ) : null}
+            <div className="multi-select-options">
+              {visibleOptions.length ? (
+                visibleOptions.map((option) => (
+                  <Checkbox
+                    checked={value.includes(option.value)}
+                    key={option.value}
+                    label={option.label}
+                    onChange={(event) => onChange(toggleReportFilterValue(value, option.value, event.target.checked))}
+                  />
+                ))
+              ) : (
+                <span className="multi-select-empty">No options found.</span>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </FormField>
   );
 }
 
@@ -1397,9 +1971,17 @@ function countActiveReportFilters(
     filters.dateFrom,
     filters.dateTo,
     statusFilterApplies && filters.statusFilter !== "all" ? filters.statusFilter : "",
+    filters.delayStatus !== "all" ? filters.delayStatus : "",
+    filters.loiAwarded !== "all" ? filters.loiAwarded : "",
+    filters.cpcInvolved !== "any" ? filters.cpcInvolved : "",
+    filters.priorityCase ? "priority" : "",
     ...filters.selectedEntityIds,
+    ...filters.selectedDepartmentIds,
     ...filters.selectedOwnerUserIds,
     ...filters.selectedTenderTypeIds,
+    ...filters.selectedNatureOfWorkIds,
+    ...filters.selectedBudgetTypeIds,
+    ...filters.selectedValueSlabs,
     ...filters.selectedStageCodes,
     ...filters.selectedCompletionFys,
     ...filters.selectedPrReceiptMonths,
@@ -1412,22 +1994,34 @@ function buildActiveReportFilterChips(
   options: {
     completionFyOptions: ReportOption[];
     completionMonthOptions: ReportOption[];
+    departmentOptions: ReportOption[];
     entityOptions: ReportOption[];
+    budgetTypeOptions: ReportOption[];
+    natureOfWorkOptions: ReportOption[];
     ownerOptions: ReportOption[];
     prReceiptMonthOptions: ReportOption[];
     stageOptions: ReportOption[];
     statusFilterApplies: boolean;
     tenderTypeOptions: ReportOption[];
+    valueSlabOptions: ReportOption[];
   },
 ): string[] {
   return [
     filters.searchTerm ? `Search: ${filters.searchTerm}` : "",
     options.statusFilterApplies && filters.statusFilter !== "all" ? `Status: ${filters.statusFilter}` : "",
+    filters.delayStatus !== "all" ? `Delay: ${filters.delayStatus === "delayed" ? "Delayed" : "On Time"}` : "",
+    filters.loiAwarded !== "all" ? `LOI: ${filters.loiAwarded === "true" ? "Yes" : "No"}` : "",
+    filters.cpcInvolved !== "any" ? `CPC: ${filters.cpcInvolved === "true" ? "Yes" : "No"}` : "",
+    filters.priorityCase ? "Priority cases" : "",
     filters.dateFrom ? `From: ${filters.dateFrom}` : "",
     filters.dateTo ? `To: ${filters.dateTo}` : "",
     ...labelsForSelection("Entity", filters.selectedEntityIds, options.entityOptions),
+    ...labelsForSelection("Department", filters.selectedDepartmentIds, options.departmentOptions),
     ...labelsForSelection("Owner", filters.selectedOwnerUserIds, options.ownerOptions),
     ...labelsForSelection("Type", filters.selectedTenderTypeIds, options.tenderTypeOptions),
+    ...labelsForSelection("Nature", filters.selectedNatureOfWorkIds, options.natureOfWorkOptions),
+    ...labelsForSelection("Budget", filters.selectedBudgetTypeIds, options.budgetTypeOptions),
+    ...labelsForSelection("Value", filters.selectedValueSlabs, options.valueSlabOptions),
     ...labelsForSelection("Stage", filters.selectedStageCodes, options.stageOptions),
     ...labelsForSelection("FY", filters.selectedCompletionFys, options.completionFyOptions),
     ...labelsForSelection("PR Month", filters.selectedPrReceiptMonths, options.prReceiptMonthOptions),
@@ -1438,4 +2032,31 @@ function buildActiveReportFilterChips(
 function labelsForSelection(prefix: string, values: string[], options: ReportOption[]): string[] {
   const byValue = new Map(options.map((option) => [option.value, option.label]));
   return values.map((value) => `${prefix}: ${byValue.get(value) ?? value}`);
+}
+
+function uniqueReportFilterOptions<TRow>(rows: TRow[], getValue: (row: TRow) => string): ReportOption[] {
+  return [...new Set(rows.map((row) => getValue(row)).filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" }))
+    .map((value) => ({ label: value, value }));
+}
+
+function reportFilterOptions(values: string[]): ReportOption[] {
+  return values.map((value) => ({ label: value, value }));
+}
+
+function formatDateTime(value: string): string {
+  return new Date(value).toLocaleString(undefined, {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function exportStatusTone(status: string) {
+  if (status === "completed") return "success" as const;
+  if (status === "failed" || status === "expired") return "danger" as const;
+  if (status === "running" || status === "queued") return "warning" as const;
+  return "neutral" as const;
 }

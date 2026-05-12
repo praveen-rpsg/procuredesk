@@ -162,7 +162,7 @@ export class ReportingService {
   async getExportJob(actor: AuthenticatedUser, jobId: string) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "report.export");
-    const job = await this.repository.getExportJob(tenantId, jobId);
+    const job = await this.repository.getExportJob(tenantId, actor.id, jobId);
     if (!job) throw new NotFoundException("Export job not found.");
     return {
       completedAt: job.completed_at?.toISOString() ?? null,
@@ -178,10 +178,29 @@ export class ReportingService {
     };
   }
 
+  async listExportJobs(actor: AuthenticatedUser) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "report.export");
+    const result = await this.repository.listExportJobs(tenantId, actor.id);
+    return result.rows.map((job) => ({
+      completedAt: job.completed_at?.toISOString() ?? null,
+      createdAt: job.created_at.toISOString(),
+      expiresAt: job.expires_at?.toISOString() ?? null,
+      fileAssetId: job.file_asset_id,
+      format: job.format,
+      id: job.id,
+      progressMessage: job.progress_message,
+      progressPercent: job.progress_percent,
+      reportCode: job.report_code,
+      selectedCount: job.selected_count,
+      status: job.status,
+    }));
+  }
+
   async getExportDownload(actor: AuthenticatedUser, jobId: string) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "report.export");
-    const file = await this.repository.getExportFile(tenantId, jobId);
+    const file = await this.repository.getExportFile(tenantId, actor.id, jobId);
     if (!file) {
       throw new NotFoundException("Export file is not available yet.");
     }

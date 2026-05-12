@@ -1,11 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Trash2 } from "lucide-react";
+import { ExternalLink, Pencil, Trash2, Trophy } from "lucide-react";
 import { useState } from "react";
 
 import { listAuditEvents } from "../../operations/api/operationsApi";
 import { deleteCase, getCase, type CaseDetail } from "../api/casesApi";
 import { useAuth } from "../../../shared/auth/AuthProvider";
-import { canDeleteCase, canReadAudit, canUpdateCase } from "../../../shared/auth/permissions";
+import {
+  canDeleteCase,
+  canManageAwards,
+  canManageCaseDelay,
+  canReadAudit,
+  canUpdateCase,
+} from "../../../shared/auth/permissions";
 import { formatCaseStageTransition } from "../../../shared/utils/caseStage";
 import { formatDateOnly, toDateOnlyInputValue } from "../../../shared/utils/dateOnly";
 import { ActivityFeed } from "../../../shared/ui/activity-feed/ActivityFeed";
@@ -20,8 +26,10 @@ import { useToast } from "../../../shared/ui/toast/ToastProvider";
 
 type CaseDetailPanelProps = {
   caseId: string | null;
+  onAward?: () => void;
   onDeleted?: () => void;
   onEdit?: () => void;
+  onOpenFull?: () => void;
 };
 
 const milestoneSteps: Array<{ key: string; label: string; stage: number }> = [
@@ -37,7 +45,7 @@ const milestoneSteps: Array<{ key: string; label: string; stage: number }> = [
   { key: "rcPoAwardDate", label: "RC/PO Award", stage: 8 },
 ];
 
-export function CaseDetailPanel({ caseId, onDeleted, onEdit }: CaseDetailPanelProps) {
+export function CaseDetailPanel({ caseId, onAward, onDeleted, onEdit, onOpenFull }: CaseDetailPanelProps) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { notify } = useToast();
@@ -99,6 +107,8 @@ export function CaseDetailPanel({ caseId, onDeleted, onEdit }: CaseDetailPanelPr
 
   const kase = detail.data;
   const canEdit = canUpdateCase(user, kase);
+  const canAward = kase.status === "completed" && canManageAwards(user);
+  const canViewDelay = canManageCaseDelay(user, kase);
   return (
     <section className="case-preview-panel">
       <div className="case-preview-hero">
@@ -116,6 +126,18 @@ export function CaseDetailPanel({ caseId, onDeleted, onEdit }: CaseDetailPanelPr
             <Button onClick={onEdit} variant="secondary">
               <Pencil size={16} />
               Edit
+            </Button>
+          ) : null}
+          {onAward ? (
+            <Button disabled={!canAward} onClick={onAward} title={canAward ? "Manage awards" : "Awards are enabled after completion"} variant="secondary">
+              <Trophy size={16} />
+              Award
+            </Button>
+          ) : null}
+          {onOpenFull ? (
+            <Button onClick={onOpenFull} variant="secondary">
+              <ExternalLink size={16} />
+              Open
             </Button>
           ) : null}
           {canDelete ? (
@@ -160,13 +182,15 @@ export function CaseDetailPanel({ caseId, onDeleted, onEdit }: CaseDetailPanelPr
           </dl>
         </section>
 
-        <section className="case-preview-section">
-          <p className="eyebrow">Delay</p>
-          <dl className="compact-detail-list">
-            <CompactMetric label="External Days" value={String(kase.delay.delayExternalDays ?? 0)} />
-            <CompactMetric label="Reason" value={kase.delay.delayReason ?? "-"} />
-          </dl>
-        </section>
+        {canViewDelay ? (
+          <section className="case-preview-section">
+            <p className="eyebrow">Delay</p>
+            <dl className="compact-detail-list">
+              <CompactMetric label="External Days" value={String(kase.delay.delayExternalDays ?? 0)} />
+              <CompactMetric label="Reason" value={kase.delay.delayReason ?? "-"} />
+            </dl>
+          </section>
+        ) : null}
       </div>
 
       <section className="case-preview-section case-preview-timeline-section">

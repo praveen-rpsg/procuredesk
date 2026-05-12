@@ -20,6 +20,7 @@ import { ReportingModule } from "./modules/reporting/reporting.module.js";
 @Module({
   imports: [
     ConfigModule.forRoot({
+      envFilePath: [".env", "../../.env"],
       isGlobal: true,
       validate: (config) => envValidationSchema.parse(config),
     }),

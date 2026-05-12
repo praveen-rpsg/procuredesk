@@ -14,6 +14,16 @@ const csvUuidList = z
   .optional()
   .transform((value) => (value ? value.split(",").filter(Boolean) : undefined))
   .pipe(z.array(z.string().uuid()).optional());
+const csvTextList = z
+  .string()
+  .optional()
+  .transform((value) => (value ? value.split(",").filter(Boolean) : undefined))
+  .pipe(z.array(z.string().trim().min(1)).optional());
+const csvValueSlabList = z
+  .string()
+  .optional()
+  .transform((value) => (value ? value.split(",").filter(Boolean) : undefined))
+  .pipe(z.array(z.enum(["lt_10l", "10l_1cr", "1cr_10cr", "gte_10cr"])).optional());
 const queryBoolean = z
   .enum(["true", "false"])
   .transform((value) => value === "true")
@@ -94,6 +104,7 @@ export const DeleteCaseRequestSchema = z
 
 export const ListCasesQuerySchema = z.object({
   budgetTypeIds: csvUuidList,
+  completionFys: csvTextList,
   cpcInvolved: queryBoolean,
   cursor: z.string().trim().min(1).max(200).optional(),
   dateFrom: z
@@ -108,13 +119,16 @@ export const ListCasesQuerySchema = z.object({
   entityIds: csvUuidList,
   isDelayed: queryBoolean,
   limit: z.coerce.number().int().min(1).max(100).optional(),
+  loiAwarded: queryBoolean,
   natureOfWorkIds: csvUuidList,
   ownerUserId: z.string().uuid().optional(),
   priorityCase: queryBoolean,
+  prReceiptMonths: csvTextList,
   q: z.string().trim().min(1).optional(),
   status: z.enum(["running", "completed"]).optional(),
   tenderTypeIds: csvUuidList,
   valueSlab: z.enum(["lt_10l", "10l_1cr", "1cr_10cr", "gte_10cr"]).optional(),
+  valueSlabs: csvValueSlabList,
 });
 
 export type AssignOwnerRequest = z.infer<typeof AssignOwnerRequestSchema>;

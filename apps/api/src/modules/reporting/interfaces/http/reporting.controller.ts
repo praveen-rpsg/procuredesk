@@ -126,6 +126,12 @@ export class ReportingController {
     return this.reporting.createExportJob(user, body);
   }
 
+  @Get("export-jobs")
+  @RequirePermissions("report.export")
+  listExportJobs(@CurrentUser() user: AuthenticatedUser) {
+    return this.reporting.listExportJobs(user);
+  }
+
   @Get("export-jobs/:jobId")
   @RequirePermissions("report.export")
   getExportJob(@CurrentUser() user: AuthenticatedUser, @Param("jobId", ParseUUIDPipe) jobId: string) {

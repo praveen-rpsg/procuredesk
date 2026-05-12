@@ -19,18 +19,26 @@ export type ReportScope = {
 };
 
 export type ReportFilters = {
+  budgetTypeIds?: string[];
   completionFys?: string[];
   completionMonths?: string[];
+  cpcInvolved?: boolean;
   dateFrom?: string;
   dateTo?: string;
+  delayStatus?: "delayed" | "on_time";
+  departmentIds?: string[];
   entityIds?: string[];
   limit?: number;
+  loiAwarded?: boolean;
+  natureOfWorkIds?: string[];
   ownerUserIds?: string[];
   prReceiptMonths?: string[];
+  priorityCase?: boolean;
   q?: string;
   stageCodes?: number[];
   status?: "completed" | "running";
   tenderTypeIds?: string[];
+  valueSlabs?: string[];
 };
 
 export type SavedReportView = {
@@ -253,8 +261,12 @@ export class ReportingRepository {
           count(*) filter (where f.status = 'running')::text as running_cases,
           count(*) filter (where f.status = 'completed')::text as completed_cases,
           count(*) filter (where f.is_delayed)::text as delayed_cases,
+          coalesce(sum(f.pr_value), 0)::text as total_pr_value,
+          coalesce(sum(f.approved_amount), 0)::text as total_approved_amount,
           coalesce(sum(f.total_awarded_amount), 0)::text as total_awarded_amount,
-          coalesce(sum(f.savings_wrt_pr), 0)::text as savings_wrt_pr
+          coalesce(sum(f.savings_wrt_pr), 0)::text as savings_wrt_pr,
+          coalesce(sum(f.savings_wrt_estimate), 0)::text as savings_wrt_estimate,
+          avg(coalesce(f.completed_age_days, f.running_age_days))::text as average_cycle_time_days
         from reporting.case_facts f
         join procurement.cases c on c.id = f.case_id and c.tenant_id = f.tenant_id and c.deleted_at is null
         where ${where.join(" and ")}
@@ -342,16 +354,50 @@ export class ReportingRepository {
         select
           c.id as case_id,
           c.pr_id,
+          c.pr_description,
+          c.tender_no,
           c.tender_name,
           f.entity_id,
+          e.code as entity_code,
+          e.name as entity_name,
+          dep.name as department_name,
+          tt.name as tender_type_name,
+          owner.full_name as owner_full_name,
           f.status,
           f.stage_code,
+          f.desired_stage_code,
           f.is_delayed,
           f.pr_receipt_date,
           f.rc_po_award_date,
-          f.total_awarded_amount
+          f.completion_fy,
+          f.running_age_days,
+          f.completed_age_days,
+          f.pr_value,
+          f.approved_amount,
+          f.total_awarded_amount,
+          f.savings_wrt_pr,
+          f.savings_wrt_estimate,
+          case
+            when c.tentative_completion_date is null or f.pr_receipt_date is null then null
+            when coalesce(f.completed_age_days, f.running_age_days) is null then null
+            when greatest((c.tentative_completion_date - f.pr_receipt_date), 1) = 0 then null
+            else round((coalesce(f.completed_age_days, f.running_age_days)::numeric / greatest((c.tentative_completion_date - f.pr_receipt_date), 1)) * 100)
+          end as percent_time_elapsed,
+          m.nit_publish_date,
+          m.bidders_participated,
+          m.qualified_bidders,
+          m.loi_issued,
+          m.loi_issued_date,
+          d.delay_external_days,
+          c.pr_remarks
         from reporting.case_facts f
         join procurement.cases c on c.id = f.case_id and c.tenant_id = f.tenant_id and c.deleted_at is null
+        left join org.entities e on e.id = f.entity_id and e.tenant_id = f.tenant_id
+        left join org.departments dep on dep.id = f.department_id and dep.tenant_id = f.tenant_id
+        left join catalog.tender_types tt on tt.id = f.tender_type_id and tt.tenant_id = f.tenant_id
+        left join iam.users owner on owner.id = f.owner_user_id and owner.tenant_id = f.tenant_id
+        left join procurement.case_milestones m on m.case_id = f.case_id and m.tenant_id = f.tenant_id
+        left join procurement.case_delays d on d.case_id = f.case_id and d.tenant_id = f.tenant_id
         where ${where.join(" and ")}
         order by f.updated_at desc
         limit $${limitPosition}
@@ -360,16 +406,39 @@ export class ReportingRepository {
     );
 
     return result.rows.map((row) => ({
+      approvedAmount: this.numberOrNull(row.approved_amount),
+      biddersParticipated: row.bidders_participated,
       caseId: row.case_id,
+      completedCycleTimeDays: row.completed_age_days,
+      completionFy: row.completion_fy,
+      departmentName: row.department_name,
+      desiredStageCode: row.desired_stage_code,
+      entityCode: row.entity_code,
       entityId: row.entity_id,
+      entityName: row.entity_name,
       isDelayed: row.is_delayed,
+      loiAwardDate: this.dateOnly(row.loi_issued_date),
+      loiAwarded: row.loi_issued,
+      nitPublishDate: this.dateOnly(row.nit_publish_date),
+      ownerFullName: row.owner_full_name,
+      percentTimeElapsed: this.numberOrNull(row.percent_time_elapsed),
       prId: row.pr_id,
+      prDescription: row.pr_description,
       prReceiptDate: this.dateOnly(row.pr_receipt_date),
+      prRemarks: row.pr_remarks,
+      prValue: this.numberOrNull(row.pr_value),
+      qualifiedBidders: row.qualified_bidders,
       rcPoAwardDate: this.dateOnly(row.rc_po_award_date),
+      runningAgeDays: row.running_age_days,
+      savingsWrtEstimate: this.numberOrNull(row.savings_wrt_estimate),
+      savingsWrtPr: this.numberOrNull(row.savings_wrt_pr),
       stageCode: row.stage_code,
       status: row.status,
       tenderName: row.tender_name,
+      tenderNo: row.tender_no,
+      tenderTypeName: row.tender_type_name,
       totalAwardedAmount: this.numberOrNull(row.total_awarded_amount),
+      uncontrollableDelayDays: row.delay_external_days,
     }));
   }
 
@@ -513,20 +582,31 @@ export class ReportingRepository {
           f.entity_id,
           e.code as entity_code,
           e.name as entity_name,
+          f.department_id,
+          dep.name as department_name,
           f.owner_user_id,
           u.username as owner_username,
           u.full_name as owner_full_name,
           f.tender_type_id,
           tt.name as tender_type_name,
+          c.budget_type_id,
+          rv_budget.label as budget_type_name,
+          c.nature_of_work_id,
+          rv_nature.label as nature_of_work_name,
+          f.value_slab,
           f.status,
           f.stage_code,
           f.completion_fy,
           to_char(f.pr_receipt_date, 'YYYY-MM') as pr_receipt_month,
           to_char(f.rc_po_award_date, 'YYYY-MM') as completion_month
         from reporting.case_facts f
+        join procurement.cases c on c.id = f.case_id and c.tenant_id = f.tenant_id and c.deleted_at is null
         left join org.entities e on e.id = f.entity_id and e.tenant_id = f.tenant_id
+        left join org.departments dep on dep.id = f.department_id and dep.tenant_id = f.tenant_id
         left join iam.users u on u.id = f.owner_user_id and u.tenant_id = f.tenant_id
         left join catalog.tender_types tt on tt.id = f.tender_type_id and tt.tenant_id = f.tenant_id
+        left join catalog.reference_values rv_budget on rv_budget.id = c.budget_type_id and rv_budget.tenant_id = c.tenant_id
+        left join catalog.reference_values rv_nature on rv_nature.id = c.nature_of_work_id and rv_nature.tenant_id = c.tenant_id
         where ${where.join(" and ")}
         order by f.status asc, f.stage_code asc
       `,
@@ -535,6 +615,9 @@ export class ReportingRepository {
     const entities = new Map<string, { code: string | null; id: string; name: string | null }>();
     const owners = new Map<string, { fullName: string | null; id: string; username: string | null }>();
     const tenderTypes = new Map<string, { id: string; name: string }>();
+    const departments = new Map<string, { id: string; name: string }>();
+    const budgetTypes = new Map<string, { id: string; name: string }>();
+    const natureOfWorks = new Map<string, { id: string; name: string }>();
     for (const row of result.rows) {
       entities.set(row.entity_id, {
         code: row.entity_code,
@@ -554,14 +637,26 @@ export class ReportingRepository {
           name: row.tender_type_name ?? "Unspecified",
         });
       }
+      if (row.department_id) {
+        departments.set(row.department_id, { id: row.department_id, name: row.department_name ?? "Unspecified" });
+      }
+      if (row.budget_type_id) {
+        budgetTypes.set(row.budget_type_id, { id: row.budget_type_id, name: row.budget_type_name ?? "Unspecified" });
+      }
+      if (row.nature_of_work_id) {
+        natureOfWorks.set(row.nature_of_work_id, { id: row.nature_of_work_id, name: row.nature_of_work_name ?? "Unspecified" });
+      }
     }
     return {
+      budgetTypes: [...budgetTypes.values()].sort((left, right) => left.name.localeCompare(right.name)),
       completionFys: [...new Set(result.rows.map((row) => row.completion_fy).filter(Boolean))].sort(),
       completionMonths: [...new Set(result.rows.map((row) => row.completion_month).filter(Boolean))].sort(),
+      departments: [...departments.values()].sort((left, right) => left.name.localeCompare(right.name)),
       entities: [...entities.values()].sort((left, right) =>
         (left.code ?? left.name ?? left.id).localeCompare(right.code ?? right.name ?? right.id),
       ),
       entityIds: [...entities.keys()],
+      natureOfWorks: [...natureOfWorks.values()].sort((left, right) => left.name.localeCompare(right.name)),
       owners: [...owners.values()].sort((left, right) =>
         (left.fullName ?? left.username ?? left.id).localeCompare(right.fullName ?? right.username ?? right.id),
       ),
@@ -569,6 +664,7 @@ export class ReportingRepository {
       stages: [...new Set(result.rows.map((row) => row.stage_code))],
       statuses: [...new Set(result.rows.map((row) => row.status))],
       tenderTypes: [...tenderTypes.values()].sort((left, right) => left.name.localeCompare(right.name)),
+      valueSlabs: [...new Set(result.rows.map((row) => row.value_slab).filter(Boolean))].sort(),
     };
   }
 
@@ -656,7 +752,7 @@ export class ReportingRepository {
     return { id: row.id };
   }
 
-  async getExportJob(tenantId: string, jobId: string) {
+  async getExportJob(tenantId: string, userId: string, jobId: string) {
     return this.db.one<
       QueryResultRow & {
         completed_at: Date | null;
@@ -678,12 +774,48 @@ export class ReportingRepository {
         from ops.export_jobs
         where tenant_id = $1
           and id = $2
+          and created_by = $3
       `,
-      [tenantId, jobId],
+      [tenantId, jobId, userId],
     );
   }
 
-  async getExportFile(tenantId: string, jobId: string) {
+  async listExportJobs(tenantId: string, userId: string, limit = 100) {
+    return this.db.query<
+      QueryResultRow & {
+        completed_at: Date | null;
+        created_at: Date;
+        expires_at: Date | null;
+        file_asset_id: string | null;
+        format: string;
+        id: string;
+        progress_message: string | null;
+        progress_percent: number;
+        report_code: string;
+        selected_count: number;
+        status: string;
+      }
+    >(
+      `
+        select
+          id, report_code, format, status, progress_percent, progress_message,
+          file_asset_id, created_at, completed_at, expires_at,
+          case
+            when jsonb_typeof(filters->'selectedIds') = 'array'
+              then jsonb_array_length(filters->'selectedIds')
+            else 0
+          end as selected_count
+        from ops.export_jobs
+        where tenant_id = $1
+          and created_by = $2
+        order by created_at desc
+        limit $3
+      `,
+      [tenantId, userId, limit],
+    );
+  }
+
+  async getExportFile(tenantId: string, userId: string, jobId: string) {
     return this.db.one<
       QueryResultRow & {
         content_type: string | null;
@@ -697,10 +829,11 @@ export class ReportingRepository {
         join ops.file_assets f on f.id = j.file_asset_id
         where j.tenant_id = $1
           and j.id = $2
+          and j.created_by = $3
           and j.status = 'completed'
           and (j.expires_at is null or j.expires_at > now())
       `,
-      [tenantId, jobId],
+      [tenantId, jobId, userId],
     );
   }
 
@@ -710,11 +843,38 @@ export class ReportingRepository {
       where.push(`f.status = $${values.length}`);
     }
     this.applyEntityFilter(where, values, filters, "f.entity_id");
+    this.applyUuidArrayFilter(where, values, filters.departmentIds, "f.department_id");
     this.applyUuidArrayFilter(where, values, filters.ownerUserIds, "f.owner_user_id");
     this.applyUuidArrayFilter(where, values, filters.tenderTypeIds, "f.tender_type_id");
+    this.applyUuidArrayFilter(where, values, filters.budgetTypeIds, "c.budget_type_id");
+    this.applyUuidArrayFilter(where, values, filters.natureOfWorkIds, "c.nature_of_work_id");
     if (filters.stageCodes?.length) {
       values.push(filters.stageCodes);
       where.push(`f.stage_code = any($${values.length}::int[])`);
+    }
+    if (filters.valueSlabs?.length) {
+      values.push(filters.valueSlabs);
+      where.push(`f.value_slab = any($${values.length}::text[])`);
+    }
+    if (filters.delayStatus) {
+      where.push(filters.delayStatus === "delayed" ? "f.is_delayed" : "not f.is_delayed");
+    }
+    if (filters.loiAwarded !== undefined) {
+      values.push(filters.loiAwarded);
+      where.push(`exists (
+        select 1 from procurement.case_milestones m_filter
+        where m_filter.case_id = f.case_id
+          and m_filter.tenant_id = f.tenant_id
+          and m_filter.loi_issued = $${values.length}
+      )`);
+    }
+    if (filters.cpcInvolved !== undefined) {
+      values.push(filters.cpcInvolved);
+      where.push(`f.cpc_involved = $${values.length}`);
+    }
+    if (filters.priorityCase !== undefined) {
+      values.push(filters.priorityCase);
+      where.push(`f.priority_case = $${values.length}`);
     }
     if (filters.completionFys?.length) {
       values.push(filters.completionFys);
@@ -809,6 +969,7 @@ export class ReportingRepository {
   ) {
     return {
       averageBiddersParticipated: this.numberOrNull(nullable(rowValue(bidderRow, "average_bidders_participated"))),
+      averageCycleTimeDays: this.numberOrNull(nullable(rowValue(row, "average_cycle_time_days"))),
       averageQualifiedBidders: this.numberOrNull(nullable(rowValue(bidderRow, "average_qualified_bidders"))),
       bidderCaseCount: Number(rowValue(bidderRow, "bidder_case_count", "0")),
       byEntity: entityRows.map(mapAnalyticsEntityRow),
@@ -816,9 +977,12 @@ export class ReportingRepository {
       completedCases: Number(rowValue(row, "completed_cases", "0")),
       delayedCases: Number(rowValue(row, "delayed_cases", "0")),
       runningCases: Number(rowValue(row, "running_cases", "0")),
+      savingsWrtEstimate: Number(rowValue(row, "savings_wrt_estimate", "0")),
       savingsWrtPr: Number(rowValue(row, "savings_wrt_pr", "0")),
+      totalApprovedAmount: Number(rowValue(row, "total_approved_amount", "0")),
       totalAwardedAmount: Number(rowValue(row, "total_awarded_amount", "0")),
       totalCases: Number(rowValue(row, "total_cases", "0")),
+      totalPrValue: Number(rowValue(row, "total_pr_value", "0")),
     };
   }
 }
@@ -868,12 +1032,16 @@ function mapAnalyticsTenderTypeRow(row: AnalyticsTenderTypeRow) {
 }
 
 type AnalyticsRow = {
+  average_cycle_time_days: string | null;
   completed_cases: string;
   delayed_cases: string;
   running_cases: string;
+  savings_wrt_estimate: string;
   savings_wrt_pr: string;
+  total_approved_amount: string;
   total_awarded_amount: string;
   total_cases: string;
+  total_pr_value: string;
 };
 
 type AnalyticsBidderRow = {
@@ -900,16 +1068,39 @@ type AnalyticsTenderTypeRow = {
 };
 
 type CaseReportRow = {
+  approved_amount: string | null;
+  bidders_participated: number | null;
   case_id: string;
+  completed_age_days: number | null;
+  completion_fy: string | null;
+  department_name: string | null;
+  desired_stage_code: number | null;
+  entity_code: string | null;
   entity_id: string;
+  entity_name: string | null;
   is_delayed: boolean;
+  loi_issued: boolean;
+  loi_issued_date: Date | null;
+  nit_publish_date: Date | null;
+  owner_full_name: string | null;
+  percent_time_elapsed: string | null;
+  pr_description: string | null;
   pr_id: string;
+  pr_remarks: string | null;
   pr_receipt_date: Date | null;
+  pr_value: string | null;
+  qualified_bidders: number | null;
   rc_po_award_date: Date | null;
+  running_age_days: number | null;
+  savings_wrt_estimate: string | null;
+  savings_wrt_pr: string | null;
   stage_code: number;
   status: string;
   tender_name: string | null;
+  tender_no: string | null;
+  tender_type_name: string | null;
   total_awarded_amount: string | null;
+  delay_external_days: number | null;
 };
 
 type VendorAwardRow = {
@@ -953,11 +1144,17 @@ type SavedViewRow = {
 };
 
 type FilterMetadataRow = {
+  budget_type_id: string | null;
+  budget_type_name: string | null;
   completion_fy: string | null;
   completion_month: string | null;
+  department_id: string | null;
+  department_name: string | null;
   entity_code: string | null;
   entity_id: string;
   entity_name: string | null;
+  nature_of_work_id: string | null;
+  nature_of_work_name: string | null;
   owner_full_name: string | null;
   owner_user_id: string | null;
   owner_username: string | null;
@@ -966,4 +1163,5 @@ type FilterMetadataRow = {
   status: string;
   tender_type_id: string | null;
   tender_type_name: string | null;
+  value_slab: string | null;
 };

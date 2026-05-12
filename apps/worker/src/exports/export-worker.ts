@@ -17,19 +17,27 @@ type ReportCode =
   | "tender_details"
   | "vendor_awards";
 type ReportFilters = {
+  budgetTypeIds: string[];
   completionFys: string[];
   completionMonths: string[];
+  cpcInvolved?: boolean | undefined;
   dateFrom?: string | undefined;
   dateTo?: string | undefined;
+  delayStatus?: "delayed" | "on_time" | undefined;
+  departmentIds: string[];
   entityIds: string[];
   limit: number;
+  loiAwarded?: boolean | undefined;
+  natureOfWorkIds: string[];
   ownerUserIds: string[];
   prReceiptMonths: string[];
+  priorityCase?: boolean | undefined;
   q?: string | undefined;
   selectedIds: string[];
   stageCodes: number[];
   status?: "completed" | "running" | undefined;
   tenderTypeIds: string[];
+  valueSlabs: string[];
 };
 type ExportScope = {
   actorUserId: string;
@@ -212,10 +220,11 @@ async function queryExportRows(input: {
           a.po_value,
           a.po_award_date,
           a.po_validity_date
-        from procurement.case_awards a
-        join procurement.cases c on c.id = a.case_id and c.tenant_id = a.tenant_id
-        join reporting.case_facts f on f.case_id = c.id and f.tenant_id = c.tenant_id
-        where ${where.join(" and ")}
+      from procurement.case_awards a
+      join procurement.cases c on c.id = a.case_id and c.tenant_id = a.tenant_id
+      join reporting.case_facts f on f.case_id = c.id and f.tenant_id = c.tenant_id
+      left join procurement.case_milestones m on m.case_id = c.id and m.tenant_id = c.tenant_id
+      where ${where.join(" and ")}
         order by a.po_award_date desc nulls last
         limit $${limitPosition}
       `,
@@ -240,16 +249,48 @@ async function queryExportRows(input: {
   const result = await input.pool.query<ExportRow>(
     `
       select
+        c.tender_no,
         c.pr_id,
+        c.pr_description,
         c.tender_name,
+        coalesce(e.code, e.name) as entity,
+        dep.name as department,
+        f.pr_value,
+        f.approved_amount,
+        tt.name as tender_type,
         f.status,
         f.stage_code,
+        f.desired_stage_code,
         f.is_delayed,
+        case
+          when c.tentative_completion_date is null or f.pr_receipt_date is null then null
+          when coalesce(f.completed_age_days, f.running_age_days) is null then null
+          else round((coalesce(f.completed_age_days, f.running_age_days)::numeric / greatest((c.tentative_completion_date - f.pr_receipt_date), 1)) * 100)
+        end as percent_time_elapsed,
+        f.running_age_days,
         f.pr_receipt_date,
+        m.nit_publish_date,
+        m.bidders_participated,
+        m.qualified_bidders,
+        f.completed_age_days as completed_cycle_time_days,
         f.rc_po_award_date,
-        f.total_awarded_amount
+        f.total_awarded_amount,
+        f.savings_wrt_pr,
+        f.savings_wrt_estimate,
+        owner.full_name as tender_owner,
+        d.delay_external_days as uncontrollable_delay_days,
+        m.loi_issued as loi_awarded,
+        m.loi_issued_date as loi_award_date,
+        c.pr_remarks,
+        f.completion_fy
       from reporting.case_facts f
       join procurement.cases c on c.id = f.case_id and c.tenant_id = f.tenant_id
+      left join org.entities e on e.id = f.entity_id and e.tenant_id = f.tenant_id
+      left join org.departments dep on dep.id = f.department_id and dep.tenant_id = f.tenant_id
+      left join catalog.tender_types tt on tt.id = f.tender_type_id and tt.tenant_id = f.tenant_id
+      left join iam.users owner on owner.id = f.owner_user_id and owner.tenant_id = f.tenant_id
+      left join procurement.case_milestones m on m.case_id = f.case_id and m.tenant_id = f.tenant_id
+      left join procurement.case_delays d on d.case_id = f.case_id and d.tenant_id = f.tenant_id
       where ${where.join(" and ")}
       ${statusClause}
       order by f.updated_at desc
@@ -283,6 +324,7 @@ async function queryStageTimeExport(input: {
         round(avg(f.running_age_days)::numeric, 2) as average_running_age_days
       from reporting.case_facts f
       join procurement.cases c on c.id = f.case_id and c.tenant_id = f.tenant_id
+      left join procurement.case_milestones m on m.case_id = f.case_id and m.tenant_id = f.tenant_id
       where ${where.join(" and ")}
       group by f.stage_code
       order by f.stage_code asc
@@ -382,19 +424,27 @@ async function getExportScope(
 function normalizeFilters(value: unknown): ReportFilters {
   const record = isRecord(value) ? value : {};
   return {
+    budgetTypeIds: stringArray(record.budgetTypeIds, 100),
     completionFys: stringArray(record.completionFys, 50),
     completionMonths: stringArray(record.completionMonths, 60),
+    cpcInvolved: optionalBoolean(record.cpcInvolved),
     dateFrom: dateString(record.dateFrom),
     dateTo: dateString(record.dateTo),
+    delayStatus: record.delayStatus === "delayed" || record.delayStatus === "on_time" ? record.delayStatus : undefined,
+    departmentIds: stringArray(record.departmentIds, 200),
     entityIds: stringArray(record.entityIds, 200),
     limit: positiveLimit(record.limit),
+    loiAwarded: optionalBoolean(record.loiAwarded),
+    natureOfWorkIds: stringArray(record.natureOfWorkIds, 100),
     ownerUserIds: stringArray(record.ownerUserIds, 200),
     prReceiptMonths: stringArray(record.prReceiptMonths, 60),
+    priorityCase: optionalBoolean(record.priorityCase),
     q: optionalSearch(record.q),
     selectedIds: stringArray(record.selectedIds, 500),
     stageCodes: intArray(record.stageCodes, 20).filter((stageCode) => stageCode >= 0 && stageCode <= 8),
     status: record.status === "completed" || record.status === "running" ? record.status : undefined,
     tenderTypeIds: stringArray(record.tenderTypeIds, 100),
+    valueSlabs: stringArray(record.valueSlabs, 20),
   };
 }
 
@@ -409,8 +459,15 @@ function applyCaseFactFilters(
     where.push(`f.status = $${values.length}`);
   }
   applyUuidArrayFilter(where, values, filters.entityIds, "f.entity_id");
+  applyUuidArrayFilter(where, values, filters.departmentIds, "f.department_id");
   applyUuidArrayFilter(where, values, filters.ownerUserIds, "f.owner_user_id");
   applyUuidArrayFilter(where, values, filters.tenderTypeIds, "f.tender_type_id");
+  applyUuidArrayFilter(where, values, filters.budgetTypeIds, "c.budget_type_id");
+  applyUuidArrayFilter(where, values, filters.natureOfWorkIds, "c.nature_of_work_id");
+  if (filters.valueSlabs.length) {
+    values.push(filters.valueSlabs);
+    where.push(`f.value_slab = any($${values.length}::text[])`);
+  }
   if (filters.stageCodes.length) {
     values.push(filters.stageCodes);
     where.push(`f.stage_code = any($${values.length}::int[])`);
@@ -428,6 +485,18 @@ function applyCaseFactFilters(
     where.push(`to_char(f.rc_po_award_date, 'YYYY-MM') = any($${values.length}::text[])`);
   }
   applyDateFilters(where, values, filters, "f.pr_receipt_date");
+  if (filters.delayStatus) {
+    where.push(filters.delayStatus === "delayed" ? "f.is_delayed" : "not f.is_delayed");
+  }
+  if (filters.loiAwarded !== undefined) {
+    where.push(filters.loiAwarded ? "coalesce(m.loi_issued, false)" : "not coalesce(m.loi_issued, false)");
+  }
+  if (filters.cpcInvolved !== undefined) {
+    where.push(filters.cpcInvolved ? "f.cpc_involved" : "not f.cpc_involved");
+  }
+  if (filters.priorityCase !== undefined) {
+    where.push(filters.priorityCase ? "f.priority_case" : "not f.priority_case");
+  }
   if (filters.q) {
     applyTextSearch(where, values, filters.q, searchColumns);
   }
@@ -517,6 +586,13 @@ function optionalSearch(value: unknown) {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   return trimmed ? trimmed.slice(0, 200) : undefined;
+}
+
+function optionalBoolean(value: unknown) {
+  if (typeof value === "boolean") return value;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return undefined;
 }
 
 function positiveLimit(value: unknown) {

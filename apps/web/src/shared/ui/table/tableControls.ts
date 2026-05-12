@@ -10,11 +10,17 @@ export type TableSortState = {
 export type TableColumnControls<TRow> = {
   enableFilter?: boolean;
   enableSort?: boolean;
+  filterOptions?: TableFilterOption[];
   filterValue?: (row: TRow) => ReactNode;
   header: string;
   key: string;
   render: (row: TRow) => ReactNode;
   sortValue?: (row: TRow) => ReactNode;
+};
+
+export type TableFilterOption = {
+  label: string;
+  value: string;
 };
 
 export function useProcessedTableRows<TRow>(
@@ -34,7 +40,8 @@ export function useProcessedTableRows<TRow>(
           activeFilters.every(([key, value]) => {
             const column = columnByKey.get(key);
             if (!column) return true;
-            return getColumnText(row, column).toLowerCase().includes(value);
+            const columnText = getColumnText(row, column).trim().toLowerCase();
+            return column.filterOptions ? columnText === value : columnText.includes(value);
           }),
         )
       : rows;

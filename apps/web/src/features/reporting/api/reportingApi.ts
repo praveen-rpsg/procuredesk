@@ -11,22 +11,31 @@ export type ReportCode =
 export type ExportFormat = "csv" | "xlsx";
 
 export type ReportQueryParams = {
+  budgetTypeIds?: string[];
   completionFys?: string[];
   completionMonths?: string[];
+  cpcInvolved?: boolean;
   dateFrom?: string;
   dateTo?: string;
+  delayStatus?: "delayed" | "on_time";
+  departmentIds?: string[];
   entityIds?: string[];
   limit?: number;
+  loiAwarded?: boolean;
+  natureOfWorkIds?: string[];
   ownerUserIds?: string[];
   prReceiptMonths?: string[];
+  priorityCase?: boolean;
   q?: string;
   stageCodes?: number[];
   status?: "completed" | "running";
   tenderTypeIds?: string[];
+  valueSlabs?: string[];
 };
 
 export type ReportingAnalytics = {
   averageBiddersParticipated: number | null;
+  averageCycleTimeDays: number | null;
   averageQualifiedBidders: number | null;
   bidderCaseCount: number;
   byEntity: Array<{
@@ -47,20 +56,26 @@ export type ReportingAnalytics = {
   completedCases: number;
   delayedCases: number;
   runningCases: number;
+  savingsWrtEstimate: number;
   savingsWrtPr: number;
+  totalApprovedAmount: number;
   totalAwardedAmount: number;
   totalCases: number;
+  totalPrValue: number;
 };
 
 export type ReportFilterMetadata = {
+  budgetTypes: Array<{ id: string; name: string }>;
   completionFys: string[];
   completionMonths: string[];
+  departments: Array<{ id: string; name: string }>;
   entities: Array<{
     code: string | null;
     id: string;
     name: string | null;
   }>;
   entityIds: string[];
+  natureOfWorks: Array<{ id: string; name: string }>;
   owners: Array<{
     fullName: string | null;
     id: string;
@@ -73,19 +88,43 @@ export type ReportFilterMetadata = {
     id: string;
     name: string;
   }>;
+  valueSlabs: string[];
 };
 
 export type ReportCaseRow = {
+  approvedAmount: number | null;
+  biddersParticipated: number | null;
   caseId: string;
+  completedCycleTimeDays: number | null;
+  completionFy: string | null;
+  departmentName: string | null;
+  desiredStageCode: number | null;
+  entityCode: string | null;
   entityId: string;
+  entityName: string | null;
   isDelayed: boolean;
+  loiAwardDate: string | null;
+  loiAwarded: boolean;
+  nitPublishDate: string | null;
+  ownerFullName: string | null;
+  percentTimeElapsed: number | null;
   prId: string;
+  prDescription: string | null;
   prReceiptDate: string | null;
+  prRemarks: string | null;
+  prValue: number | null;
+  qualifiedBidders: number | null;
   rcPoAwardDate: string | null;
+  runningAgeDays: number | null;
+  savingsWrtEstimate: number | null;
+  savingsWrtPr: number | null;
   stageCode: number;
   status: string;
   tenderName: string | null;
+  tenderNo: string | null;
+  tenderTypeName: string | null;
   totalAwardedAmount: number | null;
+  uncontrollableDelayDays: number | null;
 };
 
 export type VendorAwardReportRow = {
@@ -139,6 +178,10 @@ export type ExportJobStatus = {
   progressPercent: number;
   reportCode: ReportCode;
   status: string;
+};
+
+export type ExportJobListItem = ExportJobStatus & {
+  selectedCount: number;
 };
 
 export function refreshReportProjections() {
@@ -213,28 +256,44 @@ export function getExportJob(jobId: string) {
   return apiRequest<ExportJobStatus>(`/reports/export-jobs/${jobId}`);
 }
 
+export function listExportJobs() {
+  return apiRequest<ExportJobListItem[]>("/reports/export-jobs");
+}
+
 export function getExportDownloadUrl(jobId: string) {
   return `${apiBaseUrl}/reports/export-jobs/${jobId}/download`;
 }
 
 function buildReportQuery(params: ReportQueryParams) {
   const search = new URLSearchParams();
+  setCsvParam(search, "budgetTypeIds", params.budgetTypeIds);
   setCsvParam(search, "completionFys", params.completionFys);
   setCsvParam(search, "completionMonths", params.completionMonths);
+  setBooleanParam(search, "cpcInvolved", params.cpcInvolved);
   if (params.dateFrom) search.set("dateFrom", params.dateFrom);
   if (params.dateTo) search.set("dateTo", params.dateTo);
+  if (params.delayStatus) search.set("delayStatus", params.delayStatus);
+  setCsvParam(search, "departmentIds", params.departmentIds);
   setCsvParam(search, "entityIds", params.entityIds);
   if (params.limit != null) search.set("limit", String(params.limit));
+  setBooleanParam(search, "loiAwarded", params.loiAwarded);
+  setCsvParam(search, "natureOfWorkIds", params.natureOfWorkIds);
   setCsvParam(search, "ownerUserIds", params.ownerUserIds);
   setCsvParam(search, "prReceiptMonths", params.prReceiptMonths);
+  setBooleanParam(search, "priorityCase", params.priorityCase);
   if (params.q) search.set("q", params.q);
   setCsvParam(search, "stageCodes", params.stageCodes?.map(String));
   if (params.status) search.set("status", params.status);
   setCsvParam(search, "tenderTypeIds", params.tenderTypeIds);
+  setCsvParam(search, "valueSlabs", params.valueSlabs);
   const query = search.toString();
   return query ? `?${query}` : "";
 }
 
 function setCsvParam(search: URLSearchParams, key: string, values: string[] | undefined) {
   if (values?.length) search.set(key, values.join(","));
+}
+
+function setBooleanParam(search: URLSearchParams, key: string, value: boolean | undefined) {
+  if (value !== undefined) search.set(key, String(value));
 }

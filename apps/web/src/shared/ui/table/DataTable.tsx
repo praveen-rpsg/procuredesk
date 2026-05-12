@@ -7,6 +7,7 @@ import {
   canSortColumn,
   nextSortState,
   useProcessedTableRows,
+  type TableFilterOption,
   type TableSortDirection,
   type TableSortState,
 } from "./tableControls";
@@ -14,6 +15,7 @@ import {
 export type DataTableColumn<TRow> = {
   enableFilter?: boolean;
   enableSort?: boolean;
+  filterOptions?: TableFilterOption[];
   filterValue?: (row: TRow) => ReactNode;
   key: string;
   header: string;
@@ -30,6 +32,7 @@ type DataTableProps<TRow> = {
   emptyMessage?: string;
   getRowKey: (row: TRow) => string;
   isLoading?: boolean;
+  onRowClick?: (row: TRow) => void;
   rows: TRow[];
   /** Number of skeleton rows to show while loading */
   skeletonRows?: number;
@@ -43,6 +46,7 @@ export function DataTable<TRow>({
   emptyMessage = "No records found.",
   getRowKey,
   isLoading = false,
+  onRowClick,
   rows,
   skeletonRows = SKELETON_COUNT_DEFAULT,
 }: DataTableProps<TRow>) {
@@ -82,6 +86,7 @@ export function DataTable<TRow>({
                 <TableHeader
                   canFilter={canFilterColumn(column)}
                   canSort={Boolean(column.onSort) || canSortColumn(column)}
+                  filterOptions={column.filterOptions}
                   filterValue={filters[column.key] ?? ""}
                   header={column.header}
                   isFilterOpen={filterColumnKey === column.key}
@@ -114,7 +119,22 @@ export function DataTable<TRow>({
             </tr>
           ) : (
             processedRows.map((row) => (
-              <tr key={getRowKey(row)}>
+              <tr
+                className={onRowClick ? "table-row-clickable" : undefined}
+                key={getRowKey(row)}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                onKeyDown={
+                  onRowClick
+                    ? (event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          onRowClick(row);
+                        }
+                      }
+                    : undefined
+                }
+                tabIndex={onRowClick ? 0 : undefined}
+              >
                 {columns.map((column) => (
                   <td key={column.key}>{column.render(row)}</td>
                 ))}
@@ -130,6 +150,7 @@ export function DataTable<TRow>({
 function TableHeader({
   canFilter,
   canSort,
+  filterOptions,
   filterValue,
   header,
   isFilterOpen,
@@ -141,6 +162,7 @@ function TableHeader({
 }: {
   canFilter: boolean;
   canSort: boolean;
+  filterOptions?: TableFilterOption[] | undefined;
   filterValue: string;
   header: string;
   isFilterOpen: boolean;
@@ -150,12 +172,17 @@ function TableHeader({
   onToggleFilter: () => void;
   sortDirection?: TableSortDirection | undefined;
 }) {
+  const hasActiveFilter = Boolean(filterValue.trim());
+  const hasActiveSort = Boolean(sortDirection);
+  const isFilterHighlighted = hasActiveFilter || isFilterOpen;
+
   if (!canFilter && !canSort) return <span>{header}</span>;
   return (
     <div className="table-header-control">
       <button
         aria-label={canSort ? `Sort by ${header}` : undefined}
-        className="table-sort-button"
+        aria-pressed={canSort ? hasActiveSort : undefined}
+        className={`table-sort-button ${hasActiveSort ? "table-sort-button-active" : ""}`.trim()}
         disabled={!canSort}
         onClick={canSort ? onSort : undefined}
         type="button"
@@ -166,7 +193,9 @@ function TableHeader({
       {canFilter ? (
         <button
           aria-label={`Filter ${header}`}
-          className={`table-filter-button ${filterValue ? "table-filter-button-active" : ""}`.trim()}
+          aria-expanded={isFilterOpen}
+          aria-pressed={isFilterHighlighted}
+          className={`table-filter-button ${isFilterHighlighted ? "table-filter-button-active" : ""}`.trim()}
           onClick={onToggleFilter}
           type="button"
         >
@@ -175,12 +204,28 @@ function TableHeader({
       ) : null}
       {isFilterOpen ? (
         <div className="table-filter-popover">
-          <input
-            autoFocus
-            onChange={(event) => onFilterChange(event.target.value)}
-            placeholder={`Filter ${header}`}
-            value={filterValue}
-          />
+          {filterOptions?.length ? (
+            <select
+              autoFocus
+              aria-label={`Filter ${header}`}
+              onChange={(event) => onFilterChange(event.target.value)}
+              value={filterValue}
+            >
+              <option value="">All {header}</option>
+              {filterOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              autoFocus
+              onChange={(event) => onFilterChange(event.target.value)}
+              placeholder={`Filter ${header}`}
+              value={filterValue}
+            />
+          )}
           <button aria-label={`Clear ${header} filter`} onClick={onClearFilter} type="button">
             <X aria-hidden="true" size={13} />
           </button>

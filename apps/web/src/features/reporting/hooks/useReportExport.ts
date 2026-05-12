@@ -5,6 +5,7 @@ import {
   createExportJob,
   createSavedView,
   getExportJob,
+  listExportJobs,
   type ExportFormat,
   type ReportCode,
 } from "../api/reportingApi";
@@ -20,6 +21,7 @@ export function useReportExport(
   savedViewName: string,
   setSavedViewName: (name: string) => void,
   options: {
+    enabled?: boolean;
     initialExportJobId?: string;
     onExportCreated?: (job: { id: string }) => void;
   } = {},
@@ -53,6 +55,14 @@ export function useReportExport(
       query.state.data?.status === "queued" || query.state.data?.status === "running" ? 3000 : false,
   });
 
+  const exportJobs = useQuery({
+    enabled: options.enabled !== false,
+    queryFn: listExportJobs,
+    queryKey: ["report", "export-jobs"],
+    refetchInterval: (query) =>
+      query.state.data?.some((job) => job.status === "queued" || job.status === "running") ? 3000 : false,
+  });
+
   const exportMutation = useMutation({
     mutationFn: () => {
       const payload = {
@@ -66,6 +76,7 @@ export function useReportExport(
     onSuccess: (result) => {
       setExportJobId(result.id);
       options.onExportCreated?.(result);
+      void queryClient.invalidateQueries({ queryKey: ["report", "export-jobs"] });
       notify({
         message: selectedIds.length
           ? `Export queued for ${selectedIds.length} selected rows.`
@@ -99,6 +110,7 @@ export function useReportExport(
     canDownloadExport,
     exportFormat,
     exportJobId,
+    exportJobs,
     exportMutation,
     exportStatus,
     selectedExportCount: selectedIds.length,

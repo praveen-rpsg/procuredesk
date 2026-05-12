@@ -30,18 +30,26 @@ const dateString = z
   .optional();
 
 export const ReportQuerySchema = z.object({
+  budgetTypeIds: csvUuidList,
   completionFys: csvTextList,
   completionMonths: csvTextList,
+  cpcInvolved: z.enum(["true", "false"]).optional().transform((value) => value === undefined ? undefined : value === "true"),
   dateFrom: dateString,
   dateTo: dateString,
+  delayStatus: z.enum(["delayed", "on_time"]).optional(),
+  departmentIds: csvUuidList,
   entityIds: csvUuidList,
   limit: z.coerce.number().int().min(1).max(100).optional(),
+  loiAwarded: z.enum(["true", "false"]).optional().transform((value) => value === undefined ? undefined : value === "true"),
+  natureOfWorkIds: csvUuidList,
   ownerUserIds: csvUuidList,
   prReceiptMonths: csvTextList,
+  priorityCase: z.enum(["true", "false"]).optional().transform((value) => value === undefined ? undefined : value === "true"),
   q: z.string().trim().min(1).optional(),
   stageCodes: csvIntList,
   status: z.enum(["completed", "running"]).optional(),
   tenderTypeIds: csvUuidList,
+  valueSlabs: csvTextList,
 });
 
 export const CreateSavedViewRequestSchema = z.object({
