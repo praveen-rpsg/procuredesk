@@ -50,6 +50,25 @@ type ExportJob = {
   report_code: ReportCode;
 };
 
+const PERMISSION_IMPLICATIONS: Record<string, string[]> = {
+  "case.delay.manage.all": ["case.delay.manage.entity"],
+  "case.read.all": ["case.read.entity", "case.read.assigned"],
+  "case.read.entity": ["case.read.assigned"],
+  "case.update.all": [
+    "case.read.all",
+    "case.update.entity",
+    "case.update.assigned",
+  ],
+  "case.update.entity": ["case.read.entity", "case.update.assigned"],
+  "catalog.manage": ["catalog.read"],
+  "entity.manage": ["entity.read"],
+  "report.export": ["report.read"],
+  "role.manage": ["permission.read"],
+  "user.manage": ["user.read.all"],
+  "user.read.all": ["user.read.entity"],
+  "user.read.entity": ["user.read"],
+};
+
 export async function processExportJob(
   payload: ExportJobPayload,
   dependencies: { pool: Pool; storage: PrivateObjectStorage },
@@ -58,19 +77,40 @@ export async function processExportJob(
   if (!job) return;
 
   try {
-    await updateExportProgress(dependencies.pool, payload, 20, "Querying report data");
+    await updateExportProgress(
+      dependencies.pool,
+      payload,
+      20,
+      "Querying report data",
+    );
     const rows = await queryExportRows({
       filters: normalizeFilters(job.filters),
       pool: dependencies.pool,
       reportCode: job.report_code,
-      scope: await getExportScope(payload.tenantId, job.created_by, dependencies.pool),
+      scope: await getExportScope(
+        payload.tenantId,
+        job.created_by,
+        dependencies.pool,
+      ),
       tenantId: payload.tenantId,
     });
-    await updateExportProgress(dependencies.pool, payload, 55, "Generating file");
+    await updateExportProgress(
+      dependencies.pool,
+      payload,
+      55,
+      "Generating file",
+    );
     const storageKey = `exports/${payload.tenantId}/${payload.exportJobId}.${job.format}`;
     const file =
-      job.format === "xlsx" ? await createXlsx(rows) : Buffer.from(createCsv(rows), "utf8");
-    await updateExportProgress(dependencies.pool, payload, 80, "Writing file to private storage");
+      job.format === "xlsx"
+        ? await createXlsx(rows)
+        : Buffer.from(createCsv(rows), "utf8");
+    await updateExportProgress(
+      dependencies.pool,
+      payload,
+      80,
+      "Writing file to private storage",
+    );
     const stored = await dependencies.storage.write(storageKey, file);
     const fileAssetId = await createFileAsset({
       byteSize: stored.byteSize,
@@ -135,7 +175,9 @@ export async function processExportJob(
         payload.tenantId,
         payload.exportJobId,
         "Export generation failed",
-        JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+        JSON.stringify({
+          error: error instanceof Error ? error.message : "Unknown error",
+        }),
       ],
     );
     throw error;
@@ -199,7 +241,9 @@ async function queryExportRows(input: {
     const where = [
       "a.tenant_id = $1",
       "a.deleted_at is null",
-      input.filters.deletedOnly ? "c.deleted_at is not null" : "c.deleted_at is null",
+      input.filters.deletedOnly
+        ? "c.deleted_at is not null"
+        : "c.deleted_at is null",
     ];
     applyScope(where, values, input.scope, "f.entity_id", "f.owner_user_id");
     applyCaseFactFilters(where, values, input.filters, [
@@ -251,7 +295,9 @@ async function queryExportRows(input: {
       Entity: row.entity ?? null,
       "User Department": row.department ?? null,
       "Tender Owner": row.tender_owner ?? null,
-      "NFA Approved Amount (Lakhs) [All Inclusive]": amountToLakhs(row.approved_amount),
+      "NFA Approved Amount (Lakhs) [All Inclusive]": amountToLakhs(
+        row.approved_amount,
+      ),
       "Vendor Code": row.vendor_code ?? null,
       "Vendor Name": row.vendor_name ?? null,
       "RC/PO No.": row.po_number ?? null,
@@ -268,7 +314,12 @@ async function queryExportRows(input: {
         ? "and f.status = 'completed'"
         : "";
   const values: unknown[] = [input.tenantId];
-  const where = ["f.tenant_id = $1", input.filters.deletedOnly ? "c.deleted_at is not null" : "c.deleted_at is null"];
+  const where = [
+    "f.tenant_id = $1",
+    input.filters.deletedOnly
+      ? "c.deleted_at is not null"
+      : "c.deleted_at is null",
+  ];
   applyScope(where, values, input.scope, "f.entity_id", "f.owner_user_id");
   applyCaseFactFilters(where, values, input.filters, [
     "c.pr_id",
@@ -349,7 +400,10 @@ async function queryExportRows(input: {
       Entity: row.entity ?? null,
       "User Department": row.department ?? null,
       "Tender Stage": formatExportStage(row.stage_code),
-      "Normative Tender Stage": row.desired_stage_code == null ? null : formatExportStage(row.desired_stage_code),
+      "Normative Tender Stage":
+        row.desired_stage_code == null
+          ? null
+          : formatExportStage(row.desired_stage_code),
       "Running Tender Age": row.running_age_days ?? null,
       "Current Stage Aging (Days)": row.current_stage_aging_days ?? null,
       "Uncontrollable Delay (Days)": row.uncontrollable_delay_days ?? null,
@@ -371,8 +425,10 @@ async function queryExportRows(input: {
       "Cycle Time": row.completed_cycle_time_days ?? null,
       "Uncontrollable Delay (Days)": row.uncontrollable_delay_days ?? null,
       "Reasons for Delay": row.delay_reason ?? null,
-      "Savings wrt PR Value / Approved Budget [All Inclusive]": row.savings_wrt_pr ?? null,
-      "Savings wrt Estimate / Benchmark [All Inclusive]": row.savings_wrt_estimate ?? null,
+      "Savings wrt PR Value / Approved Budget [All Inclusive]":
+        row.savings_wrt_pr ?? null,
+      "Savings wrt Estimate / Benchmark [All Inclusive]":
+        row.savings_wrt_estimate ?? null,
       "LOI Awarded?": row.loi_awarded ? "Yes" : "No",
       "LOI Award Date": formatExportDate(row.loi_award_date),
     }));
@@ -388,7 +444,12 @@ async function queryStageTimeExport(input: {
   tenantId: string;
 }): Promise<ExportRow[]> {
   const values: unknown[] = [input.tenantId];
-  const where = ["f.tenant_id = $1", input.filters.deletedOnly ? "c.deleted_at is not null" : "c.deleted_at is null"];
+  const where = [
+    "f.tenant_id = $1",
+    input.filters.deletedOnly
+      ? "c.deleted_at is not null"
+      : "c.deleted_at is null",
+  ];
   applyScope(where, values, input.scope, "f.entity_id", "f.owner_user_id");
   applyCaseFactFilters(where, values, input.filters, [
     "c.pr_id",
@@ -486,7 +547,8 @@ async function queryStageTimeExport(input: {
     "NIT Publish Time": row.nit_publish_time_days ?? null,
     "Bid Receipt Time": row.bid_receipt_time_days ?? null,
     "Bid Evaluation Time": row.bid_evaluation_time_days ?? null,
-    "Negotiation & NFA Submission Time": row.negotiation_nfa_submission_time_days ?? null,
+    "Negotiation & NFA Submission Time":
+      row.negotiation_nfa_submission_time_days ?? null,
     "NFA Approval Time": row.nfa_approval_time_days ?? null,
     "Post NFA Contract Issuance Time": row.contract_issuance_time_days ?? null,
     "LOI Awarded?": row.loi_awarded ? "Yes" : "No",
@@ -504,9 +566,17 @@ async function queryRcPoExpiryExport(input: {
   const where = ["e.tenant_id = $1"];
   applyScope(where, values, input.scope, "e.entity_id", "e.owner_user_id");
   applyUuidArrayFilter(where, values, input.filters.entityIds, "e.entity_id");
-  applyUuidArrayFilter(where, values, input.filters.ownerUserIds, "e.owner_user_id");
+  applyUuidArrayFilter(
+    where,
+    values,
+    input.filters.ownerUserIds,
+    "e.owner_user_id",
+  );
   if (input.filters.q) {
-    applyTextSearch(where, values, input.filters.q, ["e.tender_description", "e.awarded_vendors"]);
+    applyTextSearch(where, values, input.filters.q, [
+      "e.tender_description",
+      "e.awarded_vendors",
+    ]);
   }
   values.push(input.filters.limit);
   const limitPosition = values.length;
@@ -551,7 +621,9 @@ async function queryRcPoExpiryExport(input: {
     Owner: row.tender_owner ?? null,
     "Awarded Vendors": row.awarded_vendors ?? null,
     "Tentative Tendering Date": formatExportDate(row.tentative_tendering_date),
-    "Tender Floated? or Not Required": row.tender_floated_or_not_required ? "Yes" : "No",
+    "Tender Floated? or Not Required": row.tender_floated_or_not_required
+      ? "Yes"
+      : "No",
     "Days to Expiry": row.days_to_expiry ?? null,
   }));
 }
@@ -575,7 +647,8 @@ async function getExportScope(
         array_remove(array_agg(distinct ues.entity_id::text), null) as entity_ids
       from iam.users u
       left join iam.user_roles ur on ur.user_id = u.id
-      left join iam.role_permissions rp on rp.role_id = ur.role_id
+      left join iam.roles r on r.id = ur.role_id and r.deleted_at is null
+      left join iam.role_permissions rp on rp.role_id = r.id
       left join iam.permissions p on p.code = rp.permission_code
       left join iam.user_entity_scopes ues on ues.user_id = u.id
       where u.tenant_id = $1
@@ -586,18 +659,71 @@ async function getExportScope(
     [tenantId, userId],
   );
   const actor = result.rows[0];
-  if (actor?.is_platform_super_admin || actor?.access_level === "GROUP") {
-    return { actorUserId: userId, assignedOnly: false, entityIds: [], tenantWide: true };
-  }
-  if (actor?.access_level === "ENTITY") {
+  if (!actor) {
     return {
       actorUserId: userId,
       assignedOnly: false,
-      entityIds: actor?.entity_ids ?? [],
+      entityIds: [],
       tenantWide: false,
     };
   }
-  return { actorUserId: userId, assignedOnly: true, entityIds: [], tenantWide: false };
+  if (actor.is_platform_super_admin) {
+    return {
+      actorUserId: userId,
+      assignedOnly: false,
+      entityIds: [],
+      tenantWide: true,
+    };
+  }
+  const permissions = expandPermissions(actor.permissions ?? []);
+  if (actor.access_level === "GROUP" && permissions.has("case.read.all")) {
+    return {
+      actorUserId: userId,
+      assignedOnly: false,
+      entityIds: [],
+      tenantWide: true,
+    };
+  }
+  if (actor.access_level !== "USER" && permissions.has("case.read.entity")) {
+    return {
+      actorUserId: userId,
+      assignedOnly: false,
+      entityIds: actor.entity_ids ?? [],
+      tenantWide: false,
+    };
+  }
+  if (permissions.has("case.read.assigned")) {
+    return {
+      actorUserId: userId,
+      assignedOnly: true,
+      entityIds: [],
+      tenantWide: false,
+    };
+  }
+  return {
+    actorUserId: userId,
+    assignedOnly: false,
+    entityIds: [],
+    tenantWide: false,
+  };
+}
+
+function expandPermissions(permissions: string[]): Set<string> {
+  const granted = new Set(permissions);
+  const queue = [...granted];
+
+  while (queue.length) {
+    const permission = queue.shift();
+    if (!permission) continue;
+    for (const implied of PERMISSION_IMPLICATIONS[permission] ?? []) {
+      if (!granted.has(implied)) {
+        granted.add(implied);
+        queue.push(implied);
+      }
+    }
+  }
+
+  return granted;
 }
 
 function normalizeFilters(value: unknown): ReportFilters {
@@ -607,7 +733,10 @@ function normalizeFilters(value: unknown): ReportFilters {
     completionFys: stringArray(record.completionFys, 50),
     completionMonths: stringArray(record.completionMonths, 60),
     cpcInvolved: optionalBoolean(record.cpcInvolved),
-    delayStatus: record.delayStatus === "delayed" || record.delayStatus === "on_time" ? record.delayStatus : undefined,
+    delayStatus:
+      record.delayStatus === "delayed" || record.delayStatus === "on_time"
+        ? record.delayStatus
+        : undefined,
     deletedOnly: optionalBoolean(record.deletedOnly),
     departmentIds: stringArray(record.departmentIds, 200),
     entityIds: stringArray(record.entityIds, 200),
@@ -618,8 +747,13 @@ function normalizeFilters(value: unknown): ReportFilters {
     prReceiptMonths: stringArray(record.prReceiptMonths, 60),
     priorityCase: optionalBoolean(record.priorityCase),
     q: optionalSearch(record.q),
-    stageCodes: intArray(record.stageCodes, 20).filter((stageCode) => stageCode >= 0 && stageCode <= 8),
-    status: record.status === "completed" || record.status === "running" ? record.status : undefined,
+    stageCodes: intArray(record.stageCodes, 20).filter(
+      (stageCode) => stageCode >= 0 && stageCode <= 8,
+    ),
+    status:
+      record.status === "completed" || record.status === "running"
+        ? record.status
+        : undefined,
     tenderTypeIds: stringArray(record.tenderTypeIds, 100),
     valueSlabs: stringArray(record.valueSlabs, 20),
   };
@@ -638,20 +772,44 @@ function applyCaseFactFilters(
   applyUuidArrayFilter(where, values, filters.entityIds, "f.entity_id");
   applyUuidArrayFilter(where, values, filters.departmentIds, "f.department_id");
   applyUuidArrayFilter(where, values, filters.ownerUserIds, "f.owner_user_id");
-  applyUuidArrayFilter(where, values, filters.tenderTypeIds, "f.tender_type_id");
-  applyUuidArrayFilter(where, values, filters.budgetTypeIds, "c.budget_type_id");
-  applyUuidArrayFilter(where, values, filters.natureOfWorkIds, "c.nature_of_work_id");
+  applyUuidArrayFilter(
+    where,
+    values,
+    filters.tenderTypeIds,
+    "f.tender_type_id",
+  );
+  applyUuidArrayFilter(
+    where,
+    values,
+    filters.budgetTypeIds,
+    "c.budget_type_id",
+  );
+  applyUuidArrayFilter(
+    where,
+    values,
+    filters.natureOfWorkIds,
+    "c.nature_of_work_id",
+  );
   if (filters.valueSlabs.length) {
     const predicates: string[] = [];
-    if (filters.valueSlabs.includes("lt_2l")) predicates.push("f.pr_value < 200000");
-    if (filters.valueSlabs.includes("2l_5l")) predicates.push("(f.pr_value >= 200000 and f.pr_value < 500000)");
-    if (filters.valueSlabs.includes("5l_10l")) predicates.push("(f.pr_value >= 500000 and f.pr_value < 1000000)");
-    if (filters.valueSlabs.includes("10l_25l")) predicates.push("(f.pr_value >= 1000000 and f.pr_value < 2500000)");
-    if (filters.valueSlabs.includes("25l_50l")) predicates.push("(f.pr_value >= 2500000 and f.pr_value < 5000000)");
-    if (filters.valueSlabs.includes("50l_100l")) predicates.push("(f.pr_value >= 5000000 and f.pr_value < 10000000)");
-    if (filters.valueSlabs.includes("100l_200l")) predicates.push("(f.pr_value >= 10000000 and f.pr_value < 20000000)");
-    if (filters.valueSlabs.includes("gte_200l")) predicates.push("f.pr_value >= 20000000");
-    if (predicates.length) where.push(`f.pr_value is not null and (${predicates.join(" or ")})`);
+    if (filters.valueSlabs.includes("lt_2l"))
+      predicates.push("f.pr_value < 200000");
+    if (filters.valueSlabs.includes("2l_5l"))
+      predicates.push("(f.pr_value >= 200000 and f.pr_value < 500000)");
+    if (filters.valueSlabs.includes("5l_10l"))
+      predicates.push("(f.pr_value >= 500000 and f.pr_value < 1000000)");
+    if (filters.valueSlabs.includes("10l_25l"))
+      predicates.push("(f.pr_value >= 1000000 and f.pr_value < 2500000)");
+    if (filters.valueSlabs.includes("25l_50l"))
+      predicates.push("(f.pr_value >= 2500000 and f.pr_value < 5000000)");
+    if (filters.valueSlabs.includes("50l_100l"))
+      predicates.push("(f.pr_value >= 5000000 and f.pr_value < 10000000)");
+    if (filters.valueSlabs.includes("100l_200l"))
+      predicates.push("(f.pr_value >= 10000000 and f.pr_value < 20000000)");
+    if (filters.valueSlabs.includes("gte_200l"))
+      predicates.push("f.pr_value >= 20000000");
+    if (predicates.length)
+      where.push(`f.pr_value is not null and (${predicates.join(" or ")})`);
   }
   if (filters.stageCodes.length) {
     values.push(filters.stageCodes);
@@ -663,23 +821,35 @@ function applyCaseFactFilters(
   }
   if (filters.prReceiptMonths.length) {
     values.push(filters.prReceiptMonths);
-    where.push(`to_char(f.pr_receipt_date, 'YYYY-MM') = any($${values.length}::text[])`);
+    where.push(
+      `to_char(f.pr_receipt_date, 'YYYY-MM') = any($${values.length}::text[])`,
+    );
   }
   if (filters.completionMonths.length) {
     values.push(filters.completionMonths);
-    where.push(`to_char(f.rc_po_award_date, 'YYYY-MM') = any($${values.length}::text[])`);
+    where.push(
+      `to_char(f.rc_po_award_date, 'YYYY-MM') = any($${values.length}::text[])`,
+    );
   }
   if (filters.delayStatus) {
-    where.push(filters.delayStatus === "delayed" ? "f.is_delayed" : "not f.is_delayed");
+    where.push(
+      filters.delayStatus === "delayed" ? "f.is_delayed" : "not f.is_delayed",
+    );
   }
   if (filters.loiAwarded !== undefined) {
-    where.push(filters.loiAwarded ? "coalesce(m.loi_issued, false)" : "not coalesce(m.loi_issued, false)");
+    where.push(
+      filters.loiAwarded
+        ? "coalesce(m.loi_issued, false)"
+        : "not coalesce(m.loi_issued, false)",
+    );
   }
   if (filters.cpcInvolved !== undefined) {
     where.push(filters.cpcInvolved ? "f.cpc_involved" : "not f.cpc_involved");
   }
   if (filters.priorityCase !== undefined) {
-    where.push(filters.priorityCase ? "f.priority_case" : "not f.priority_case");
+    where.push(
+      filters.priorityCase ? "f.priority_case" : "not f.priority_case",
+    );
   }
   if (filters.q) {
     applyTextSearch(where, values, filters.q, searchColumns);
@@ -711,9 +881,13 @@ function applyTextSearch(
 ) {
   const trimmed = query.trim();
   if (!trimmed) return;
-  values.push(`%${trimmed.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_")}%`);
+  values.push(
+    `%${trimmed.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_")}%`,
+  );
   const position = values.length;
-  where.push(`(${columns.map((column) => `coalesce(${column}, '') ilike $${position} escape '\\'`).join(" or ")})`);
+  where.push(
+    `(${columns.map((column) => `coalesce(${column}, '') ilike $${position} escape '\\'`).join(" or ")})`,
+  );
 }
 
 function applyUuidArrayFilter(
@@ -771,7 +945,9 @@ function createCsv(rows: ExportRow[]): string {
   const headers = Object.keys(rows[0] ?? {});
   return [
     headers.join(","),
-    ...rows.map((row) => headers.map((header) => csvEscape(row[header])).join(",")),
+    ...rows.map((row) =>
+      headers.map((header) => csvEscape(row[header])).join(","),
+    ),
   ].join("\n");
 }
 
@@ -818,7 +994,9 @@ function formatExportStage(value: unknown): string {
     7: "NFA Note Approved, RC/PO to be issued",
     8: "RC/PO issued",
   };
-  return stageNames[stageCode] ? `Stage ${stageCode} - ${stageNames[stageCode]}` : `Stage ${stageCode}`;
+  return stageNames[stageCode]
+    ? `Stage ${stageCode} - ${stageNames[stageCode]}`
+    : `Stage ${stageCode}`;
 }
 
 async function createFileAsset(input: {

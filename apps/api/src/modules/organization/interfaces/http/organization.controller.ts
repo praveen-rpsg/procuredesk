@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  UseGuards,
+} from "@nestjs/common";
 
 import { CurrentUser } from "../../../../common/auth/current-user.decorator.js";
 import { RequirePermissions } from "../../../../common/auth/permissions.decorator.js";
@@ -30,26 +40,28 @@ export class OrganizationController {
   }
 
   @Post("admin/entities")
-  @RequirePermissions("entity.manage")
+  @RequirePermissions("admin.console.access", "entity.manage")
   createEntity(
     @CurrentUser() user: AuthenticatedUser,
-    @Body(new ZodValidationPipe(CreateEntityRequestSchema)) body: CreateEntityRequest,
+    @Body(new ZodValidationPipe(CreateEntityRequestSchema))
+    body: CreateEntityRequest,
   ) {
     return this.organization.createEntity(user, body);
   }
 
   @Patch("admin/entities/:entityId")
-  @RequirePermissions("entity.manage")
+  @RequirePermissions("admin.console.access", "entity.manage")
   updateEntity(
     @CurrentUser() user: AuthenticatedUser,
     @Param("entityId", ParseUUIDPipe) entityId: string,
-    @Body(new ZodValidationPipe(UpdateEntityRequestSchema)) body: UpdateEntityRequest,
+    @Body(new ZodValidationPipe(UpdateEntityRequestSchema))
+    body: UpdateEntityRequest,
   ) {
     return this.organization.updateEntity(user, { entityId, ...body });
   }
 
   @Delete("admin/entities/:entityId")
-  @RequirePermissions("entity.manage")
+  @RequirePermissions("admin.console.access", "entity.manage")
   deleteEntity(
     @CurrentUser() user: AuthenticatedUser,
     @Param("entityId", ParseUUIDPipe) entityId: string,
@@ -67,18 +79,21 @@ export class OrganizationController {
   }
 
   @Post("admin/entities/:entityId/departments")
-  @RequirePermissions("entity.manage")
+  @RequirePermissions("admin.console.access", "entity.manage")
   createDepartment(
     @CurrentUser() user: AuthenticatedUser,
     @Param("entityId", ParseUUIDPipe) entityId: string,
     @Body(new ZodValidationPipe(CreateDepartmentRequestSchema))
     body: CreateDepartmentRequest,
   ) {
-    return this.organization.createDepartment(user, { entityId, name: body.name });
+    return this.organization.createDepartment(user, {
+      entityId,
+      name: body.name,
+    });
   }
 
   @Patch("admin/departments/:departmentId")
-  @RequirePermissions("entity.manage")
+  @RequirePermissions("admin.console.access", "entity.manage")
   updateDepartment(
     @CurrentUser() user: AuthenticatedUser,
     @Param("departmentId", ParseUUIDPipe) departmentId: string,
@@ -89,7 +104,7 @@ export class OrganizationController {
   }
 
   @Delete("admin/departments/:departmentId")
-  @RequirePermissions("entity.manage")
+  @RequirePermissions("admin.console.access", "entity.manage")
   deleteDepartment(
     @CurrentUser() user: AuthenticatedUser,
     @Param("departmentId", ParseUUIDPipe) departmentId: string,

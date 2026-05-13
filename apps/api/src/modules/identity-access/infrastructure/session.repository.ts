@@ -46,7 +46,9 @@ export class SessionRepository {
     );
   }
 
-  async findAuthenticatedUser(sessionHash: string): Promise<AuthenticatedUser | null> {
+  async findAuthenticatedUser(
+    sessionHash: string,
+  ): Promise<AuthenticatedUser | null> {
     const row = await this.db.one<
       QueryResultRow & {
         id: string;
@@ -63,7 +65,7 @@ export class SessionRepository {
       `
         select
           u.id,
-          u.tenant_id,
+          coalesce(s.tenant_id, u.tenant_id) as tenant_id,
           u.email,
           u.username,
           u.full_name,
@@ -80,7 +82,8 @@ export class SessionRepository {
         from iam.sessions s
         join iam.users u on u.id = s.user_id
         left join iam.user_roles ur on ur.user_id = u.id
-        left join iam.role_permissions rp on rp.role_id = ur.role_id
+        left join iam.roles r on r.id = ur.role_id and r.deleted_at is null
+        left join iam.role_permissions rp on rp.role_id = r.id
         left join iam.permissions p on p.code = rp.permission_code
         left join iam.user_entity_scopes ues on ues.user_id = u.id
         where s.session_hash = $1
@@ -88,7 +91,7 @@ export class SessionRepository {
           and s.expires_at > now()
           and u.deleted_at is null
           and u.status = 'active'
-        group by u.id
+        group by u.id, s.tenant_id
       `,
       [sessionHash],
     );

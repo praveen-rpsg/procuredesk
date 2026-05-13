@@ -12,12 +12,29 @@ import {
   UploadCloud,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { lazy, Suspense, useEffect, useState, type MouseEvent, type ReactNode } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 
 import { useAuth, type CurrentUser } from "../../shared/auth/AuthProvider";
-import { canAccessWorkspace, type Permission, type WorkspaceKey } from "../../shared/auth/permissions";
-import { navigateToAppPath, useAppLocation } from "../../shared/routing/appLocation";
-import { AccessDeniedState, NotFoundState } from "../../shared/ui/app-states/AppStates";
+import {
+  canAccessWorkspace,
+  type Permission,
+  type WorkspaceKey,
+} from "../../shared/auth/permissions";
+import {
+  navigateToAppPath,
+  useAppLocation,
+} from "../../shared/routing/appLocation";
+import {
+  AccessDeniedState,
+  NotFoundState,
+} from "../../shared/ui/app-states/AppStates";
 import { Drawer } from "../../shared/ui/drawer/Drawer";
 import { Skeleton } from "../../shared/ui/skeleton/Skeleton";
 import { DashboardPage } from "../../features/dashboard/pages/DashboardPage";
@@ -27,10 +44,14 @@ import { ProfileDrawer } from "../../features/profile/components/ProfileDrawer";
 import { CasesWorkspace } from "../../features/procurement-cases/pages/CasesWorkspace";
 
 const AdminFoundation = lazy(() =>
-  import("../../features/admin/AdminFoundation").then((module) => ({ default: module.AdminFoundation })),
+  import("../../features/admin/AdminFoundation").then((module) => ({
+    default: module.AdminFoundation,
+  })),
 );
 const ReportsWorkspace = lazy(() =>
-  import("../../features/reporting/pages/ReportsWorkspace").then((module) => ({ default: module.ReportsWorkspace })),
+  import("../../features/reporting/pages/ReportsWorkspace").then((module) => ({
+    default: module.ReportsWorkspace,
+  })),
 );
 
 type RouteWorkspace = WorkspaceKey | "not-found";
@@ -48,7 +69,12 @@ type DashboardTarget =
   | "update-case";
 
 const navigation = [
-  { key: "dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
+  {
+    key: "dashboard",
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    path: "/dashboard",
+  },
   { key: "cases", label: "Cases", icon: FileText, path: "/cases" },
   { key: "planning", label: "Planning", icon: Activity, path: "/planning" },
   { key: "reports", label: "Reports", icon: BarChart3, path: "/reports" },
@@ -131,15 +157,41 @@ export function AuthenticatedShell() {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(readCollapsedPref);
-  const activeTitle = activeWorkspace === "not-found" ? "Page Not Found" : workspaceTitles[activeWorkspace];
-  const visibleNavigation = navigation.filter((item) => canAccessWorkspace(user, item.key));
-  const userInitial = user?.fullName?.[0]?.toUpperCase() ?? user?.username?.[0]?.toUpperCase() ?? "?";
+  const activeTitle =
+    activeWorkspace === "not-found"
+      ? "Page Not Found"
+      : workspaceTitles[activeWorkspace];
+  const visibleNavigation = navigation.filter((item) =>
+    canAccessWorkspace(user, item.key),
+  );
+  const hasVisibleNavigation = visibleNavigation.length > 0;
+  const defaultNavigationPath = visibleNavigation[0]?.path ?? "/dashboard";
+  const canUseActiveWorkspace =
+    activeWorkspace !== "not-found" &&
+    canAccessWorkspace(user, activeWorkspace);
+  const userInitial =
+    user?.fullName?.[0]?.toUpperCase() ??
+    user?.username?.[0]?.toUpperCase() ??
+    "?";
 
   useEffect(() => {
-    if (location.pathname === "/") {
-      navigateToAppPath("/dashboard", { replace: true });
+    if (
+      location.pathname === "/" ||
+      (hasVisibleNavigation &&
+        activeWorkspace !== "not-found" &&
+        !canUseActiveWorkspace)
+    ) {
+      navigateToAppPath(defaultNavigationPath, {
+        replace: true,
+      });
     }
-  }, [location.pathname]);
+  }, [
+    activeWorkspace,
+    canUseActiveWorkspace,
+    defaultNavigationPath,
+    hasVisibleNavigation,
+    location.pathname,
+  ]);
 
   const selectWorkspace = (workspace: WorkspaceKey) => {
     const item = navigation.find((entry) => entry.key === workspace);
@@ -201,7 +253,10 @@ export function AuthenticatedShell() {
     selectWorkspace(target);
   };
 
-  const onNavigationClick = (event: MouseEvent<HTMLAnchorElement>, workspace: WorkspaceKey) => {
+  const onNavigationClick = (
+    event: MouseEvent<HTMLAnchorElement>,
+    workspace: WorkspaceKey,
+  ) => {
     event.preventDefault();
     selectWorkspace(workspace);
   };
@@ -224,10 +279,10 @@ export function AuthenticatedShell() {
         {/* Brand — navigates to dashboard */}
         <a
           className="brand"
-          href="/dashboard"
+          href={defaultNavigationPath}
           onClick={(e) => {
             e.preventDefault();
-            selectWorkspace("dashboard");
+            navigateToAppPath(defaultNavigationPath);
           }}
         >
           <div className="brand-mark">PD</div>
@@ -266,7 +321,11 @@ export function AuthenticatedShell() {
           title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           type="button"
         >
-          {isCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          {isCollapsed ? (
+            <PanelLeftOpen size={16} />
+          ) : (
+            <PanelLeftClose size={16} />
+          )}
         </button>
 
         {/* User footer */}
@@ -285,7 +344,11 @@ export function AuthenticatedShell() {
               <strong>{user?.fullName}</strong>
               <span>{user?.email}</span>
             </div>
-            <Pencil aria-hidden="true" className="sidebar-user-edit-icon" size={14} />
+            <Pencil
+              aria-hidden="true"
+              className="sidebar-user-edit-icon"
+              size={14}
+            />
           </button>
           <button
             aria-label="Log out"
@@ -301,9 +364,16 @@ export function AuthenticatedShell() {
       </aside>
 
       {/* Mobile navigation drawer */}
-      <Drawer isOpen={isMobileNavOpen} onClose={() => setIsMobileNavOpen(false)} title="Navigation">
+      <Drawer
+        isOpen={isMobileNavOpen}
+        onClose={() => setIsMobileNavOpen(false)}
+        title="Navigation"
+      >
         <div className="drawer-nav-content">
-          <nav aria-label="Mobile navigation" className="nav-list nav-list-drawer">
+          <nav
+            aria-label="Mobile navigation"
+            className="nav-list nav-list-drawer"
+          >
             {visibleNavigation.map((item) => (
               <a
                 aria-current={activeWorkspace === item.key ? "page" : undefined}
@@ -318,15 +388,29 @@ export function AuthenticatedShell() {
             ))}
           </nav>
           <div className="drawer-user-footer">
-            <button className="drawer-user-info drawer-profile-button" onClick={() => setIsProfileOpen(true)} type="button">
-              <div className="sidebar-user-avatar" aria-hidden="true">{userInitial}</div>
+            <button
+              className="drawer-user-info drawer-profile-button"
+              onClick={() => setIsProfileOpen(true)}
+              type="button"
+            >
+              <div className="sidebar-user-avatar" aria-hidden="true">
+                {userInitial}
+              </div>
               <div className="sidebar-user-info">
                 <strong>{user?.fullName}</strong>
                 <span>{user?.email}</span>
               </div>
-              <Pencil aria-hidden="true" className="sidebar-user-edit-icon" size={14} />
+              <Pencil
+                aria-hidden="true"
+                className="sidebar-user-edit-icon"
+                size={14}
+              />
             </button>
-            <button className="sidebar-logout drawer-logout" onClick={handleLogout} type="button">
+            <button
+              className="sidebar-logout drawer-logout"
+              onClick={handleLogout}
+              type="button"
+            >
               <LogOut size={15} />
               <span>Log out</span>
             </button>
@@ -334,7 +418,10 @@ export function AuthenticatedShell() {
         </div>
       </Drawer>
 
-      <ProfileDrawer isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
+      <ProfileDrawer
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+      />
 
       {/* Main workspace */}
       <section className="workspace">
@@ -360,10 +447,14 @@ export function AuthenticatedShell() {
 function workspaceFromPath(pathname: string): RouteWorkspace {
   if (pathname === "/" || pathname === "/dashboard") return "dashboard";
   if (pathname === "/cases" || pathname.startsWith("/cases/")) return "cases";
-  if (pathname === "/planning" || pathname.startsWith("/planning/")) return "planning";
-  if (pathname === "/reports" || pathname.startsWith("/reports/")) return "reports";
-  if (pathname === "/imports" || pathname.startsWith("/imports/")) return "imports";
-  if (pathname === "/operations" || pathname.startsWith("/operations/")) return "admin";
+  if (pathname === "/planning" || pathname.startsWith("/planning/"))
+    return "planning";
+  if (pathname === "/reports" || pathname.startsWith("/reports/"))
+    return "reports";
+  if (pathname === "/imports" || pathname.startsWith("/imports/"))
+    return "imports";
+  if (pathname === "/operations" || pathname.startsWith("/operations/"))
+    return "admin";
   if (pathname === "/admin" || pathname.startsWith("/admin/")) return "admin";
   return "not-found";
 }

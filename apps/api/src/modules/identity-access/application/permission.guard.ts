@@ -1,9 +1,12 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from "@nestjs/common";
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Injectable,
+} from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 
-import {
-  REQUIRED_PERMISSIONS_KEY,
-} from "../../../common/auth/permissions.decorator.js";
+import { REQUIRED_PERMISSIONS_KEY } from "../../../common/auth/permissions.decorator.js";
 import type { AuthenticatedRequest } from "../../../common/auth/authenticated-request.js";
 import { expandPermissions } from "../../../common/auth/permission-utils.js";
 
@@ -12,11 +15,19 @@ export class PermissionGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const requiredPermissions =
-      this.reflector.getAllAndOverride<string[]>(REQUIRED_PERMISSIONS_KEY, [
-        context.getHandler(),
+    const classPermissions =
+      this.reflector.get<string[]>(
+        REQUIRED_PERMISSIONS_KEY,
         context.getClass(),
-      ]) ?? [];
+      ) ?? [];
+    const handlerPermissions =
+      this.reflector.get<string[]>(
+        REQUIRED_PERMISSIONS_KEY,
+        context.getHandler(),
+      ) ?? [];
+    const requiredPermissions = Array.from(
+      new Set([...classPermissions, ...handlerPermissions]),
+    );
 
     if (requiredPermissions.length === 0) {
       return true;
@@ -33,7 +44,9 @@ export class PermissionGuard implements CanActivate {
     }
 
     const granted = expandPermissions(user.permissions);
-    const hasAllRequired = requiredPermissions.every((permission) => granted.has(permission));
+    const hasAllRequired = requiredPermissions.every((permission) =>
+      granted.has(permission),
+    );
     if (!hasAllRequired) {
       throw new ForbiddenException("Missing required permission.");
     }

@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Put, Query, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Put,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
 
 import { CurrentUser } from "../../../../common/auth/current-user.decorator.js";
 import { RequirePermissions } from "../../../../common/auth/permissions.decorator.js";
@@ -46,16 +57,17 @@ export class AdminUsersController {
   }
 
   @Post()
-  @RequirePermissions("user.manage")
+  @RequirePermissions("admin.console.access", "user.manage")
   createUser(
     @CurrentUser() user: AuthenticatedUser,
-    @Body(new ZodValidationPipe(CreateUserRequestSchema)) body: CreateUserRequest,
+    @Body(new ZodValidationPipe(CreateUserRequestSchema))
+    body: CreateUserRequest,
   ) {
     return this.adminUsers.createPendingUser(user, body);
   }
 
   @Patch(":userId")
-  @RequirePermissions("user.manage")
+  @RequirePermissions("admin.console.access", "user.manage")
   updateProfile(
     @CurrentUser() user: AuthenticatedUser,
     @Param("userId", ParseUUIDPipe) userId: string,
@@ -66,7 +78,7 @@ export class AdminUsersController {
   }
 
   @Patch(":userId/status")
-  @RequirePermissions("user.manage")
+  @RequirePermissions("admin.console.access", "user.manage")
   updateStatus(
     @CurrentUser() user: AuthenticatedUser,
     @Param("userId", ParseUUIDPipe) userId: string,
@@ -77,29 +89,35 @@ export class AdminUsersController {
   }
 
   @Patch(":userId/access-level")
-  @RequirePermissions("user.manage")
+  @RequirePermissions("admin.console.access", "user.manage")
   updateAccessLevel(
     @CurrentUser() user: AuthenticatedUser,
     @Param("userId", ParseUUIDPipe) userId: string,
     @Body(new ZodValidationPipe(UpdateUserAccessLevelRequestSchema))
     body: UpdateUserAccessLevelRequest,
   ) {
-    return this.adminUsers.updateAccessLevel(user, { userId, accessLevel: body.accessLevel });
+    return this.adminUsers.updateAccessLevel(user, {
+      userId,
+      accessLevel: body.accessLevel,
+    });
   }
 
   @Put(":userId/roles")
-  @RequirePermissions("role.manage")
+  @RequirePermissions("admin.console.access", "user.manage", "role.manage")
   replaceRoles(
     @CurrentUser() user: AuthenticatedUser,
     @Param("userId", ParseUUIDPipe) userId: string,
     @Body(new ZodValidationPipe(ReplaceUserRolesRequestSchema))
     body: ReplaceUserRolesRequest,
   ) {
-    return this.adminUsers.replaceRoles(user, { userId, roleIds: body.roleIds });
+    return this.adminUsers.replaceRoles(user, {
+      userId,
+      roleIds: body.roleIds,
+    });
   }
 
   @Put(":userId/entity-scopes")
-  @RequirePermissions("user.manage")
+  @RequirePermissions("admin.console.access", "user.manage")
   replaceEntityScopes(
     @CurrentUser() user: AuthenticatedUser,
     @Param("userId", ParseUUIDPipe) userId: string,

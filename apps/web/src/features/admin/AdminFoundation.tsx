@@ -1,11 +1,23 @@
-import { Bell, Building2, CalendarClock, FileClock, LayoutDashboard, ShieldCheck, Tags, UsersRound } from "lucide-react";
+import {
+  Bell,
+  Building2,
+  CalendarClock,
+  FileClock,
+  LayoutDashboard,
+  ShieldCheck,
+  Tags,
+  UsersRound,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo } from "react";
 
 import { AdminAuditPage } from "./audit/AdminAuditPage";
 import { CatalogAdminPage } from "./catalog/CatalogAdminPage";
 import { EntitiesAdminPage } from "./entities/EntitiesAdminPage";
-import { AdminOverviewPage, type AdminOverviewItem } from "./overview/AdminOverviewPage";
+import {
+  AdminOverviewPage,
+  type AdminOverviewItem,
+} from "./overview/AdminOverviewPage";
 import { RolesAdminPage } from "./roles/RolesAdminPage";
 import { TenderTypeDaysAdminPage } from "./tender-type-days/TenderTypeDaysAdminPage";
 import { AdminUsersPage } from "./users/AdminUsersPage";
@@ -21,11 +33,26 @@ import {
   canReadEntities,
   canReadUsers,
 } from "../../shared/auth/permissions";
-import { navigateToAppPath, useAppLocation } from "../../shared/routing/appLocation";
-import { AccessDeniedState, NotFoundState } from "../../shared/ui/app-states/AppStates";
+import {
+  navigateToAppPath,
+  useAppLocation,
+} from "../../shared/routing/appLocation";
+import {
+  AccessDeniedState,
+  NotFoundState,
+} from "../../shared/ui/app-states/AppStates";
+import { PageHeader } from "../../shared/ui/page-header/PageHeader";
 import { SecondaryNav } from "../../shared/ui/secondary-nav/SecondaryNav";
 
-type AdminSectionKey = "audit" | "catalog" | "entities" | "operations" | "overview" | "roles" | "tender-rules" | "users";
+type AdminSectionKey =
+  | "audit"
+  | "catalog"
+  | "entities"
+  | "operations"
+  | "overview"
+  | "roles"
+  | "tender-rules"
+  | "users";
 
 type AdminSectionDefinition = AdminOverviewItem & {
   icon: LucideIcon;
@@ -54,7 +81,8 @@ export function AdminFoundation() {
   const hasEntityAccess = canReadEntities(user);
   const hasCatalogAccess = canReadCatalog(user);
   const hasAuditAccess = canReadAudit(user);
-  const hasOperationsAccess = canReadAudit(user) || canManageNotifications(user);
+  const hasOperationsAccess =
+    canReadAudit(user) || canManageNotifications(user);
   const hasAdminAccess = canAccessAdminWorkspace(user);
   const sections = useMemo<AdminSectionDefinition[]>(() => {
     const items: AdminSectionDefinition[] = [
@@ -109,7 +137,8 @@ export function AdminFoundation() {
         },
         {
           group: "Configuration",
-          description: "Manage tender types, completion days, and milestone rules.",
+          description:
+            "Manage tender types, completion days, and milestone rules.",
           icon: CalendarClock,
           key: "tender-rules",
           label: "Tender Types",
@@ -120,7 +149,8 @@ export function AdminFoundation() {
     if (hasAuditAccess) {
       items.push({
         group: "Governance",
-        description: "Review tenant audit events, actors, IPs, and event details.",
+        description:
+          "Review tenant audit events, actors, IPs, and event details.",
         icon: FileClock,
         key: "audit",
         label: "Audit Logs",
@@ -130,7 +160,8 @@ export function AdminFoundation() {
     if (hasOperationsAccess) {
       items.push({
         group: "Governance",
-        description: "Manage notification rules, previews, queue jobs, and failed events.",
+        description:
+          "Manage notification rules, previews, queue jobs, and failed events.",
         icon: Bell,
         key: "operations",
         label: "Operations",
@@ -138,15 +169,27 @@ export function AdminFoundation() {
       });
     }
     return items;
-  }, [hasAuditAccess, hasCatalogAccess, hasEntityAccess, hasOperationsAccess, hasRoleAccess, hasUserAccess]);
+  }, [
+    hasAuditAccess,
+    hasCatalogAccess,
+    hasEntityAccess,
+    hasOperationsAccess,
+    hasRoleAccess,
+    hasUserAccess,
+  ]);
 
   const requestedSection = adminSectionFromPath(location.pathname);
   const isRootAdminPath = location.pathname === "/admin";
   const isLegacyDepartmentsPath = location.pathname === legacyDepartmentsPath;
   const firstSection = sections[0];
-  const activeSection = isLegacyDepartmentsPath ? "entities" : requestedSection ?? firstSection?.key ?? "overview";
-  const activeSectionAllowed = sections.some((section) => section.key === activeSection);
-  const departmentFocusEntityId = new URLSearchParams(location.search).get("entityId") ?? "";
+  const activeSection = isLegacyDepartmentsPath
+    ? "entities"
+    : (requestedSection ?? firstSection?.key ?? "overview");
+  const activeSectionAllowed = sections.some(
+    (section) => section.key === activeSection,
+  );
+  const departmentFocusEntityId =
+    new URLSearchParams(location.search).get("entityId") ?? "";
 
   useEffect(() => {
     if (isRootAdminPath && firstSection) {
@@ -156,12 +199,33 @@ export function AdminFoundation() {
 
   useEffect(() => {
     if (isLegacyDepartmentsPath) {
-      navigateToAppPath(`${adminSectionPaths.entities}${location.search}`, { replace: true });
+      navigateToAppPath(`${adminSectionPaths.entities}${location.search}`, {
+        replace: true,
+      });
     }
   }, [isLegacyDepartmentsPath, location.search]);
 
-  if (!hasAdminAccess || (!hasUserAccess && !hasRoleAccess && !hasEntityAccess && !hasCatalogAccess && !hasAuditAccess && !hasOperationsAccess)) {
+  if (
+    !hasAdminAccess ||
+    (!hasUserAccess &&
+      !hasRoleAccess &&
+      !hasEntityAccess &&
+      !hasCatalogAccess &&
+      !hasAuditAccess &&
+      !hasOperationsAccess)
+  ) {
     return <AccessDeniedState />;
+  }
+
+  if (user?.isPlatformSuperAdmin && !user.tenantId) {
+    return (
+      <section className="admin-section admin-grid-wide">
+        <PageHeader eyebrow="Admin" title="Tenant context required">
+          Tenant configuration and procurement workspaces require a
+          tenant-scoped session.
+        </PageHeader>
+      </section>
+    );
   }
 
   if (!requestedSection && !isRootAdminPath && !isLegacyDepartmentsPath) {
@@ -193,7 +257,12 @@ export function AdminFoundation() {
         />
       </section>
       <div className="admin-section-host">
-        {renderAdminSection(activeSection, sections, openSection, departmentFocusEntityId)}
+        {renderAdminSection(
+          activeSection,
+          sections,
+          openSection,
+          departmentFocusEntityId,
+        )}
       </div>
     </section>
   );
@@ -225,11 +294,21 @@ function renderAdminSection(
 }
 
 function adminSectionFromPath(pathname: string): AdminSectionKey | null {
-  if (pathname === "/operations/audit-logs" || pathname === "/admin/operations/audit-logs") return "audit";
-  if (pathname === "/operations" || pathname.startsWith("/operations/")) return "operations";
-  if (pathname === "/admin/operations" || pathname.startsWith("/admin/operations/")) return "operations";
+  if (
+    pathname === "/operations/audit-logs" ||
+    pathname === "/admin/operations/audit-logs"
+  )
+    return "audit";
+  if (pathname === "/operations" || pathname.startsWith("/operations/"))
+    return "operations";
+  if (
+    pathname === "/admin/operations" ||
+    pathname.startsWith("/admin/operations/")
+  )
+    return "operations";
   return (
-    (Object.entries(adminSectionPaths).find(([, path]) => path === pathname)?.[0] as AdminSectionKey | undefined) ??
-    null
+    (Object.entries(adminSectionPaths).find(
+      ([, path]) => path === pathname,
+    )?.[0] as AdminSectionKey | undefined) ?? null
   );
 }

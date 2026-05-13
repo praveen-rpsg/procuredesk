@@ -15,8 +15,15 @@ import {
   Zap,
 } from "lucide-react";
 
-import { getCaseSummary, listCases, type CaseListItem } from "../../procurement-cases/api/casesApi";
-import { listRcPoExpiry, type RcPoExpiryRow } from "../../planning/api/planningApi";
+import {
+  getCaseSummary,
+  listCases,
+  type CaseListItem,
+} from "../../procurement-cases/api/casesApi";
+import {
+  listRcPoExpiry,
+  type RcPoExpiryRow,
+} from "../../planning/api/planningApi";
 import { useAuth } from "../../../shared/auth/AuthProvider";
 import {
   canCreateCase,
@@ -24,7 +31,11 @@ import {
   canReadCases,
   canReadReports,
 } from "../../../shared/auth/permissions";
-import { formatDateOnly, todayDateOnlyString, toDateOnlyInputValue } from "../../../shared/utils/dateOnly";
+import {
+  formatDateOnly,
+  todayDateOnlyString,
+  toDateOnlyInputValue,
+} from "../../../shared/utils/dateOnly";
 import { formatCaseStage } from "../../../shared/utils/caseStage";
 import { navigateToAppPath } from "../../../shared/routing/appLocation";
 import { Button } from "../../../shared/ui/button/Button";
@@ -32,7 +43,10 @@ import { ErrorState } from "../../../shared/ui/error-state/ErrorState";
 import { Checkbox } from "../../../shared/ui/form/Checkbox";
 import { Skeleton } from "../../../shared/ui/skeleton/Skeleton";
 import { StatusBadge } from "../../../shared/ui/status/StatusBadge";
-import { DataTable, type DataTableColumn } from "../../../shared/ui/table/DataTable";
+import {
+  DataTable,
+  type DataTableColumn,
+} from "../../../shared/ui/table/DataTable";
 
 type DashboardTarget =
   | "all-cases"
@@ -52,9 +66,21 @@ type DashboardPageProps = {
 };
 
 const expiryColumns: DataTableColumn<RcPoExpiryRow>[] = [
-  { key: "contract", header: "Contract", render: (row) => row.tenderDescription ?? row.sourceId },
-  { key: "vendors", header: "Vendors", render: (row) => row.awardedVendors ?? "-" },
-  { key: "validity", header: "Valid Till", render: (row) => formatDateOnly(row.rcPoValidityDate) },
+  {
+    key: "contract",
+    header: "Contract",
+    render: (row) => row.tenderDescription ?? row.sourceId,
+  },
+  {
+    key: "vendors",
+    header: "Vendors",
+    render: (row) => row.awardedVendors ?? "-",
+  },
+  {
+    key: "validity",
+    header: "Valid Till",
+    render: (row) => formatDateOnly(row.rcPoValidityDate),
+  },
   {
     key: "urgency",
     filterOptions: [
@@ -65,7 +91,9 @@ const expiryColumns: DataTableColumn<RcPoExpiryRow>[] = [
     ],
     filterValue: (row) => row.urgency,
     header: "Urgency",
-    render: (row) => <StatusBadge tone={urgencyTone(row.urgency)}>{row.urgency}</StatusBadge>,
+    render: (row) => (
+      <StatusBadge tone={urgencyTone(row.urgency)}>{row.urgency}</StatusBadge>
+    ),
   },
 ];
 
@@ -75,12 +103,14 @@ function urgencyTone(urgency: RcPoExpiryRow["urgency"]) {
   return "success";
 }
 
-function isCaseOverdue(row: Pick<CaseListItem, "status" | "tentativeCompletionDate">) {
+function isCaseOverdue(
+  row: Pick<CaseListItem, "status" | "tentativeCompletionDate">,
+) {
   const targetDate = toDateOnlyInputValue(row.tentativeCompletionDate);
   return Boolean(
     row.status === "running" &&
-      targetDate &&
-      targetDate < todayDateOnlyString(),
+    targetDate &&
+    targetDate < todayDateOnlyString(),
   );
 }
 
@@ -102,9 +132,17 @@ function caseFlagLabel(row: CaseListItem): string {
   return "Normal";
 }
 
-function uniqueFilterOptions<TRow>(rows: TRow[], getValue: (row: TRow) => string) {
+function uniqueFilterOptions<TRow>(
+  rows: TRow[],
+  getValue: (row: TRow) => string,
+) {
   return [...new Set(rows.map((row) => getValue(row)).filter(Boolean))]
-    .sort((left, right) => left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" }))
+    .sort((left, right) =>
+      left.localeCompare(right, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      }),
+    )
     .map((value) => ({ label: value, value: value.toLowerCase() }));
 }
 
@@ -112,7 +150,14 @@ function TableSkeleton({ rows = 4 }: { rows?: number }) {
   return (
     <div style={{ display: "grid", gap: "var(--space-3)" }}>
       {Array.from({ length: rows }, (_, i) => (
-        <div key={i} style={{ display: "flex", gap: "var(--space-4)", alignItems: "center" }}>
+        <div
+          key={i}
+          style={{
+            display: "flex",
+            gap: "var(--space-4)",
+            alignItems: "center",
+          }}
+        >
           <Skeleton height={13} width="11%" />
           <Skeleton height={13} width="37%" />
           <Skeleton height={13} width="13%" />
@@ -126,11 +171,16 @@ function TableSkeleton({ rows = 4 }: { rows?: number }) {
 export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const [showDelayedCases, setShowDelayedCases] = useState(false);
   const { user } = useAuth();
-  const hasCaseAccess = canReadCases(user);
-  const hasCreateAccess = canCreateCase(user);
-  const hasPlanningAccess = canManagePlanning(user);
-  const hasReportAccess = canReadReports(user);
-  const summary = useQuery({ enabled: hasCaseAccess, queryFn: getCaseSummary, queryKey: ["case-summary"] });
+  const hasTenantContext = Boolean(user?.tenantId);
+  const hasCaseAccess = hasTenantContext && canReadCases(user);
+  const hasCreateAccess = hasTenantContext && canCreateCase(user);
+  const hasPlanningAccess = hasTenantContext && canManagePlanning(user);
+  const hasReportAccess = hasTenantContext && canReadReports(user);
+  const summary = useQuery({
+    enabled: hasCaseAccess,
+    queryFn: getCaseSummary,
+    queryKey: ["case-summary"],
+  });
   const focusedCases = useQuery({
     enabled: hasCaseAccess,
     queryFn: () =>
@@ -139,7 +189,9 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           ? { isDelayed: true, limit: 5, status: "running" }
           : { limit: 5, priorityCase: true, status: "running" },
       ),
-    queryKey: [showDelayedCases ? "dashboard-delayed-cases" : "dashboard-priority-cases"],
+    queryKey: [
+      showDelayedCases ? "dashboard-delayed-cases" : "dashboard-priority-cases",
+    ],
   });
   const expiryRows = useQuery({
     enabled: hasCaseAccess && hasPlanningAccess,
@@ -148,10 +200,22 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   });
 
   if (hasCaseAccess && summary.error) {
-    return <ErrorState message={summary.error.message} title="Could not load dashboard" />;
+    return (
+      <ErrorState
+        message={summary.error.message}
+        title="Could not load dashboard"
+      />
+    );
   }
 
-  const metrics = summary.data ?? { completed: 0, delayed: 0, priority: 0, risk: 0, running: 0, total: 0 };
+  const metrics = summary.data ?? {
+    completed: 0,
+    delayed: 0,
+    priority: 0,
+    risk: 0,
+    running: 0,
+    total: 0,
+  };
 
   const now = new Date();
   const greeting = getGreeting(now.getHours());
@@ -168,10 +232,16 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const focusedCaseRows = focusedCases.data ?? [];
   const caseColumns: DataTableColumn<CaseListItem>[] = [
     { key: "pr", header: "Case ID", render: (row) => row.prId },
-    { key: "description", header: "Description", render: (row) => row.prDescription ?? row.tenderName ?? "-" },
+    {
+      key: "description",
+      header: "Description",
+      render: (row) => row.prDescription ?? row.tenderName ?? "-",
+    },
     {
       key: "stage",
-      filterOptions: uniqueFilterOptions(focusedCaseRows, (row) => formatCaseStage(row.stageCode)),
+      filterOptions: uniqueFilterOptions(focusedCaseRows, (row) =>
+        formatCaseStage(row.stageCode),
+      ),
       filterValue: (row) => formatCaseStage(row.stageCode),
       header: "Stage",
       render: (row) => formatCaseStage(row.stageCode),
@@ -183,14 +253,26 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       header: "Flags",
       render: (row) => (
         <div className="row-actions">
-          {isCaseOverdue(row) ? <StatusBadge tone="danger">Overdue</StatusBadge> : null}
-          {row.isDelayed ? <StatusBadge tone="danger">Delayed</StatusBadge> : null}
-          {row.priorityCase ? <StatusBadge tone="warning">Priority</StatusBadge> : null}
-          {!isCaseOverdue(row) && !row.isDelayed && !row.priorityCase ? <StatusBadge>Normal</StatusBadge> : null}
+          {isCaseOverdue(row) ? (
+            <StatusBadge tone="danger">Overdue</StatusBadge>
+          ) : null}
+          {row.isDelayed ? (
+            <StatusBadge tone="danger">Delayed</StatusBadge>
+          ) : null}
+          {row.priorityCase ? (
+            <StatusBadge tone="warning">Priority</StatusBadge>
+          ) : null}
+          {!isCaseOverdue(row) && !row.isDelayed && !row.priorityCase ? (
+            <StatusBadge>Normal</StatusBadge>
+          ) : null}
         </div>
       ),
     },
-    { key: "updated", header: "Updated", render: (row) => new Date(row.updatedAt).toLocaleDateString() },
+    {
+      key: "updated",
+      header: "Updated",
+      render: (row) => new Date(row.updatedAt).toLocaleDateString(),
+    },
   ];
   const dashboardActions = [
     {
@@ -202,7 +284,8 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       tone: "primary",
     },
     {
-      description: "Open the case list and update milestones, allocations, or awards.",
+      description:
+        "Open the case list and update milestones, allocations, or awards.",
       icon: FilePenLine,
       isVisible: hasCaseAccess,
       label: "Update Existing Case",
@@ -289,7 +372,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           <h1>
             {greeting}, {firstName}
           </h1>
-          <p>{todayFormatted} · Track cases, risks, expiry exposure, and import operations from one focused workspace.</p>
+          <p>
+            {todayFormatted} · Track cases, risks, expiry exposure, and import
+            operations from one focused workspace.
+          </p>
           <div className="dashboard-hero-metrics" aria-label="Case summary">
             {dashboardMetrics.map((metric) => {
               const Icon = metric.icon;
@@ -306,16 +392,29 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                     <div className="metric-card-icon">
                       <Icon size={15} />
                     </div>
-                    {metric.progress != null ? <span className="dashboard-metric-percent">{metric.progress}%</span> : null}
+                    {metric.progress != null ? (
+                      <span className="dashboard-metric-percent">
+                        {metric.progress}%
+                      </span>
+                    ) : null}
                   </div>
                   <span>{metric.label}</span>
-                  <strong>{summary.isLoading ? <Skeleton height={22} width="60%" /> : metric.value}</strong>
+                  <strong>
+                    {summary.isLoading ? (
+                      <Skeleton height={22} width="60%" />
+                    ) : (
+                      metric.value
+                    )}
+                  </strong>
                 </button>
               );
             })}
           </div>
         </div>
-        <div className="dashboard-hero-card" aria-label="Procurement health summary">
+        <div
+          className="dashboard-hero-card"
+          aria-label="Procurement health summary"
+        >
           <div className="dashboard-health-ring">
             <Gauge size={20} />
             <strong>{summary.isLoading ? "..." : `${completionRate}%`}</strong>
@@ -362,65 +461,79 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
 
       {/* Priority cases */}
       {hasCaseAccess ? (
-      <section className="state-panel dashboard-priority-panel">
-        <div className="detail-header">
-          <div>
-            <p className="eyebrow">Focus</p>
-            <h2>Priority Cases</h2>
-          </div>
-          <div className="dashboard-case-filter-actions">
-            <Checkbox
-              checked={showDelayedCases}
-              label="Delayed Cases"
-              onChange={(event) => setShowDelayedCases(event.target.checked)}
-            />
-            <div className={`panel-icon ${showDelayedCases ? "panel-icon-danger" : "panel-icon-warning"}`}>
-              {showDelayedCases ? <AlertTriangle size={16} /> : <Zap size={16} />}
+        <section className="state-panel dashboard-priority-panel">
+          <div className="detail-header">
+            <div>
+              <p className="eyebrow">Focus</p>
+              <h2>Priority Cases</h2>
+            </div>
+            <div className="dashboard-case-filter-actions">
+              <Checkbox
+                checked={showDelayedCases}
+                label="Delayed Cases"
+                onChange={(event) => setShowDelayedCases(event.target.checked)}
+              />
+              <div
+                className={`panel-icon ${showDelayedCases ? "panel-icon-danger" : "panel-icon-warning"}`}
+              >
+                {showDelayedCases ? (
+                  <AlertTriangle size={16} />
+                ) : (
+                  <Zap size={16} />
+                )}
+              </div>
             </div>
           </div>
-        </div>
-        {focusedCases.isLoading ? (
-          <TableSkeleton rows={4} />
-        ) : focusedCases.error ? (
-          <p className="inline-error">{focusedCases.error.message}</p>
-        ) : (
-          <DataTable
-            columns={caseColumns}
-            emptyMessage={showDelayedCases ? "No delayed running cases." : "No priority running cases."}
-            getRowKey={(row) => row.id}
-            onRowClick={(row) => navigateToAppPath(`/cases/${row.id}`)}
-            rows={focusedCases.data ?? []}
-          />
-        )}
-      </section>
+          {focusedCases.isLoading ? (
+            <TableSkeleton rows={4} />
+          ) : focusedCases.error ? (
+            <p className="inline-error">{focusedCases.error.message}</p>
+          ) : (
+            <DataTable
+              columns={caseColumns}
+              emptyMessage={
+                showDelayedCases
+                  ? "No delayed running cases."
+                  : "No priority running cases."
+              }
+              getRowKey={(row) => row.id}
+              onRowClick={(row) => navigateToAppPath(`/cases/${row.id}`)}
+              rows={focusedCases.data ?? []}
+            />
+          )}
+        </section>
       ) : null}
 
       {/* RC/PO expiry */}
       {hasCaseAccess && hasPlanningAccess ? (
-      <section className="state-panel dashboard-expiry-panel">
-        <div className="detail-header">
-          <div>
-            <p className="eyebrow">RC / PO</p>
-            <h2>Expiring Within 90 Days</h2>
+        <section className="state-panel dashboard-expiry-panel">
+          <div className="detail-header">
+            <div>
+              <p className="eyebrow">RC / PO</p>
+              <h2>Expiring Within 90 Days</h2>
+            </div>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => onNavigate?.("planning")}
+            >
+              <Clock3 size={15} />
+              View Plan
+            </Button>
           </div>
-          <Button size="sm" variant="secondary" onClick={() => onNavigate?.("planning")}>
-            <Clock3 size={15} />
-            View Plan
-          </Button>
-        </div>
-        {expiryRows.isLoading ? (
-          <TableSkeleton rows={5} />
-        ) : expiryRows.error ? (
-          <p className="inline-error">{expiryRows.error.message}</p>
-        ) : (
-          <DataTable
-            columns={expiryColumns}
-            emptyMessage="No RC/PO expiry risks in the selected horizon."
-            getRowKey={(row) => row.sourceId}
-            rows={expiryRows.data ?? []}
-          />
-        )}
-      </section>
+          {expiryRows.isLoading ? (
+            <TableSkeleton rows={5} />
+          ) : expiryRows.error ? (
+            <p className="inline-error">{expiryRows.error.message}</p>
+          ) : (
+            <DataTable
+              columns={expiryColumns}
+              emptyMessage="No RC/PO expiry risks in the selected horizon."
+              getRowKey={(row) => row.sourceId}
+              rows={expiryRows.data ?? []}
+            />
+          )}
+        </section>
       ) : null}
     </section>
   );

@@ -2,7 +2,11 @@ import { Injectable } from "@nestjs/common";
 import type { PoolClient, QueryResultRow } from "pg";
 
 import { DatabaseService } from "../../../database/database.service.js";
-import type { FileAsset, ImportJob, ImportJobRow } from "../domain/import-export-models.js";
+import type {
+  FileAsset,
+  ImportJob,
+  ImportJobRow,
+} from "../domain/import-export-models.js";
 
 export type CreateFileAssetInput = {
   byteSize?: number | null;
@@ -114,7 +118,10 @@ export class ImportExportRepository {
     return result.rows.map((row) => this.mapImportJob(row));
   }
 
-  async listImportRows(tenantId: string, importJobId: string): Promise<ImportJobRow[]> {
+  async listImportRows(
+    tenantId: string,
+    importJobId: string,
+  ): Promise<ImportJobRow[]> {
     const result = await this.db.query<QueryResultRow & ImportJobRowRowSql>(
       `
         select r.id, r.row_number, r.status, r.source_payload, r.normalized_payload, r.errors
@@ -137,7 +144,10 @@ export class ImportExportRepository {
     }));
   }
 
-  async listProblemRows(tenantId: string, importJobId: string): Promise<ImportJobRow[]> {
+  async listProblemRows(
+    tenantId: string,
+    importJobId: string,
+  ): Promise<ImportJobRow[]> {
     const result = await this.db.query<QueryResultRow & ImportJobRowRowSql>(
       `
         select r.id, r.row_number, r.status, r.source_payload, r.normalized_payload, r.errors
@@ -181,9 +191,15 @@ export class ImportExportRepository {
         await this.insertImportRow(input.importJobId, index + 1, row, client);
       }
 
-      const accepted = input.rows.filter((row) => row.status === "accepted").length;
-      const rejected = input.rows.filter((row) => row.status === "rejected").length;
-      const stagedUnknownEntities = input.rows.filter((row) => row.status === "staged").length;
+      const accepted = input.rows.filter(
+        (row) => row.status === "accepted",
+      ).length;
+      const rejected = input.rows.filter(
+        (row) => row.status === "rejected",
+      ).length;
+      const stagedUnknownEntities = input.rows.filter(
+        (row) => row.status === "staged",
+      ).length;
       const stagedUnknownUsers = 0;
       await this.db.query(
         `
@@ -198,7 +214,15 @@ export class ImportExportRepository {
           where tenant_id = $1
             and id = $2
         `,
-        [input.tenantId, input.importJobId, input.rows.length, accepted, rejected, stagedUnknownEntities, stagedUnknownUsers],
+        [
+          input.tenantId,
+          input.importJobId,
+          input.rows.length,
+          accepted,
+          rejected,
+          stagedUnknownEntities,
+          stagedUnknownUsers,
+        ],
         client,
       );
     });
@@ -439,7 +463,7 @@ export class ImportExportRepository {
             r.normalized_payload->>'entityCode' as entity_code,
             r.normalized_payload->>'accessLevelRequired' as access_level,
             case
-              when lower(r.normalized_payload->>'accessLevelRequired') in ('group', 'group viewer', 'group_viewer', 'tenant admin', 'tenant_admin', 'report viewer', 'report_viewer') then 'GROUP'
+              when lower(r.normalized_payload->>'accessLevelRequired') in ('group', 'group manager', 'group_manager', 'administration manager', 'administration_manager', 'group viewer', 'group_viewer', 'tenant admin', 'tenant_admin', 'report viewer', 'report_viewer') then 'GROUP'
               when lower(r.normalized_payload->>'accessLevelRequired') in ('entity', 'entity manager', 'entity_manager') then 'ENTITY'
               else 'USER'
             end as data_access_level
@@ -493,6 +517,7 @@ export class ImportExportRepository {
           from iam.roles r
           where (r.tenant_id = $1 or r.tenant_id is null)
             and r.deleted_at is null
+            and r.code <> 'platform_super_admin'
             and (lower(r.name) = lower(n.access_level) or lower(r.code::text) = lower(n.access_level))
           order by case when r.tenant_id = $1 then 0 else 1 end
           limit 1

@@ -39,13 +39,22 @@ const emptyDraft: RoleDraft = {
 export function RolesAdminPage() {
   const queryClient = useQueryClient();
   const { notify } = useToast();
-  const roles = useQuery({ queryFn: listAdminRoles, queryKey: ["admin-roles"] });
-  const permissions = useQuery({ queryFn: listAdminPermissions, queryKey: ["admin-permissions"] });
+  const roles = useQuery({
+    queryFn: listAdminRoles,
+    queryKey: ["admin-roles"],
+  });
+  const permissions = useQuery({
+    queryFn: listAdminPermissions,
+    queryKey: ["admin-permissions"],
+  });
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<AdminRole | null>(null);
   const [deleteRole, setDeleteRole] = useState<AdminRole | null>(null);
   const [draft, setDraft] = useState<RoleDraft>(emptyDraft);
-  const groupedPermissions = useMemo(() => groupPermissions(permissions.data ?? []), [permissions.data]);
+  const groupedPermissions = useMemo(
+    () => groupPermissions(permissions.data ?? []),
+    [permissions.data],
+  );
 
   const createMutation = useMutation({
     mutationFn: () => createAdminRole(toRolePayload(draft)),
@@ -98,7 +107,7 @@ export function RolesAdminPage() {
     setDraft({
       code: `${role.code}_copy`.replace(/[^a-z0-9_]/g, "_"),
       description: role.description ?? "",
-      name: `${role.name} Copy`,
+      name: `${formatRoleName(role)} Copy`,
       permissionCodes: role.permissionCodes,
     });
     setIsCreateOpen(true);
@@ -126,7 +135,8 @@ export function RolesAdminPage() {
         eyebrow="Admin"
         title="Roles & Permissions"
       >
-        Manage tenant roles, permission bundles, and assignment-safe access levels.
+        Manage tenant roles, permission bundles, and assignment-safe access
+        levels.
       </PageHeader>
 
       <div className="admin-stack">
@@ -155,27 +165,37 @@ export function RolesAdminPage() {
                   <div className="role-card-header">
                     <div>
                       <div className="role-card-title-row">
-                        <h3>{role.name}</h3>
-                        <StatusBadge tone={role.isSystemRole ? "neutral" : "success"}>
+                        <h3>{formatRoleName(role)}</h3>
+                        <StatusBadge
+                          tone={role.isSystemRole ? "neutral" : "success"}
+                        >
                           {role.isSystemRole ? "System" : "Tenant"}
                         </StatusBadge>
                       </div>
                       <code>{role.code}</code>
                     </div>
                     <div className="row-actions">
-                      <IconButton aria-label={`Clone ${role.name}`} onClick={() => openClone(role)} tooltip="Clone role">
+                      <IconButton
+                        aria-label={`Clone ${formatRoleName(role)}`}
+                        onClick={() => openClone(role)}
+                        tooltip="Clone role"
+                      >
                         <Copy size={16} />
                       </IconButton>
                       <IconButton
-                        aria-label={`Edit ${role.name}`}
+                        aria-label={`Edit ${formatRoleName(role)}`}
                         disabled={role.isSystemRole}
                         onClick={() => openEdit(role)}
-                        tooltip={role.isSystemRole ? "Clone system roles to customize permissions" : "Edit role"}
+                        tooltip={
+                          role.isSystemRole
+                            ? "Clone system roles to customize permissions"
+                            : "Edit role"
+                        }
                       >
                         <Pencil size={16} />
                       </IconButton>
                       <IconButton
-                        aria-label={`Delete ${role.name}`}
+                        aria-label={`Delete ${formatRoleName(role)}`}
                         disabled={role.isSystemRole || role.userCount > 0}
                         onClick={() => setDeleteRole(role)}
                         tooltip={
@@ -200,7 +220,9 @@ export function RolesAdminPage() {
                     {role.permissionCodes.slice(0, 8).map((permission) => (
                       <span key={permission}>{permission}</span>
                     ))}
-                    {role.permissionCodes.length > 8 ? <span>+{role.permissionCodes.length - 8}</span> : null}
+                    {role.permissionCodes.length > 8 ? (
+                      <span>+{role.permissionCodes.length - 8}</span>
+                    ) : null}
                   </div>
                 </article>
               ))}
@@ -209,7 +231,12 @@ export function RolesAdminPage() {
         </section>
       </div>
 
-      <Modal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} size="wide" title="New Role">
+      <Modal
+        isOpen={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        size="wide"
+        title="New Role"
+      >
         <form className="stack-form" onSubmit={onCreate}>
           <RoleForm
             groupedPermissions={groupedPermissions}
@@ -219,7 +246,11 @@ export function RolesAdminPage() {
             value={draft}
           />
           <div className="modal-actions">
-            <Button variant="ghost" onClick={() => setIsCreateOpen(false)} type="button">
+            <Button
+              variant="ghost"
+              onClick={() => setIsCreateOpen(false)}
+              type="button"
+            >
               Cancel
             </Button>
             <Button disabled={createMutation.isPending} type="submit">
@@ -227,10 +258,17 @@ export function RolesAdminPage() {
             </Button>
           </div>
         </form>
-        {createMutation.error ? <p className="inline-error">{createMutation.error.message}</p> : null}
+        {createMutation.error ? (
+          <p className="inline-error">{createMutation.error.message}</p>
+        ) : null}
       </Modal>
 
-      <Modal isOpen={Boolean(editingRole)} onClose={() => setEditingRole(null)} size="wide" title="Edit Role">
+      <Modal
+        isOpen={Boolean(editingRole)}
+        onClose={() => setEditingRole(null)}
+        size="wide"
+        title="Edit Role"
+      >
         <form className="stack-form" onSubmit={onUpdate}>
           <RoleForm
             groupedPermissions={groupedPermissions}
@@ -240,7 +278,11 @@ export function RolesAdminPage() {
             value={draft}
           />
           <div className="modal-actions">
-            <Button variant="ghost" onClick={() => setEditingRole(null)} type="button">
+            <Button
+              variant="ghost"
+              onClick={() => setEditingRole(null)}
+              type="button"
+            >
               Cancel
             </Button>
             <Button disabled={updateMutation.isPending} type="submit">
@@ -248,12 +290,18 @@ export function RolesAdminPage() {
             </Button>
           </div>
         </form>
-        {updateMutation.error ? <p className="inline-error">{updateMutation.error.message}</p> : null}
+        {updateMutation.error ? (
+          <p className="inline-error">{updateMutation.error.message}</p>
+        ) : null}
       </Modal>
 
       <ConfirmationDialog
         confirmLabel="Delete Role"
-        description={deleteRole ? `Delete ${deleteRole.name}? This cannot be undone.` : "Delete this role?"}
+        description={
+          deleteRole
+            ? `Delete ${formatRoleName(deleteRole)}? This cannot be undone.`
+            : "Delete this role?"
+        }
         isOpen={Boolean(deleteRole)}
         isPending={deleteMutation.isPending}
         onCancel={() => setDeleteRole(null)}
@@ -261,7 +309,9 @@ export function RolesAdminPage() {
         title="Delete Role"
         tone="danger"
       >
-        {deleteMutation.error ? <p className="inline-error">{deleteMutation.error.message}</p> : null}
+        {deleteMutation.error ? (
+          <p className="inline-error">{deleteMutation.error.message}</p>
+        ) : null}
       </ConfirmationDialog>
     </section>
   );
@@ -288,9 +338,11 @@ function RoleForm({
       ...group,
       permissions: normalizedQuery
         ? group.permissions.filter((permission) =>
-            [permission.name, permission.code, permission.description ?? ""].some((text) =>
-              text.toLowerCase().includes(normalizedQuery),
-            ),
+            [
+              permission.name,
+              permission.code,
+              permission.description ?? "",
+            ].some((text) => text.toLowerCase().includes(normalizedQuery)),
           )
         : group.permissions,
     }))
@@ -305,29 +357,41 @@ function RoleForm({
   };
   const selectGroup = (permissions: AdminPermission[]) => {
     const nextPermissionCodes = Array.from(
-      new Set([...value.permissionCodes, ...permissions.map((permission) => permission.code)]),
+      new Set([
+        ...value.permissionCodes,
+        ...permissions.map((permission) => permission.code),
+      ]),
     );
     onChange({ ...value, permissionCodes: nextPermissionCodes });
   };
   const clearGroup = (permissions: AdminPermission[]) => {
-    const groupCodes = new Set(permissions.map((permission) => permission.code));
+    const groupCodes = new Set(
+      permissions.map((permission) => permission.code),
+    );
     onChange({
       ...value,
-      permissionCodes: value.permissionCodes.filter((permissionCode) => !groupCodes.has(permissionCode)),
+      permissionCodes: value.permissionCodes.filter(
+        (permissionCode) => !groupCodes.has(permissionCode),
+      ),
     });
   };
 
   return (
     <>
       <div className="two-column">
-        <FormField helperText="Lowercase code used by the system. Cannot be changed later." label="Role Code">
+        <FormField
+          helperText="Lowercase code used by the system. Cannot be changed later."
+          label="Role Code"
+        >
           <TextInput
             disabled={!isCodeEditable}
             maxLength={80}
             onChange={(event) =>
               onChange({
                 ...value,
-                code: event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_"),
+                code: event.target.value
+                  .toLowerCase()
+                  .replace(/[^a-z0-9_]/g, "_"),
               })
             }
             placeholder="procurement_reviewer"
@@ -338,7 +402,9 @@ function RoleForm({
         <FormField label="Role Name">
           <TextInput
             maxLength={160}
-            onChange={(event) => onChange({ ...value, name: event.target.value })}
+            onChange={(event) =>
+              onChange({ ...value, name: event.target.value })
+            }
             placeholder="Procurement Reviewer"
             required
             value={value.name}
@@ -348,7 +414,9 @@ function RoleForm({
       <FormField label="Description">
         <TextArea
           maxLength={500}
-          onChange={(event) => onChange({ ...value, description: event.target.value })}
+          onChange={(event) =>
+            onChange({ ...value, description: event.target.value })
+          }
           placeholder="Explain who should receive this role and what it allows."
           value={value.description}
         />
@@ -366,7 +434,9 @@ function RoleForm({
                 permissionCodes:
                   value.permissionCodes.length > 0
                     ? []
-                    : groupedPermissions.flatMap((group) => group.permissions.map((permission) => permission.code)),
+                    : groupedPermissions.flatMap((group) =>
+                        group.permissions.map((permission) => permission.code),
+                      ),
               })
             }
             size="sm"
@@ -388,38 +458,56 @@ function RoleForm({
         {isLoadingPermissions ? (
           <Skeleton height={160} />
         ) : visibleGroups.length === 0 ? (
-          <p className="admin-help-text">No permissions match the current search.</p>
+          <p className="admin-help-text">
+            No permissions match the current search.
+          </p>
         ) : (
           <div className="permission-group-grid">
             {visibleGroups.map((group) => {
-              const selectedCount = group.permissions.filter((permission) => selected.has(permission.code)).length;
+              const selectedCount = group.permissions.filter((permission) =>
+                selected.has(permission.code),
+              ).length;
               return (
-              <section className="permission-group" key={group.group}>
-                <div className="permission-group-heading">
-                  <div>
-                    <h4>{group.group}</h4>
-                    <span>{selectedCount} of {group.permissions.length} selected</span>
+                <section className="permission-group" key={group.group}>
+                  <div className="permission-group-heading">
+                    <div>
+                      <h4>{group.group}</h4>
+                      <span>
+                        {selectedCount} of {group.permissions.length} selected
+                      </span>
+                    </div>
+                    <div className="row-actions">
+                      <button
+                        onClick={() => selectGroup(group.permissions)}
+                        type="button"
+                      >
+                        Select
+                      </button>
+                      <button
+                        onClick={() => clearGroup(group.permissions)}
+                        type="button"
+                      >
+                        Clear
+                      </button>
+                    </div>
                   </div>
-                  <div className="row-actions">
-                    <button onClick={() => selectGroup(group.permissions)} type="button">Select</button>
-                    <button onClick={() => clearGroup(group.permissions)} type="button">Clear</button>
-                  </div>
-                </div>
-                {group.permissions.map((permission) => (
-                  <label className="permission-row" key={permission.code}>
-                    <input
-                      checked={selected.has(permission.code)}
-                      onChange={() => togglePermission(permission.code)}
-                      type="checkbox"
-                    />
-                    <span>
-                      <strong>{permission.name}</strong>
-                      <small>{permission.code}</small>
-                      {permission.description ? <em>{permission.description}</em> : null}
-                    </span>
-                  </label>
-                ))}
-              </section>
+                  {group.permissions.map((permission) => (
+                    <label className="permission-row" key={permission.code}>
+                      <input
+                        checked={selected.has(permission.code)}
+                        onChange={() => togglePermission(permission.code)}
+                        type="checkbox"
+                      />
+                      <span>
+                        <strong>{permission.name}</strong>
+                        <small>{permission.code}</small>
+                        {permission.description ? (
+                          <em>{permission.description}</em>
+                        ) : null}
+                      </span>
+                    </label>
+                  ))}
+                </section>
               );
             })}
           </div>
@@ -444,6 +532,7 @@ function groupPermissions(permissions: AdminPermission[]) {
 
 function groupLabel(group: string) {
   const labels: Record<string, string> = {
+    admin: "Admin Console",
     audit: "Audit",
     award: "Awards",
     case: "Cases",
@@ -451,9 +540,11 @@ function groupLabel(group: string) {
     entity: "Organization",
     import: "Imports",
     notification: "Notifications",
+    permission: "Permissions",
     planning: "Planning",
     report: "Reports",
     role: "Roles",
+    system: "System",
     tenant: "Tenant",
     user: "Users",
   };
@@ -467,4 +558,11 @@ function toRolePayload(value: RoleDraft) {
     name: value.name,
     permissionCodes: value.permissionCodes,
   };
+}
+
+function formatRoleName(role: Pick<AdminRole, "code" | "name">) {
+  if (role.code === "platform_super_admin") return "Super Admin";
+  if (role.code === "tenant_admin") return "Administration Manager";
+  if (role.code === "group_viewer") return "Group Manager";
+  return role.name;
 }

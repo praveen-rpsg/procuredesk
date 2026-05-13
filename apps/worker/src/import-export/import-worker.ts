@@ -12,7 +12,8 @@ export type ImportJobPayload = {
 
 const UNKNOWN_ENTITY_ERROR = "Unknown entity code.";
 const UNKNOWN_USER_ERROR = "Unknown owner user.";
-const UNKNOWN_DEPARTMENT_ERROR = "Unknown or inactive user department for entity.";
+const UNKNOWN_DEPARTMENT_ERROR =
+  "Unknown or inactive user department for entity.";
 
 export async function processImportJob(
   payload: ImportJobPayload,
@@ -64,7 +65,12 @@ export async function processImportJob(
       importType: job.import_type,
       storageKey: job.storage_key,
     });
-    await updateImportProgress(dependencies.pool, payload, 55, "Validating rows");
+    await updateImportProgress(
+      dependencies.pool,
+      payload,
+      55,
+      "Validating rows",
+    );
     const validatedRows = await validateRows(
       payload.tenantId,
       job.import_type,
@@ -72,8 +78,18 @@ export async function processImportJob(
       dependencies.pool,
       payload.actorUserId,
     );
-    await updateImportProgress(dependencies.pool, payload, 80, "Saving staged rows");
-    await persistRows(payload.tenantId, payload.importJobId, validatedRows, dependencies.pool);
+    await updateImportProgress(
+      dependencies.pool,
+      payload,
+      80,
+      "Saving staged rows",
+    );
+    await persistRows(
+      payload.tenantId,
+      payload.importJobId,
+      validatedRows,
+      dependencies.pool,
+    );
   } catch (error) {
     await client.query("rollback").catch(() => undefined);
     await dependencies.pool.query(
@@ -102,7 +118,9 @@ export async function processImportJob(
         payload.tenantId,
         payload.importJobId,
         "Import parsing failed",
-        JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+        JSON.stringify({
+          error: error instanceof Error ? error.message : "Unknown error",
+        }),
       ],
     );
     throw error;
@@ -138,14 +156,28 @@ async function validateRows(
   actorUserId?: string,
 ): Promise<ParsedImportRow[]> {
   const shouldLoadExistingUsers = importType === "portal_user_mapping";
-  const [entityScope, catalog, users, departments, existingCases, roles, existingUsers, existingOldContracts] = await Promise.all([
+  const [
+    entityScope,
+    catalog,
+    users,
+    departments,
+    existingCases,
+    roles,
+    existingUsers,
+    existingOldContracts,
+  ] = await Promise.all([
     loadEntityScope(tenantId, pool, actorUserId),
     loadCatalogLookups(tenantId, pool),
     loadUserLookups(tenantId, pool),
     loadDepartmentLookups(tenantId, pool),
     loadExistingCaseLookups(tenantId, pool),
     loadRoleLookups(tenantId, pool),
-    shouldLoadExistingUsers ? loadExistingUserLookups(tenantId, pool) : Promise.resolve({ emails: new Set<string>(), phones: new Set<string>() }),
+    shouldLoadExistingUsers
+      ? loadExistingUserLookups(tenantId, pool)
+      : Promise.resolve({
+          emails: new Set<string>(),
+          phoneOwners: new Map<string, string>(),
+        }),
     loadExistingOldContractLookups(tenantId, pool),
   ]);
 
@@ -196,9 +228,13 @@ function validateImportRow(input: ValidateImportRowInput): ParsedImportRow {
     seenTenderNos,
     users,
   } = input;
-  const normalizedPayload = normalizeValidatedPayload(row.normalizedPayload ?? {});
+  const normalizedPayload = normalizeValidatedPayload(
+    row.normalizedPayload ?? {},
+  );
   const entityCode = textValue(normalizedPayload.entityCode).toLowerCase();
-  const entity = entityCode ? entityScope.entitiesByCode.get(entityCode) : undefined;
+  const entity = entityCode
+    ? entityScope.entitiesByCode.get(entityCode)
+    : undefined;
   const errors = [...row.errors];
 
   validateEntityScope(errors, entity, entityScope.allowedEntityIds);
@@ -224,23 +260,64 @@ function validateImportRow(input: ValidateImportRowInput): ParsedImportRow {
 
   validateCatalogFields(errors, normalizedPayload, catalog);
   normalizeTenderOwner(errors, normalizedPayload, entity?.id, users);
-  validateDepartment(errors, normalizedPayload.departmentName, entity?.id, departments);
-  validateTenderIdentifiers(errors, normalizedPayload, existingCases, seenPrIds, seenTenderNos);
+  validateDepartment(
+    errors,
+    normalizedPayload.departmentName,
+    entity?.id,
+    departments,
+  );
+  validateTenderIdentifiers(
+    errors,
+    normalizedPayload,
+    existingCases,
+    seenPrIds,
+    seenTenderNos,
+  );
   validateRequiredText(
     errors,
-    normalizedPayload.tenderName ?? normalizedPayload.tenderDescription ?? normalizedPayload.prDescription,
+    normalizedPayload.tenderName ??
+      normalizedPayload.tenderDescription ??
+      normalizedPayload.prDescription,
     "Tender Name is required.",
   );
   validateOptionalDates(errors, normalizedPayload, entity?.id, catalog);
   validateChronology(errors, normalizedPayload);
-  validateOptionalNumber(errors, normalizedPayload.rcPoAmount, "RC/PO amount is invalid.");
-  validatePositiveMoney(errors, normalizedPayload.prValue, "PR Value / Approved Budget must be a positive number.");
-  validatePositiveMoney(errors, normalizedPayload.estimateBenchmark, "Estimate / Benchmark must be a positive number.");
-  validatePositiveMoney(errors, normalizedPayload.approvedAmount, "NFA Approved Amount must be a positive number.");
-  validateInteger(errors, normalizedPayload.biddersParticipated, "Bidder Participated Count must be a non-negative integer.");
-  validateInteger(errors, normalizedPayload.qualifiedBidders, "Qualified Bidders Count must be a non-negative integer.");
+  validateOptionalNumber(
+    errors,
+    normalizedPayload.rcPoAmount,
+    "RC/PO amount is invalid.",
+  );
+  validatePositiveMoney(
+    errors,
+    normalizedPayload.prValue,
+    "PR Value / Approved Budget must be a positive number.",
+  );
+  validatePositiveMoney(
+    errors,
+    normalizedPayload.estimateBenchmark,
+    "Estimate / Benchmark must be a positive number.",
+  );
+  validatePositiveMoney(
+    errors,
+    normalizedPayload.approvedAmount,
+    "NFA Approved Amount must be a positive number.",
+  );
+  validateInteger(
+    errors,
+    normalizedPayload.biddersParticipated,
+    "Bidder Participated Count must be a non-negative integer.",
+  );
+  validateInteger(
+    errors,
+    normalizedPayload.qualifiedBidders,
+    "Qualified Bidders Count must be a non-negative integer.",
+  );
   validateBidderCounts(errors, normalizedPayload);
-  validateControlledBoolean(errors, normalizedPayload.cpcInvolved, "CPC Involved? must be Yes or No.");
+  validateControlledBoolean(
+    errors,
+    normalizedPayload.cpcInvolved,
+    "CPC Involved? must be Yes or No.",
+  );
   validatePriority(errors, normalizedPayload.priority);
   validateLoiAndRcPo(errors, normalizedPayload);
 
@@ -248,7 +325,9 @@ function validateImportRow(input: ValidateImportRowInput): ParsedImportRow {
     row,
     normalizedPayload,
     errors,
-    existingCases.prIds.has(textValue(normalizedPayload.prId).toLowerCase()) ? "update" : "create",
+    existingCases.prIds.has(textValue(normalizedPayload.prId).toLowerCase())
+      ? "update"
+      : "create",
   );
 }
 
@@ -256,7 +335,9 @@ function validateSpecializedImportRow(input: {
   departments: Awaited<ReturnType<typeof loadDepartmentLookups>>;
   entityId: string | undefined;
   errors: string[];
-  existingOldContracts: Awaited<ReturnType<typeof loadExistingOldContractLookups>>;
+  existingOldContracts: Awaited<
+    ReturnType<typeof loadExistingOldContractLookups>
+  >;
   existingUsers: Awaited<ReturnType<typeof loadExistingUserLookups>>;
   importType: ImportParserInput["importType"];
   normalizedPayload: Record<string, unknown>;
@@ -270,20 +351,77 @@ function validateSpecializedImportRow(input: {
 }): ParsedImportRow | null {
   const payload = input.normalizedPayload;
   if (input.importType === "portal_user_mapping") {
-    validatePortalUserMapping(input.errors, payload, input.entityId, input.roles, input.existingUsers, input.seenEmails, input.seenPhones);
-    return buildValidatedRow(input.row, payload, input.errors, userImportAction(payload, input.existingUsers));
+    validatePortalUserMapping(
+      input.errors,
+      payload,
+      input.entityId,
+      input.roles,
+      input.existingUsers,
+      input.seenEmails,
+      input.seenPhones,
+    );
+    return buildValidatedRow(
+      input.row,
+      payload,
+      input.errors,
+      userImportAction(payload, input.existingUsers),
+    );
   }
   if (input.importType === "user_department_mapping") {
-    validateUserDepartmentMapping(input.errors, payload, input.entityId, input.departments, input.seenDepartments);
-    return buildValidatedRow(input.row, payload, input.errors, departmentImportAction(payload, input.entityId, input.departments));
+    validateUserDepartmentMapping(
+      input.errors,
+      payload,
+      input.entityId,
+      input.departments,
+      input.seenDepartments,
+    );
+    return buildValidatedRow(
+      input.row,
+      payload,
+      input.errors,
+      departmentImportAction(payload, input.entityId, input.departments),
+    );
   }
   if (input.importType === "rc_po_plan") {
-    validateRcPoPlan(input.errors, payload, input.entityId, input.departments, input.existingOldContracts, input.seenContracts);
-    return buildValidatedRow(input.row, payload, input.errors, oldContractImportAction(payload, input.entityId, input.existingOldContracts));
+    validateRcPoPlan(
+      input.errors,
+      payload,
+      input.entityId,
+      input.departments,
+      input.existingOldContracts,
+      input.seenContracts,
+    );
+    return buildValidatedRow(
+      input.row,
+      payload,
+      input.errors,
+      oldContractImportAction(
+        payload,
+        input.entityId,
+        input.existingOldContracts,
+      ),
+    );
   }
   if (input.importType === "old_contracts") {
-    validateOldContract(input.errors, payload, input.entityId, input.users, input.departments, input.existingOldContracts, input.seenContracts);
-    return buildValidatedRow(input.row, payload, input.errors, oldContractImportAction(payload, input.entityId, input.existingOldContracts));
+    validateOldContract(
+      input.errors,
+      payload,
+      input.entityId,
+      input.users,
+      input.departments,
+      input.existingOldContracts,
+      input.seenContracts,
+    );
+    return buildValidatedRow(
+      input.row,
+      payload,
+      input.errors,
+      oldContractImportAction(
+        payload,
+        input.entityId,
+        input.existingOldContracts,
+      ),
+    );
   }
   return null;
 }
@@ -293,7 +431,9 @@ type ValidateImportRowInput = {
   departments: Awaited<ReturnType<typeof loadDepartmentLookups>>;
   entityScope: Awaited<ReturnType<typeof loadEntityScope>>;
   existingCases: Awaited<ReturnType<typeof loadExistingCaseLookups>>;
-  existingOldContracts: Awaited<ReturnType<typeof loadExistingOldContractLookups>>;
+  existingOldContracts: Awaited<
+    ReturnType<typeof loadExistingOldContractLookups>
+  >;
   existingUsers: Awaited<ReturnType<typeof loadExistingUserLookups>>;
   importType: ImportParserInput["importType"];
   roles: Awaited<ReturnType<typeof loadRoleLookups>>;
@@ -340,8 +480,20 @@ function validateCatalogFields(
   payload: Record<string, unknown>,
   catalog: Awaited<ReturnType<typeof loadCatalogLookups>>,
 ): void {
-  validateCatalogValue(errors, catalog.referenceValues, "budget_type", payload.budgetType, "Unknown budget type.");
-  validateCatalogValue(errors, catalog.referenceValues, "nature_of_work", payload.natureOfWork, "Unknown nature of work.");
+  validateCatalogValue(
+    errors,
+    catalog.referenceValues,
+    "budget_type",
+    payload.budgetType,
+    "Unknown budget type.",
+  );
+  validateCatalogValue(
+    errors,
+    catalog.referenceValues,
+    "nature_of_work",
+    payload.natureOfWork,
+    "Unknown nature of work.",
+  );
   validateCatalogValue(
     errors,
     catalog.referenceValues,
@@ -349,7 +501,10 @@ function validateCatalogFields(
     payload.prReceivingMedium,
     "Unknown PR receiving medium.",
   );
-  if (hasValue(payload.tenderType) && !catalog.tenderTypes.has(textValue(payload.tenderType).toLowerCase())) {
+  if (
+    hasValue(payload.tenderType) &&
+    !catalog.tenderTypes.has(textValue(payload.tenderType).toLowerCase())
+  ) {
     errors.push("Unknown tender type.");
   }
 }
@@ -383,11 +538,20 @@ function validateOptionalDates(
   if (isFutureDate(payload.prReceiptDate)) {
     errors.push("PR/Scheme Receipt Date cannot be in the future.");
   }
-  const tenderType = catalog.tenderTypesByName.get(textValue(payload.tenderType).toLowerCase());
-  if (!payload.tentativeCompletionDate && tenderType?.completionDays != null && payload.prReceiptDate) {
+  const tenderType = catalog.tenderTypesByName.get(
+    textValue(payload.tenderType).toLowerCase(),
+  );
+  if (
+    !payload.tentativeCompletionDate &&
+    tenderType?.completionDays != null &&
+    payload.prReceiptDate
+  ) {
     const receipt = parseImportDate(payload.prReceiptDate);
     if (receipt && entityId) {
-      payload.tentativeCompletionDate = addDays(receipt, tenderType.completionDays);
+      payload.tentativeCompletionDate = addDays(
+        receipt,
+        tenderType.completionDays,
+      );
     }
   }
 }
@@ -396,30 +560,38 @@ async function loadEntityScope(
   tenantId: string,
   pool: Pool,
   actorUserId?: string,
-): Promise<{ allowedEntityIds: Set<string> | null; entitiesByCode: Map<string, { id: string }> }> {
+): Promise<{
+  allowedEntityIds: Set<string> | null;
+  entitiesByCode: Map<string, { id: string }>;
+}> {
   const entities = await pool.query<{ code: string; id: string }>(
     "select id::text as id, lower(code::text) as code from org.entities where tenant_id = $1 and deleted_at is null and is_active = true",
     [tenantId],
   );
-  const entitiesByCode = new Map(entities.rows.map((row) => [row.code, { id: row.id }]));
+  const entitiesByCode = new Map(
+    entities.rows.map((row) => [row.code, { id: row.id }]),
+  );
 
   if (!actorUserId) {
     return { allowedEntityIds: null, entitiesByCode };
   }
 
   const actor = await pool.query<{
+    access_level: "ENTITY" | "GROUP" | "USER";
     entity_ids: string[] | null;
     is_platform_super_admin: boolean;
     permissions: string[] | null;
   }>(
     `
       select
+        u.access_level,
         u.is_platform_super_admin,
         coalesce(array_agg(distinct rp.permission_code::text) filter (where rp.permission_code is not null), '{}') as permissions,
         coalesce(array_agg(distinct ues.entity_id::text) filter (where ues.entity_id is not null), '{}') as entity_ids
       from iam.users u
       left join iam.user_roles ur on ur.user_id = u.id
-      left join iam.role_permissions rp on rp.role_id = ur.role_id
+      left join iam.roles r on r.id = ur.role_id and r.deleted_at is null
+      left join iam.role_permissions rp on rp.role_id = r.id
       left join iam.user_entity_scopes ues on ues.user_id = u.id
       where u.tenant_id = $1
         and u.id = $2
@@ -436,11 +608,14 @@ async function loadEntityScope(
   const permissions = new Set(actorRow.permissions ?? []);
   const canImportAllEntities =
     actorRow.is_platform_super_admin ||
+    actorRow.access_level === "GROUP" ||
     permissions.has("case.update.all") ||
     permissions.has("entity.manage");
 
   return {
-    allowedEntityIds: canImportAllEntities ? null : new Set(actorRow.entity_ids ?? []),
+    allowedEntityIds: canImportAllEntities
+      ? null
+      : new Set(actorRow.entity_ids ?? []),
     entitiesByCode,
   };
 }
@@ -453,7 +628,10 @@ async function loadCatalogLookups(
   tenderTypes: Set<string>;
   tenderTypesByName: Map<string, { completionDays: number | null }>;
 }> {
-  const referenceValues = await pool.query<{ category_code: string; key: string }>(
+  const referenceValues = await pool.query<{
+    category_code: string;
+    key: string;
+  }>(
     `
       select c.code::text as category_code, lower(v.label) as key
       from catalog.reference_values v
@@ -474,11 +652,15 @@ async function loadCatalogLookups(
   );
   const referenceValueMap = new Map<string, Set<string>>();
   for (const row of referenceValues.rows) {
-    if (!referenceValueMap.has(row.category_code)) referenceValueMap.set(row.category_code, new Set());
+    if (!referenceValueMap.has(row.category_code))
+      referenceValueMap.set(row.category_code, new Set());
     referenceValueMap.get(row.category_code)?.add(row.key);
   }
 
-  const tenderTypes = await pool.query<{ completion_days: number | null; key: string }>(
+  const tenderTypes = await pool.query<{
+    completion_days: number | null;
+    key: string;
+  }>(
     `
       select lower(tt.name) as key, tcr.completion_days
       from catalog.tender_types tt
@@ -493,7 +675,12 @@ async function loadCatalogLookups(
   return {
     referenceValues: referenceValueMap,
     tenderTypes: new Set(tenderTypes.rows.map((row) => row.key)),
-    tenderTypesByName: new Map(tenderTypes.rows.map((row) => [row.key, { completionDays: row.completion_days }])),
+    tenderTypesByName: new Map(
+      tenderTypes.rows.map((row) => [
+        row.key,
+        { completionDays: row.completion_days },
+      ]),
+    ),
   };
 }
 
@@ -513,7 +700,8 @@ async function loadDepartmentLookups(
   );
   const departments = new Map<string, Set<string>>();
   for (const row of result.rows) {
-    if (!departments.has(row.entity_id)) departments.set(row.entity_id, new Set());
+    if (!departments.has(row.entity_id))
+      departments.set(row.entity_id, new Set());
     departments.get(row.entity_id)?.add(row.name);
   }
   return departments;
@@ -534,7 +722,11 @@ async function loadExistingCaseLookups(
   );
   return {
     prIds: new Set(result.rows.map((row) => row.pr_id)),
-    tenderNos: new Map(result.rows.filter((row) => row.tender_no).map((row) => [row.tender_no as string, row.pr_id])),
+    tenderNos: new Map(
+      result.rows
+        .filter((row) => row.tender_no)
+        .map((row) => [row.tender_no as string, row.pr_id]),
+    ),
   };
 }
 
@@ -565,27 +757,38 @@ async function loadRoleLookups(
   tenantId: string,
   pool: Pool,
 ): Promise<Map<string, { description: string | null; id: string }>> {
-  const result = await pool.query<{ description: string | null; id: string; key: string }>(
+  const result = await pool.query<{
+    description: string | null;
+    id: string;
+    key: string;
+  }>(
     `
       select id::text, lower(name) as key, description
       from iam.roles
       where (tenant_id = $1 or tenant_id is null)
         and deleted_at is null
+        and code <> 'platform_super_admin'
       union
       select id::text, lower(code::text) as key, description
       from iam.roles
       where (tenant_id = $1 or tenant_id is null)
         and deleted_at is null
+        and code <> 'platform_super_admin'
     `,
     [tenantId],
   );
-  return new Map(result.rows.map((row) => [row.key, { description: row.description, id: row.id }]));
+  return new Map(
+    result.rows.map((row) => [
+      row.key,
+      { description: row.description, id: row.id },
+    ]),
+  );
 }
 
 async function loadExistingUserLookups(
   tenantId: string,
   pool: Pool,
-): Promise<{ emails: Set<string>; phones: Set<string> }> {
+): Promise<{ emails: Set<string>; phoneOwners: Map<string, string> }> {
   const result = await pool.query<{ contact_no: string | null; email: string }>(
     `
       select lower(email::text) as email, contact_no
@@ -597,7 +800,11 @@ async function loadExistingUserLookups(
   );
   return {
     emails: new Set(result.rows.map((row) => row.email)),
-    phones: new Set(result.rows.map((row) => normalizePhone(row.contact_no)).filter(Boolean)),
+    phoneOwners: new Map(
+      result.rows
+        .map((row) => [normalizePhone(row.contact_no), row.email] as const)
+        .filter(([phone]) => Boolean(phone)),
+    ),
   };
 }
 
@@ -687,41 +894,70 @@ function validatePortalUserMapping(
   payload: Record<string, unknown>,
   entityId: string | undefined,
   roles: Map<string, { description: string | null; id: string }>,
-  existingUsers: { emails: Set<string>; phones: Set<string> },
+  existingUsers: { emails: Set<string>; phoneOwners: Map<string, string> },
   seenEmails: Set<string>,
   seenPhones: Set<string>,
 ): void {
   validateRequiredText(errors, payload.fullName, "Full Name is required.");
   validateRequiredText(errors, payload.mailId, "Mail ID is required.");
-  validateRequiredText(errors, payload.accessLevelRequired, "Access Level Required is required.");
-  validatePortalUserEmail(errors, payload.mailId, seenEmails);
-  validatePortalUserPhone(errors, payload.contactNo, existingUsers, seenPhones);
+  validateRequiredText(
+    errors,
+    payload.accessLevelRequired,
+    "Access Level Required is required.",
+  );
+  validatePortalUserEmail(errors, payload, seenEmails);
+  validatePortalUserPhone(
+    errors,
+    payload.contactNo,
+    payload.mailId,
+    existingUsers,
+    seenPhones,
+  );
   const role = roles.get(textValue(payload.accessLevelRequired).toLowerCase());
-  if (!role) errors.push("Access Level Required is not available in role master.");
-  if (!entityId) errors.push("User access cannot be mapped without a valid entity.");
-  payload.accessLevelDefinition = role?.description ?? payload.accessLevelDefinition ?? "";
+  if (!role)
+    errors.push("Access Level Required is not available in role master.");
+  if (!entityId)
+    errors.push("User access cannot be mapped without a valid entity.");
+  payload.accessLevelDefinition =
+    role?.description ?? payload.accessLevelDefinition ?? "";
 }
 
-function validatePortalUserEmail(errors: string[], value: unknown, seenEmails: Set<string>): void {
-  const email = textValue(value).toLowerCase();
+function validatePortalUserEmail(
+  errors: string[],
+  payload: Record<string, unknown>,
+  seenEmails: Set<string>,
+): void {
+  const email = textValue(payload.mailId).toLowerCase();
   if (!email) return;
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push("Mail ID must be a valid email address.");
-  if (seenEmails.has(email)) errors.push("Duplicate Mail ID exists within this import file.");
+  payload.mailId = email;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    errors.push("Mail ID must be a valid email address.");
+  if (seenEmails.has(email))
+    errors.push("Duplicate Mail ID exists within this import file.");
   seenEmails.add(email);
 }
 
 function validatePortalUserPhone(
   errors: string[],
   value: unknown,
-  existingUsers: { emails: Set<string>; phones: Set<string> },
+  mailId: unknown,
+  existingUsers: { emails: Set<string>; phoneOwners: Map<string, string> },
   seenPhones: Set<string>,
 ): void {
   const phone = normalizePhone(value);
   if (!phone) return;
-  if (phone.length < 8 || phone.length > 15) errors.push("Contact No. must be 8 to 15 digits including country code.");
-  if (seenPhones.has(phone)) errors.push("Duplicate Contact No. exists within this import file.");
+  if (phone.length < 8 || phone.length > 15)
+    errors.push("Contact No. must be 8 to 15 digits including country code.");
+  if (seenPhones.has(phone))
+    errors.push("Duplicate Contact No. exists within this import file.");
   seenPhones.add(phone);
-  if (existingUsers.phones.has(phone)) errors.push("Contact No. already exists for another user.");
+  const existingOwnerEmail = existingUsers.phoneOwners.get(phone);
+  if (
+    existingOwnerEmail &&
+    existingOwnerEmail !== textValue(mailId).toLowerCase()
+  ) {
+    errors.push("Contact No. already exists for another user.");
+  }
 }
 
 function validateUserDepartmentMapping(
@@ -731,12 +967,17 @@ function validateUserDepartmentMapping(
   departments: Map<string, Set<string>>,
   seenDepartments: Set<string>,
 ): void {
-  validateRequiredText(errors, payload.departmentName, "User Department is required.");
+  validateRequiredText(
+    errors,
+    payload.departmentName,
+    "User Department is required.",
+  );
   if (!entityId) return;
   const department = textValue(payload.departmentName);
   const key = `${entityId}|${department.toLowerCase()}`;
   if (key.endsWith("|")) return;
-  if (seenDepartments.has(key)) errors.push("Duplicate User Department exists within this import file.");
+  if (seenDepartments.has(key))
+    errors.push("Duplicate User Department exists within this import file.");
   seenDepartments.add(key);
   if (departments.get(entityId)?.has(department.toLowerCase())) {
     payload.importAction = "existing";
@@ -754,18 +995,35 @@ function validateOldContract(
 ): void {
   validateDepartment(errors, payload.departmentName, entityId, departments);
   validateOwner(errors, payload.ownerUsername, entityId, users);
-  validateRequiredText(errors, payload.tenderDescription, "Tender Description is required.");
-  validateRequiredText(errors, payload.awardedVendors, "Awarded Vendors (comma separated) is required.");
-  validatePositiveMoney(errors, payload.rcPoAmount, "RC/PO Amount must be a positive number.");
+  validateRequiredText(
+    errors,
+    payload.tenderDescription,
+    "Tender Description is required.",
+  );
+  validateRequiredText(
+    errors,
+    payload.awardedVendors,
+    "Awarded Vendors (comma separated) is required.",
+  );
+  validatePositiveMoney(
+    errors,
+    payload.rcPoAmount,
+    "RC/PO Amount must be a positive number.",
+  );
   validateOldContractDates(errors, payload);
   const vendorList = splitVendors(payload.awardedVendors);
-  if (!vendorList.length) errors.push("Awarded Vendors must include at least one vendor.");
-  if (vendorList.length !== new Set(vendorList.map((vendor) => vendor.toLowerCase())).size) {
+  if (!vendorList.length)
+    errors.push("Awarded Vendors must include at least one vendor.");
+  if (
+    vendorList.length !==
+    new Set(vendorList.map((vendor) => vendor.toLowerCase())).size
+  ) {
     errors.push("Awarded Vendors contains duplicate vendor names.");
   }
   const key = oldContractKey(payload, entityId);
   if (key) {
-    if (seenContracts.has(key)) errors.push("Duplicate old contract exists within this import file.");
+    if (seenContracts.has(key))
+      errors.push("Duplicate old contract exists within this import file.");
     seenContracts.add(key);
     if (existingOldContracts.has(key)) payload.importAction = "existing";
   }
@@ -780,18 +1038,35 @@ function validateRcPoPlan(
   seenContracts: Set<string>,
 ): void {
   validateDepartment(errors, payload.departmentName, entityId, departments);
-  validateRequiredText(errors, payload.tenderDescription, "Tender Description is required.");
-  validateRequiredText(errors, payload.awardedVendors, "Awarded Vendors (comma separated) is required.");
-  validatePositiveMoney(errors, payload.rcPoAmount, "RC/PO Amount must be a positive number.");
+  validateRequiredText(
+    errors,
+    payload.tenderDescription,
+    "Tender Description is required.",
+  );
+  validateRequiredText(
+    errors,
+    payload.awardedVendors,
+    "Awarded Vendors (comma separated) is required.",
+  );
+  validatePositiveMoney(
+    errors,
+    payload.rcPoAmount,
+    "RC/PO Amount must be a positive number.",
+  );
   validateRcPoPlanDates(errors, payload);
   const vendorList = splitVendors(payload.awardedVendors);
-  if (!vendorList.length) errors.push("Awarded Vendors must include at least one vendor.");
-  if (vendorList.length !== new Set(vendorList.map((vendor) => vendor.toLowerCase())).size) {
+  if (!vendorList.length)
+    errors.push("Awarded Vendors must include at least one vendor.");
+  if (
+    vendorList.length !==
+    new Set(vendorList.map((vendor) => vendor.toLowerCase())).size
+  ) {
     errors.push("Awarded Vendors contains duplicate vendor names.");
   }
   const key = oldContractKey(payload, entityId);
   if (key) {
-    if (seenContracts.has(key)) errors.push("Duplicate RC/PO plan exists within this import file.");
+    if (seenContracts.has(key))
+      errors.push("Duplicate RC/PO plan exists within this import file.");
     seenContracts.add(key);
     if (existingOldContracts.has(key)) payload.importAction = "existing";
   }
@@ -804,7 +1079,10 @@ function validateDepartment(
   departments: Map<string, Set<string>>,
 ): void {
   if (!hasValue(value)) return;
-  if (!entityId || !departments.get(entityId)?.has(textValue(value).toLowerCase())) {
+  if (
+    !entityId ||
+    !departments.get(entityId)?.has(textValue(value).toLowerCase())
+  ) {
     errors.push(UNKNOWN_DEPARTMENT_ERROR);
   }
 }
@@ -819,12 +1097,14 @@ function validateTenderIdentifiers(
   validateRequiredText(errors, payload.prId, "PR/Scheme No is required.");
   const prId = textValue(payload.prId).toLowerCase();
   if (prId) {
-    if (seenPrIds.has(prId)) errors.push("Duplicate PR/Scheme No exists within this import file.");
+    if (seenPrIds.has(prId))
+      errors.push("Duplicate PR/Scheme No exists within this import file.");
     seenPrIds.add(prId);
   }
   const tenderNo = textValue(payload.tenderNo).toLowerCase();
   if (tenderNo) {
-    if (seenTenderNos.has(tenderNo)) errors.push("Duplicate Tender No. exists within this import file.");
+    if (seenTenderNos.has(tenderNo))
+      errors.push("Duplicate Tender No. exists within this import file.");
     seenTenderNos.add(tenderNo);
     const existingPrId = existingCases.tenderNos.get(tenderNo);
     if (existingPrId && existingPrId !== prId) {
@@ -833,7 +1113,10 @@ function validateTenderIdentifiers(
   }
 }
 
-function validateChronology(errors: string[], payload: Record<string, unknown>): void {
+function validateChronology(
+  errors: string[],
+  payload: Record<string, unknown>,
+): void {
   const chain = [
     ["PR/Scheme Receipt Date", payload.prReceiptDate],
     ["NIT Initiation", payload.nitInitiationDate],
@@ -864,20 +1147,31 @@ function validateChronology(errors: string[], payload: Record<string, unknown>):
     ["Technical Evaluation", payload.technicalEvaluationDate],
   ] as const) {
     const date = parseImportDate(value);
-    if (date && bidReceipt && date < bidReceipt) errors.push(`${label} must be on or after Bid Receipt.`);
-    if (date && nfaSubmission && nfaSubmission < date) errors.push("NFA Submission cannot be before evaluation dates.");
+    if (date && bidReceipt && date < bidReceipt)
+      errors.push(`${label} must be on or after Bid Receipt.`);
+    if (date && nfaSubmission && nfaSubmission < date)
+      errors.push("NFA Submission cannot be before evaluation dates.");
   }
 }
 
-function validateBidderCounts(errors: string[], payload: Record<string, unknown>): void {
+function validateBidderCounts(
+  errors: string[],
+  payload: Record<string, unknown>,
+): void {
   const participated = numberValue(payload.biddersParticipated);
   const qualified = numberValue(payload.qualifiedBidders);
   if (participated != null && qualified != null && qualified > participated) {
-    errors.push("Qualified Bidders Count cannot exceed Bidder Participated Count.");
+    errors.push(
+      "Qualified Bidders Count cannot exceed Bidder Participated Count.",
+    );
   }
 }
 
-function validateControlledBoolean(errors: string[], value: unknown, message: string): void {
+function validateControlledBoolean(
+  errors: string[],
+  value: unknown,
+  message: string,
+): void {
   if (!hasValue(value)) return;
   if (booleanValue(value) == null) errors.push(message);
 }
@@ -885,12 +1179,26 @@ function validateControlledBoolean(errors: string[], value: unknown, message: st
 function validatePriority(errors: string[], value: unknown): void {
   if (!hasValue(value)) return;
   const normalized = textValue(value).toLowerCase();
-  if (!["low", "medium", "high", "critical", "yes", "no", "true", "false"].includes(normalized)) {
+  if (
+    ![
+      "low",
+      "medium",
+      "high",
+      "critical",
+      "yes",
+      "no",
+      "true",
+      "false",
+    ].includes(normalized)
+  ) {
     errors.push("Priority? must be Low, Medium, High, Critical, Yes, or No.");
   }
 }
 
-function validateLoiAndRcPo(errors: string[], payload: Record<string, unknown>): void {
+function validateLoiAndRcPo(
+  errors: string[],
+  payload: Record<string, unknown>,
+): void {
   const loiIssued = booleanValue(payload.loiIssued);
   if (loiIssued && !parseImportDate(payload.loiIssuedDate)) {
     errors.push("LOI Award Date is mandatory when LOI Awarded? is Yes.");
@@ -906,13 +1214,21 @@ function validateLoiAndRcPo(errors: string[], payload: Record<string, unknown>):
   }
 }
 
-function validateRequiredText(errors: string[], value: unknown, message: string): void {
+function validateRequiredText(
+  errors: string[],
+  value: unknown,
+  message: string,
+): void {
   if (!hasValue(value)) {
     errors.push(message);
   }
 }
 
-function validateOptionalDate(errors: string[], value: unknown, message: string): void {
+function validateOptionalDate(
+  errors: string[],
+  value: unknown,
+  message: string,
+): void {
   if (!hasValue(value)) return;
   if (value instanceof Date && !Number.isNaN(value.getTime())) return;
   const parsed = Date.parse(textValue(value));
@@ -921,7 +1237,10 @@ function validateOptionalDate(errors: string[], value: unknown, message: string)
   }
 }
 
-function validateOldContractDates(errors: string[], payload: Record<string, unknown>): void {
+function validateOldContractDates(
+  errors: string[],
+  payload: Record<string, unknown>,
+): void {
   for (const [label, value] of [
     ["RC/PO Award Date", payload.rcPoAwardDate],
     ["RC/PO Validity Date", payload.rcPoValidityDate],
@@ -937,13 +1256,18 @@ function validateOldContractDates(errors: string[], payload: Record<string, unkn
   }
 }
 
-function validateRcPoPlanDates(errors: string[], payload: Record<string, unknown>): void {
+function validateRcPoPlanDates(
+  errors: string[],
+  payload: Record<string, unknown>,
+): void {
   for (const [label, value] of [
     ["RC/PO Award Date", payload.rcPoAwardDate],
     ["RC/PO Validity Date", payload.rcPoValidityDate],
   ] as const) {
     if (hasValue(value) && !parseImportDate(value)) {
-      errors.push(`${label} must be a valid date in YYYY-MM-DD or DD-MM-YYYY format.`);
+      errors.push(
+        `${label} must be a valid date in YYYY-MM-DD or DD-MM-YYYY format.`,
+      );
     }
   }
   const awardDate = parseImportDate(payload.rcPoAwardDate);
@@ -955,7 +1279,7 @@ function validateRcPoPlanDates(errors: string[], payload: Record<string, unknown
 
 function userImportAction(
   payload: Record<string, unknown>,
-  existingUsers: { emails: Set<string>; phones: Set<string> },
+  existingUsers: { emails: Set<string>; phoneOwners: Map<string, string> },
 ): string {
   const email = textValue(payload.mailId).toLowerCase();
   if (email && existingUsers.emails.has(email)) return "update-access";
@@ -968,7 +1292,11 @@ function departmentImportAction(
   departments: Map<string, Set<string>>,
 ): string {
   if (!entityId) return "create";
-  return departments.get(entityId)?.has(textValue(payload.departmentName).toLowerCase()) ? "existing" : "create";
+  return departments
+    .get(entityId)
+    ?.has(textValue(payload.departmentName).toLowerCase())
+    ? "existing"
+    : "create";
 }
 
 function oldContractImportAction(
@@ -980,7 +1308,10 @@ function oldContractImportAction(
   return key && existingOldContracts.has(key) ? "existing" : "create";
 }
 
-function oldContractKey(payload: Record<string, unknown>, entityId: string | undefined): string {
+function oldContractKey(
+  payload: Record<string, unknown>,
+  entityId: string | undefined,
+): string {
   if (!entityId) return "";
   return [
     entityId,
@@ -997,7 +1328,11 @@ function splitVendors(value: unknown): string[] {
     .filter(Boolean);
 }
 
-function validateOptionalNumber(errors: string[], value: unknown, message: string): void {
+function validateOptionalNumber(
+  errors: string[],
+  value: unknown,
+  message: string,
+): void {
   if (!hasValue(value)) return;
   if (numberValue(value) == null) {
     errors.push(message);
@@ -1009,19 +1344,31 @@ function isFutureDate(value: unknown): boolean {
   return Boolean(parsed && parsed > todayDateString());
 }
 
-function validatePositiveMoney(errors: string[], value: unknown, message: string): void {
+function validatePositiveMoney(
+  errors: string[],
+  value: unknown,
+  message: string,
+): void {
   if (!hasValue(value)) return;
   const numeric = numberValue(value);
   if (numeric == null || numeric < 0) errors.push(message);
 }
 
-function validateInteger(errors: string[], value: unknown, message: string): void {
+function validateInteger(
+  errors: string[],
+  value: unknown,
+  message: string,
+): void {
   if (!hasValue(value)) return;
   const numeric = numberValue(value);
-  if (numeric == null || numeric < 0 || !Number.isInteger(numeric)) errors.push(message);
+  if (numeric == null || numeric < 0 || !Number.isInteger(numeric))
+    errors.push(message);
 }
 
-function statusForRow(currentStatus: ParsedImportRow["status"], errors: string[]): ParsedImportRow["status"] {
+function statusForRow(
+  currentStatus: ParsedImportRow["status"],
+  errors: string[],
+): ParsedImportRow["status"] {
   if (currentStatus === "rejected") return "rejected";
   if (!errors.length) return "accepted";
   const hasUnknownReference =
@@ -1041,7 +1388,9 @@ function textValue(value: unknown): string {
   return String(value).trim();
 }
 
-function normalizeValidatedPayload(payload: Record<string, unknown>): Record<string, unknown> {
+function normalizeValidatedPayload(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
   const normalized = { ...payload };
   for (const key of [
     "prReceiptDate",
@@ -1061,7 +1410,14 @@ function normalizeValidatedPayload(payload: Record<string, unknown>): Record<str
     const parsed = parseImportDate(normalized[key]);
     if (parsed) normalized[key] = parsed;
   }
-  for (const key of ["approvedAmount", "biddersParticipated", "estimateBenchmark", "prValue", "qualifiedBidders", "rcPoAmount"]) {
+  for (const key of [
+    "approvedAmount",
+    "biddersParticipated",
+    "estimateBenchmark",
+    "prValue",
+    "qualifiedBidders",
+    "rcPoAmount",
+  ]) {
     const numeric = numberValue(normalized[key]);
     if (numeric != null) normalized[key] = numeric;
   }
@@ -1070,7 +1426,10 @@ function normalizeValidatedPayload(payload: Record<string, unknown>): Record<str
   const loi = booleanValue(normalized.loiIssued);
   if (loi != null) normalized.loiIssued = loi;
   normalized.priorityCase = priorityValue(normalized.priority);
-  normalized.tenderDescription = normalized.tenderName ?? normalized.tenderDescription ?? normalized.prDescription;
+  normalized.tenderDescription =
+    normalized.tenderName ??
+    normalized.tenderDescription ??
+    normalized.prDescription;
   return normalized;
 }
 
@@ -1135,15 +1494,25 @@ function addDays(value: string, days: number): string {
   if (!parts) return value;
   const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
   date.setUTCDate(date.getUTCDate() + days);
-  return formatDateOnlyParts(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
+  return formatDateOnlyParts(
+    date.getUTCFullYear(),
+    date.getUTCMonth() + 1,
+    date.getUTCDate(),
+  );
 }
 
 function dateToDateOnlyString(value: Date): string | null {
   if (Number.isNaN(value.getTime())) return null;
-  return formatDateOnlyParts(value.getFullYear(), value.getMonth() + 1, value.getDate());
+  return formatDateOnlyParts(
+    value.getFullYear(),
+    value.getMonth() + 1,
+    value.getDate(),
+  );
 }
 
-function parseIsoDateParts(value: string): { day: number; month: number; year: number } | null {
+function parseIsoDateParts(
+  value: string,
+): { day: number; month: number; year: number } | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) return null;
   return {
@@ -1166,14 +1535,21 @@ async function persistRows(
   const client = await pool.connect();
   try {
     await client.query("begin");
-    await client.query("delete from ops.import_job_rows where import_job_id = $1", [importJobId]);
+    await client.query(
+      "delete from ops.import_job_rows where import_job_id = $1",
+      [importJobId],
+    );
     for (const [index, row] of rows.entries()) {
       await insertRow(client, importJobId, index + 1, row);
     }
     const accepted = rows.filter((row) => row.status === "accepted").length;
     const rejected = rows.filter((row) => row.status === "rejected").length;
-    const stagedUnknownEntities = rows.filter((row) => row.errors.includes(UNKNOWN_ENTITY_ERROR)).length;
-    const stagedUnknownUsers = rows.filter((row) => row.errors.includes(UNKNOWN_USER_ERROR)).length;
+    const stagedUnknownEntities = rows.filter((row) =>
+      row.errors.includes(UNKNOWN_ENTITY_ERROR),
+    ).length;
+    const stagedUnknownUsers = rows.filter((row) =>
+      row.errors.includes(UNKNOWN_USER_ERROR),
+    ).length;
     await client.query(
       `
         update ops.import_jobs

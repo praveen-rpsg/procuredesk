@@ -71,7 +71,7 @@ tenant_role as (
   select id
   from iam.roles
   where tenant_id is null
-    and code = 'tenant_admin'
+    and code = 'administration_manager'
     and deleted_at is null
 ),
 entity_row as (

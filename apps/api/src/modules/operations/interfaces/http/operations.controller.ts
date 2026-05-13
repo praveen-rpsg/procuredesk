@@ -9,6 +9,7 @@ import { OperationsService } from "../../application/operations.service.js";
 
 @Controller("operations")
 @UseGuards(AuthGuard, PermissionGuard)
+@RequirePermissions("admin.console.access")
 export class OperationsController {
   constructor(private readonly operations: OperationsService) {}
 

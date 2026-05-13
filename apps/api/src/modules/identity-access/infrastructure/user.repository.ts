@@ -74,43 +74,93 @@ export class UserRepository {
     usernameOrEmail: string,
     tenantCode?: string,
   ): Promise<LoginUserRecord | null> {
+    const normalizedLogin = usernameOrEmail.trim().toLowerCase();
+    const normalizedTenantCode = tenantCode?.trim().toLowerCase() || null;
     const row = await this.db.one<LoginUserRow>(
       `
+        with login_candidates as (
+          select
+            u.id,
+            u.tenant_id,
+            t.code as tenant_code,
+            u.email,
+            u.username,
+            u.full_name,
+            u.password_hash,
+            u.password_changed_at,
+            u.status,
+            u.access_level,
+            u.is_platform_super_admin,
+            u.failed_login_count,
+            u.locked_until,
+            1 as match_rank
+          from iam.users u
+          join iam.tenants t on t.id = u.tenant_id
+          where u.deleted_at is null
+            and $2::text is not null
+            and t.code = $2::citext
+            and (u.email = $1::citext or u.username = $1::citext)
+
+          union all
+
+          select
+            u.id,
+            u.tenant_id,
+            t.code as tenant_code,
+            u.email,
+            u.username,
+            u.full_name,
+            u.password_hash,
+            u.password_changed_at,
+            u.status,
+            u.access_level,
+            u.is_platform_super_admin,
+            u.failed_login_count,
+            u.locked_until,
+            2 as match_rank
+          from iam.users u
+          left join iam.tenants t on t.id = u.tenant_id
+          where u.deleted_at is null
+            and u.is_platform_super_admin = true
+            and (u.email = $1::citext or u.username = $1::citext)
+        )
         select
-          u.id,
-          u.tenant_id,
-          t.code as tenant_code,
-          u.email,
-          u.username,
-          u.full_name,
-          u.password_hash,
-          u.password_changed_at,
-          u.status,
-          u.access_level,
-          u.is_platform_super_admin,
-          u.failed_login_count,
-          u.locked_until
-        from iam.users u
-        left join iam.tenants t on t.id = u.tenant_id
-        where u.deleted_at is null
-          and (
-            (
-              $2::text is not null
-              and lower(t.code::text) = lower($2::text)
-              and (lower(u.email::text) = lower($1::text) or lower(u.username::text) = lower($1::text))
-            )
-            or (
-              $2::text is null
-              and u.is_platform_super_admin = true
-              and lower(u.email::text) = lower($1::text)
-            )
-          )
+          id,
+          tenant_id,
+          tenant_code,
+          email,
+          username,
+          full_name,
+          password_hash,
+          password_changed_at,
+          status,
+          access_level,
+          is_platform_super_admin,
+          failed_login_count,
+          locked_until
+        from login_candidates
+        order by match_rank asc
         limit 1
       `,
-      [usernameOrEmail.toLowerCase(), tenantCode?.toLowerCase() ?? null],
+      [normalizedLogin, normalizedTenantCode],
     );
 
     return row ? this.mapLoginUser(row) : null;
+  }
+
+  async findTenantIdByCode(tenantCode: string): Promise<string | null> {
+    const row = await this.db.one<QueryResultRow & { id: string }>(
+      `
+        select id
+        from iam.tenants
+        where code = $1::citext
+          and status = 'active'
+        limit 1
+      `,
+      [tenantCode.trim().toLowerCase()],
+    );
+
+    return row?.id ?? null;
   }
 
   async listTenantUsers(tenantId: string): Promise<UserListItem[]> {
@@ -193,14 +243,17 @@ export class UserRepository {
           and u.deleted_at is null
           and u.status = 'active'
           and r.deleted_at is null
-          and r.code = 'tenant_admin'
+          and r.code in ('administration_manager', 'tenant_admin')
       `,
       [tenantId],
     );
     return Number(result?.count ?? 0);
   }
 
-  async findTenantUserAccess(input: { tenantId: string; userId: string }): Promise<UserListItem | null> {
+  async findTenantUserAccess(input: {
+    tenantId: string;
+    userId: string;
+  }): Promise<UserListItem | null> {
     const users = await this.listTenantUsers(input.tenantId);
     return users.find((user) => user.id === input.userId) ?? null;
   }
@@ -241,7 +294,12 @@ export class UserRepository {
   }
 
   async updateOwnProfile(
-    input: { fullName: string; tenantId: string | null; updatedBy: string; userId: string },
+    input: {
+      fullName: string;
+      tenantId: string | null;
+      updatedBy: string;
+      userId: string;
+    },
     client?: PoolClient,
   ): Promise<boolean> {
     const result = await this.db.query(
@@ -260,7 +318,10 @@ export class UserRepository {
     return (result.rowCount ?? 0) > 0;
   }
 
-  async findPasswordRecord(input: { tenantId: string | null; userId: string }): Promise<UserPasswordRecord | null> {
+  async findPasswordRecord(input: {
+    tenantId: string | null;
+    userId: string;
+  }): Promise<UserPasswordRecord | null> {
     const row = await this.db.one<
       QueryResultRow & {
         password_changed_at: Date | null;
@@ -366,7 +427,12 @@ export class UserRepository {
   }
 
   async updateUserStatus(
-    input: { userId: string; tenantId: string; status: string; updatedBy: string },
+    input: {
+      userId: string;
+      tenantId: string;
+      status: string;
+      updatedBy: string;
+    },
     client?: PoolClient,
   ): Promise<void> {
     await this.db.query(
@@ -413,7 +479,9 @@ export class UserRepository {
     tenantId: string;
     userId: string;
   }): Promise<string[]> {
-    const result = await this.db.query<QueryResultRow & { password_hash: string }>(
+    const result = await this.db.query<
+      QueryResultRow & { password_hash: string }
+    >(
       `
         select password_hash
         from (
@@ -444,7 +512,9 @@ export class UserRepository {
     tenantId: string | null;
     userId: string;
   }): Promise<string[]> {
-    const result = await this.db.query<QueryResultRow & { password_hash: string }>(
+    const result = await this.db.query<
+      QueryResultRow & { password_hash: string }
+    >(
       `
         select password_hash
         from (
@@ -471,7 +541,12 @@ export class UserRepository {
   }
 
   async setPassword(
-    input: { passwordHash: string; tenantId: string; updatedBy: string; userId: string },
+    input: {
+      passwordHash: string;
+      tenantId: string;
+      updatedBy: string;
+      userId: string;
+    },
     client?: PoolClient,
   ): Promise<boolean> {
     const result = await this.db.query(
@@ -510,7 +585,12 @@ export class UserRepository {
   }
 
   async setOwnPassword(
-    input: { passwordHash: string; tenantId: string | null; updatedBy: string; userId: string },
+    input: {
+      passwordHash: string;
+      tenantId: string | null;
+      updatedBy: string;
+      userId: string;
+    },
     client?: PoolClient,
   ): Promise<boolean> {
     const result = await this.db.query(
@@ -548,7 +628,11 @@ export class UserRepository {
     return (result.rowCount ?? 0) > 0;
   }
 
-  async recordFailedLogin(userId: string, attemptsBeforeLock: number, lockoutMinutes: number) {
+  async recordFailedLogin(
+    userId: string,
+    attemptsBeforeLock: number,
+    lockoutMinutes: number,
+  ) {
     await this.db.query(
       `
         update iam.users
@@ -582,7 +666,12 @@ export class UserRepository {
   }
 
   async replaceEntityScopes(
-    input: { userId: string; tenantId: string; entityIds: string[]; assignedBy: string },
+    input: {
+      userId: string;
+      tenantId: string;
+      entityIds: string[];
+      assignedBy: string;
+    },
     client?: PoolClient,
   ): Promise<void> {
     await this.db.query(

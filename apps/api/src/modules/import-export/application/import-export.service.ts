@@ -1,14 +1,24 @@
 import { Readable as ReadableStream, type Readable } from "node:stream";
 
-import { BadRequestException, ForbiddenException, HttpException, Injectable, StreamableFile } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  HttpException,
+  Injectable,
+  StreamableFile,
+} from "@nestjs/common";
 import ExcelJS from "exceljs";
 
+import { hasExpandedPermission } from "../../../common/auth/permission-utils.js";
 import { PrivateFileStorageService } from "../../../common/storage/private-file-storage.service.js";
 import { DatabaseService } from "../../../database/database.service.js";
 import { AuditWriterService } from "../../audit/application/audit-writer.service.js";
 import type { AuthenticatedUser } from "../../identity-access/domain/authenticated-user.js";
 import { OutboxWriterService } from "../../outbox/application/outbox-writer.service.js";
-import { ImportExportRepository, type CreateFileAssetInput } from "../infrastructure/import-export.repository.js";
+import {
+  ImportExportRepository,
+  type CreateFileAssetInput,
+} from "../infrastructure/import-export.repository.js";
 import type { ImportType } from "../interfaces/http/import-export.schemas.js";
 
 @Injectable()
@@ -32,7 +42,11 @@ export class ImportExportService {
   ) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "import.manage");
-    this.assertAllowedImportFile(input.importType, input.originalFilename, input.contentType);
+    this.assertAllowedImportFile(
+      input.importType,
+      input.originalFilename,
+      input.contentType,
+    );
 
     const stored = await this.storage.writeImportFile({
       filename: input.originalFilename ?? null,
@@ -79,7 +93,10 @@ export class ImportExportService {
     });
   }
 
-  async createFileAsset(actor: AuthenticatedUser, input: Omit<CreateFileAssetInput, "createdBy" | "tenantId">) {
+  async createFileAsset(
+    actor: AuthenticatedUser,
+    input: Omit<CreateFileAssetInput, "createdBy" | "tenantId">,
+  ) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "import.manage");
     return this.db.transaction(async () => {
@@ -100,7 +117,10 @@ export class ImportExportService {
     });
   }
 
-  async createImportJob(actor: AuthenticatedUser, input: { fileAssetId: string; importType: string }) {
+  async createImportJob(
+    actor: AuthenticatedUser,
+    input: { fileAssetId: string; importType: string },
+  ) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "import.manage");
     return this.db.transaction(async () => {
@@ -146,7 +166,8 @@ export class ImportExportService {
     const workbook = await this.buildTenderCasesTemplate(tenantId);
     const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
     return new StreamableFile(ReadableStream.from([buffer]), {
-      disposition: 'attachment; filename="procuredesk-tender-cases-template.xlsx"',
+      disposition:
+        'attachment; filename="procuredesk-tender-cases-template.xlsx"',
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
   }
@@ -250,7 +271,8 @@ export class ImportExportService {
       await this.repository.stageDryRunRows({
         importJobId: input.importJobId,
         rows: input.rows.map((row) => ({
-          errors: row.status === "rejected" ? ["Row rejected during dry run."] : [],
+          errors:
+            row.status === "rejected" ? ["Row rejected during dry run."] : [],
           normalizedPayload: row.normalizedPayload ?? row.sourcePayload,
           sourcePayload: row.sourcePayload,
           status: row.status ?? "staged",
@@ -306,7 +328,7 @@ export class ImportExportService {
   }
 
   private requirePermission(actor: AuthenticatedUser, permission: string) {
-    if (!actor.isPlatformSuperAdmin && !actor.permissions.includes(permission)) {
+    if (!hasExpandedPermission(actor, permission)) {
       throw new ForbiddenException("Missing required permission.");
     }
   }
@@ -339,7 +361,9 @@ export class ImportExportService {
       return;
     }
 
-    throw new BadRequestException("Spreadsheet imports must use a CSV or XLSX file.");
+    throw new BadRequestException(
+      "Spreadsheet imports must use a CSV or XLSX file.",
+    );
   }
 
   private problemRowsCsv(
@@ -351,7 +375,13 @@ export class ImportExportService {
       status: string;
     }>,
   ): string {
-    const header = ["row_number", "status", "errors", "normalized_payload", "source_payload"];
+    const header = [
+      "row_number",
+      "status",
+      "errors",
+      "normalized_payload",
+      "source_payload",
+    ];
     const lines = [
       header.join(","),
       ...rows.map((row) =>
@@ -374,7 +404,10 @@ export class ImportExportService {
     return `"${text.replace(/"/g, '""')}"`;
   }
 
-  private async templateFile(workbook: ExcelJS.Workbook, filename: string): Promise<StreamableFile> {
+  private async templateFile(
+    workbook: ExcelJS.Workbook,
+    filename: string,
+  ): Promise<StreamableFile> {
     const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
     return new StreamableFile(ReadableStream.from([buffer]), {
       disposition: `attachment; filename="${filename}"`,
@@ -382,7 +415,9 @@ export class ImportExportService {
     });
   }
 
-  private async buildTenderCasesTemplate(tenantId: string): Promise<ExcelJS.Workbook> {
+  private async buildTenderCasesTemplate(
+    tenantId: string,
+  ): Promise<ExcelJS.Workbook> {
     const workbook = new ExcelJS.Workbook();
     workbook.creator = "ProcureDesk";
     workbook.created = new Date();
@@ -395,7 +430,11 @@ export class ImportExportService {
 
     const columns = tenderTemplateColumns();
     template.getCell("A1").value = "Instructions to fill the table:";
-    template.getCell("A1").font = { bold: true, color: { argb: "FFFF0000" }, italic: true };
+    template.getCell("A1").font = {
+      bold: true,
+      color: { argb: "FFFF0000" },
+      italic: true,
+    };
     [
       "All applicable fields need to be filled based on the current status of tender.",
       "All Dates shall be in DD-MM-YYYY format.",
@@ -412,9 +451,16 @@ export class ImportExportService {
     template.getRow(8).values = columns.map((column) => column.label);
     template.getRow(7).font = { bold: true, color: { argb: "FFFFB26B" } };
     template.getRow(8).font = { bold: true, color: { argb: "FFFFFFFF" } };
-    template.getRow(8).fill = { fgColor: { argb: "FF0070C0" }, pattern: "solid", type: "pattern" };
+    template.getRow(8).fill = {
+      fgColor: { argb: "FF0070C0" },
+      pattern: "solid",
+      type: "pattern",
+    };
     template.getRow(8).alignment = { vertical: "middle", wrapText: true };
-    template.autoFilter = { from: "A8", to: `${template.getColumn(columns.length).letter}8` };
+    template.autoFilter = {
+      from: "A8",
+      to: `${template.getColumn(columns.length).letter}8`,
+    };
 
     columns.forEach((column, index) => {
       const worksheetColumn = template.getColumn(index + 1);
@@ -448,7 +494,11 @@ export class ImportExportService {
     metadata.state = "veryHidden";
 
     template.getCell("A1").value = "Instructions to fill the table:";
-    template.getCell("A1").font = { bold: true, color: { argb: "FFFF0000" }, italic: true };
+    template.getCell("A1").font = {
+      bold: true,
+      color: { argb: "FFFF0000" },
+      italic: true,
+    };
     input.instructions.forEach((line, index) => {
       const cell = template.getCell(index + 2, 1);
       cell.value = line;
@@ -456,14 +506,34 @@ export class ImportExportService {
     });
 
     const headerRow = Math.max(4, input.instructions.length + 3);
-    template.getRow(headerRow - 1).values = input.columns.map((column) => column.type);
-    template.getRow(headerRow).values = input.columns.map((column) => column.label);
-    template.getRow(headerRow - 1).font = { bold: true, color: { argb: "FFFFB26B" } };
-    template.getRow(headerRow).font = { bold: true, color: { argb: "FFFFFFFF" } };
-    template.getRow(headerRow).fill = { fgColor: { argb: "FF0070C0" }, pattern: "solid", type: "pattern" };
-    template.getRow(headerRow).alignment = { vertical: "middle", wrapText: true };
+    template.getRow(headerRow - 1).values = input.columns.map(
+      (column) => column.type,
+    );
+    template.getRow(headerRow).values = input.columns.map(
+      (column) => column.label,
+    );
+    template.getRow(headerRow - 1).font = {
+      bold: true,
+      color: { argb: "FFFFB26B" },
+    };
+    template.getRow(headerRow).font = {
+      bold: true,
+      color: { argb: "FFFFFFFF" },
+    };
+    template.getRow(headerRow).fill = {
+      fgColor: { argb: "FF0070C0" },
+      pattern: "solid",
+      type: "pattern",
+    };
+    template.getRow(headerRow).alignment = {
+      vertical: "middle",
+      wrapText: true,
+    };
     template.views = [{ state: "frozen", xSplit: 0, ySplit: headerRow }];
-    template.autoFilter = { from: `A${headerRow}`, to: `${template.getColumn(input.columns.length).letter}${headerRow}` };
+    template.autoFilter = {
+      from: `A${headerRow}`,
+      to: `${template.getColumn(input.columns.length).letter}${headerRow}`,
+    };
 
     input.columns.forEach((column, index) => {
       const worksheetColumn = template.getColumn(index + 1);
@@ -473,12 +543,24 @@ export class ImportExportService {
 
     const lookupData = await this.loadTemplateLookups(input.tenantId);
     this.populateLookupSheet(lookups, lookupData);
-    this.populateMetadataSheet(metadata, input.columns, input.metadataName, headerRow);
-    this.applyTemplateValidations(template, input.columns, lookupData, headerRow + 1);
+    this.populateMetadataSheet(
+      metadata,
+      input.columns,
+      input.metadataName,
+      headerRow,
+    );
+    this.applyTemplateValidations(
+      template,
+      input.columns,
+      lookupData,
+      headerRow + 1,
+    );
     return workbook;
   }
 
-  private async buildRcPoPlanTemplate(tenantId: string): Promise<ExcelJS.Workbook> {
+  private async buildRcPoPlanTemplate(
+    tenantId: string,
+  ): Promise<ExcelJS.Workbook> {
     const workbook = new ExcelJS.Workbook();
     workbook.creator = "ProcureDesk";
     workbook.created = new Date();
@@ -492,9 +574,16 @@ export class ImportExportService {
     const columns = rcPoPlanTemplateColumns();
     template.getRow(1).values = columns.map((column) => column.label);
     template.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
-    template.getRow(1).fill = { fgColor: { argb: "FF0070C0" }, pattern: "solid", type: "pattern" };
+    template.getRow(1).fill = {
+      fgColor: { argb: "FF0070C0" },
+      pattern: "solid",
+      type: "pattern",
+    };
     template.getRow(1).alignment = { vertical: "middle", wrapText: true };
-    template.autoFilter = { from: "A1", to: `${template.getColumn(columns.length).letter}1` };
+    template.autoFilter = {
+      from: "A1",
+      to: `${template.getColumn(columns.length).letter}1`,
+    };
     template.getRow(2).values = [
       "CESC",
       "Mechanical",
@@ -522,14 +611,17 @@ export class ImportExportService {
     return workbook;
   }
 
-  private async loadTemplateLookups(tenantId: string): Promise<Record<string, string[]>> {
-    const [entities, departments, users, roles, references, tenderTypes] = await Promise.all([
-      this.db.query<{ code: string }>(
-        "select code::text from org.entities where tenant_id = $1 and deleted_at is null and is_active = true order by code",
-        [tenantId],
-      ),
-      this.db.query<{ key: string }>(
-        `
+  private async loadTemplateLookups(
+    tenantId: string,
+  ): Promise<Record<string, string[]>> {
+    const [entities, departments, users, roles, references, tenderTypes] =
+      await Promise.all([
+        this.db.query<{ code: string }>(
+          "select code::text from org.entities where tenant_id = $1 and deleted_at is null and is_active = true order by code",
+          [tenantId],
+        ),
+        this.db.query<{ key: string }>(
+          `
           select distinct d.name as key
           from org.departments d
           join org.entities e on e.id = d.entity_id
@@ -537,38 +629,42 @@ export class ImportExportService {
             and e.deleted_at is null and e.is_active = true
           order by d.name
         `,
-        [tenantId],
-      ),
-      this.db.query<{ key: string }>(
-        "select username as key from iam.users where tenant_id = $1 and deleted_at is null and status = 'active' order by username",
-        [tenantId],
-      ),
-      this.db.query<{ definition: string | null; key: string }>(
-        `
+          [tenantId],
+        ),
+        this.db.query<{ key: string }>(
+          "select username as key from iam.users where tenant_id = $1 and deleted_at is null and status = 'active' order by username",
+          [tenantId],
+        ),
+        this.db.query<{ definition: string | null; key: string }>(
+          `
           select name as key, description as definition
           from iam.roles
           where (tenant_id = $1 or tenant_id is null)
             and deleted_at is null
+            and code <> 'platform_super_admin'
           order by name
         `,
-        [tenantId],
-      ),
-      this.db.query<{ category_code: string; label: string }>(
-        `
+          [tenantId],
+        ),
+        this.db.query<{ category_code: string; label: string }>(
+          `
           select c.code as category_code, v.label
           from catalog.reference_values v
           join catalog.reference_categories c on c.id = v.category_id
           where v.tenant_id = $1 and v.deleted_at is null and v.is_active = true
           order by c.code, v.display_order, v.label
         `,
-        [tenantId],
-      ),
-      this.db.query<{ name: string }>(
-        "select name from catalog.tender_types where tenant_id = $1 and deleted_at is null and is_active = true order by name",
-        [tenantId],
-      ),
-    ]);
-    const byCategory = (category: string) => references.rows.filter((row) => row.category_code === category).map((row) => row.label);
+          [tenantId],
+        ),
+        this.db.query<{ name: string }>(
+          "select name from catalog.tender_types where tenant_id = $1 and deleted_at is null and is_active = true order by name",
+          [tenantId],
+        ),
+      ]);
+    const byCategory = (category: string) =>
+      references.rows
+        .filter((row) => row.category_code === category)
+        .map((row) => row.label);
     return {
       "CPC Involved?": ["Yes", "No"],
       Entity: entities.rows.map((row) => row.code),
@@ -584,7 +680,10 @@ export class ImportExportService {
     };
   }
 
-  private populateLookupSheet(worksheet: ExcelJS.Worksheet, lookupData: Record<string, string[]>): void {
+  private populateLookupSheet(
+    worksheet: ExcelJS.Worksheet,
+    lookupData: Record<string, string[]>,
+  ): void {
     const entries = Object.entries(lookupData);
     entries.forEach(([label, values], index) => {
       const column = index + 1;
@@ -635,7 +734,15 @@ export class ImportExportService {
 
 type TenderTemplateColumn = {
   label: string;
-  type: "Alphanumeric" | "Auto-fetched / Readonly" | "DD-MM-YYYY" | "Dropdown" | "Email" | "Number" | "Text" | "YYYY-MM-DD";
+  type:
+    | "Alphanumeric"
+    | "Auto-fetched / Readonly"
+    | "DD-MM-YYYY"
+    | "Dropdown"
+    | "Email"
+    | "Number"
+    | "Text"
+    | "YYYY-MM-DD";
   width: number;
 };
 
@@ -644,7 +751,11 @@ function portalUserTemplateColumns(): TenderTemplateColumn[] {
     { label: "Entity", type: "Dropdown", width: 18 },
     { label: "Full Name", type: "Text", width: 28 },
     { label: "Access Level Required", type: "Dropdown", width: 24 },
-    { label: "Access Level Definition", type: "Auto-fetched / Readonly", width: 34 },
+    {
+      label: "Access Level Definition",
+      type: "Auto-fetched / Readonly",
+      width: 34,
+    },
     { label: "Mail ID", type: "Email", width: 30 },
     { label: "Contact No.", type: "Text", width: 18 },
   ];
@@ -678,7 +789,11 @@ function rcPoPlanTemplateColumns(): TenderTemplateColumn[] {
     { label: "Awarded Vendors (comma separated)", type: "Text", width: 36 },
     { label: "RC/PO Amount (Rs.)", type: "Number", width: 22 },
     { label: "RC/PO Award Date (YYYY-MM-DD)", type: "YYYY-MM-DD", width: 28 },
-    { label: "RC/PO Validity Date (YYYY-MM-DD)", type: "YYYY-MM-DD", width: 30 },
+    {
+      label: "RC/PO Validity Date (YYYY-MM-DD)",
+      type: "YYYY-MM-DD",
+      width: 30,
+    },
   ];
 }
 
@@ -690,7 +805,11 @@ function tenderTemplateColumns(): TenderTemplateColumn[] {
     { label: "PR/Scheme No", type: "Alphanumeric", width: 20 },
     { label: "PR/Scheme Receipt Date", type: "DD-MM-YYYY", width: 22 },
     { label: "PR Description", type: "Text", width: 34 },
-    { label: "PR Value / Approved Budget (Rs.) [All Inclusive]", type: "Number", width: 26 },
+    {
+      label: "PR Value / Approved Budget (Rs.) [All Inclusive]",
+      type: "Number",
+      width: 26,
+    },
     { label: "CPC Involved?", type: "Dropdown", width: 16 },
     { label: "Nature of Work", type: "Dropdown", width: 20 },
     { label: "User Department", type: "Dropdown", width: 22 },
@@ -707,10 +826,18 @@ function tenderTemplateColumns(): TenderTemplateColumn[] {
     { label: "Commercial Evaluation", type: "DD-MM-YYYY", width: 20 },
     { label: "Technical Evaluation", type: "DD-MM-YYYY", width: 20 },
     { label: "Qualified Bidders Count", type: "Number", width: 20 },
-    { label: "Estimate / Benchmark (Rs.) [All Inclusive]", type: "Number", width: 26 },
+    {
+      label: "Estimate / Benchmark (Rs.) [All Inclusive]",
+      type: "Number",
+      width: 26,
+    },
     { label: "NFA Submission", type: "DD-MM-YYYY", width: 16 },
     { label: "NFA Approval", type: "DD-MM-YYYY", width: 16 },
-    { label: "NFA Approved Amount (Rs.) [All Inclusive]", type: "Number", width: 26 },
+    {
+      label: "NFA Approved Amount (Rs.) [All Inclusive]",
+      type: "Number",
+      width: 26,
+    },
     { label: "LOI Awarded?", type: "Dropdown", width: 16 },
     { label: "LOI Award Date", type: "DD-MM-YYYY", width: 16 },
     { label: "RC/PO Award Date", type: "DD-MM-YYYY", width: 18 },

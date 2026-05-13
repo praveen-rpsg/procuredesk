@@ -1,4 +1,11 @@
-import { Controller, Get, Param, ParseUUIDPipe, Query, UseGuards } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
 
 import { CurrentUser } from "../../../../common/auth/current-user.decorator.js";
 import { RequirePermissions } from "../../../../common/auth/permissions.decorator.js";
@@ -12,6 +19,7 @@ import { AuditListQuerySchema, type AuditListQuery } from "./audit.schemas.js";
 
 @Controller("audit")
 @UseGuards(AuthGuard, PermissionGuard)
+@RequirePermissions("admin.console.access")
 export class AuditController {
   constructor(private readonly audit: AuditQueryService) {}
 
@@ -32,7 +40,10 @@ export class AuditController {
 
   @Get("events/:eventId")
   @RequirePermissions("audit.read")
-  getEvent(@CurrentUser() user: AuthenticatedUser, @Param("eventId", ParseUUIDPipe) eventId: string) {
+  getEvent(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("eventId", ParseUUIDPipe) eventId: string,
+  ) {
     return this.audit.getEvent(user, eventId);
   }
 }

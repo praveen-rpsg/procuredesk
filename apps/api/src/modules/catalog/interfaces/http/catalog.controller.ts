@@ -53,7 +53,7 @@ export class CatalogController {
   }
 
   @Post("admin/catalog/reference-values")
-  @RequirePermissions("catalog.manage")
+  @RequirePermissions("admin.console.access", "catalog.manage")
   createReferenceValue(
     @CurrentUser() user: AuthenticatedUser,
     @Body(new ZodValidationPipe(CreateReferenceValueRequestSchema))
@@ -63,7 +63,7 @@ export class CatalogController {
   }
 
   @Post("admin/catalog/reference-categories")
-  @RequirePermissions("catalog.manage")
+  @RequirePermissions("admin.console.access", "catalog.manage")
   createReferenceCategory(
     @CurrentUser() user: AuthenticatedUser,
     @Body(new ZodValidationPipe(CreateReferenceCategoryRequestSchema))
@@ -73,7 +73,7 @@ export class CatalogController {
   }
 
   @Patch("admin/catalog/reference-categories/:categoryId")
-  @RequirePermissions("catalog.manage")
+  @RequirePermissions("admin.console.access", "catalog.manage")
   updateReferenceCategory(
     @CurrentUser() user: AuthenticatedUser,
     @Param("categoryId", ParseUUIDPipe) categoryId: string,
@@ -84,7 +84,7 @@ export class CatalogController {
   }
 
   @Delete("admin/catalog/reference-categories/:categoryId")
-  @RequirePermissions("catalog.manage")
+  @RequirePermissions("admin.console.access", "catalog.manage")
   deleteReferenceCategory(
     @CurrentUser() user: AuthenticatedUser,
     @Param("categoryId", ParseUUIDPipe) categoryId: string,
@@ -93,18 +93,21 @@ export class CatalogController {
   }
 
   @Patch("admin/catalog/reference-values/:referenceValueId")
-  @RequirePermissions("catalog.manage")
+  @RequirePermissions("admin.console.access", "catalog.manage")
   updateReferenceValue(
     @CurrentUser() user: AuthenticatedUser,
     @Param("referenceValueId", ParseUUIDPipe) referenceValueId: string,
     @Body(new ZodValidationPipe(UpdateReferenceValueRequestSchema))
     body: UpdateReferenceValueRequest,
   ) {
-    return this.catalog.updateReferenceValue(user, { referenceValueId, ...body });
+    return this.catalog.updateReferenceValue(user, {
+      referenceValueId,
+      ...body,
+    });
   }
 
   @Delete("admin/catalog/reference-values/:referenceValueId")
-  @RequirePermissions("catalog.manage")
+  @RequirePermissions("admin.console.access", "catalog.manage")
   deleteReferenceValue(
     @CurrentUser() user: AuthenticatedUser,
     @Param("referenceValueId", ParseUUIDPipe) referenceValueId: string,
@@ -113,7 +116,7 @@ export class CatalogController {
   }
 
   @Post("admin/catalog/tender-types")
-  @RequirePermissions("catalog.manage")
+  @RequirePermissions("admin.console.access", "catalog.manage")
   createTenderType(
     @CurrentUser() user: AuthenticatedUser,
     @Body(new ZodValidationPipe(CreateTenderTypeRequestSchema))
@@ -123,7 +126,7 @@ export class CatalogController {
   }
 
   @Patch("admin/catalog/tender-types/:tenderTypeId")
-  @RequirePermissions("catalog.manage")
+  @RequirePermissions("admin.console.access", "catalog.manage")
   updateTenderType(
     @CurrentUser() user: AuthenticatedUser,
     @Param("tenderTypeId", ParseUUIDPipe) tenderTypeId: string,
@@ -134,7 +137,7 @@ export class CatalogController {
   }
 
   @Delete("admin/catalog/tender-types/:tenderTypeId")
-  @RequirePermissions("catalog.manage")
+  @RequirePermissions("admin.console.access", "catalog.manage")
   deleteTenderType(
     @CurrentUser() user: AuthenticatedUser,
     @Param("tenderTypeId", ParseUUIDPipe) tenderTypeId: string,
@@ -143,7 +146,7 @@ export class CatalogController {
   }
 
   @Patch("admin/catalog/tender-type-rules/:ruleId")
-  @RequirePermissions("catalog.manage")
+  @RequirePermissions("admin.console.access", "catalog.manage")
   updateTenderTypeRule(
     @CurrentUser() user: AuthenticatedUser,
     @Param("ruleId", ParseUUIDPipe) ruleId: string,
@@ -154,7 +157,7 @@ export class CatalogController {
   }
 
   @Patch("admin/catalog/tender-types/:tenderTypeId/completion-rule")
-  @RequirePermissions("catalog.manage")
+  @RequirePermissions("admin.console.access", "catalog.manage")
   upsertTenderTypeRule(
     @CurrentUser() user: AuthenticatedUser,
     @Param("tenderTypeId", ParseUUIDPipe) tenderTypeId: string,

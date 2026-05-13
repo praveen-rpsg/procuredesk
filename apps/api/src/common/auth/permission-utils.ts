@@ -1,11 +1,20 @@
 export const PERMISSION_IMPLICATIONS: Record<string, string[]> = {
+  "case.delay.manage.all": ["case.delay.manage.entity"],
   "case.read.all": ["case.read.entity", "case.read.assigned"],
   "case.read.entity": ["case.read.assigned"],
-  "case.update.all": ["case.read.all", "case.update.entity", "case.update.assigned"],
+  "case.update.all": [
+    "case.read.all",
+    "case.update.entity",
+    "case.update.assigned",
+  ],
   "case.update.entity": ["case.read.entity", "case.update.assigned"],
   "catalog.manage": ["catalog.read"],
   "entity.manage": ["entity.read"],
-  "user.manage": ["user.read"],
+  "report.export": ["report.read"],
+  "role.manage": ["permission.read"],
+  "user.manage": ["user.read.all"],
+  "user.read.all": ["user.read.entity"],
+  "user.read.entity": ["user.read"],
 };
 
 type PermissionUser = {
@@ -26,7 +35,9 @@ type ScopedUser = PermissionUser & {
   id: string;
 };
 
-export function expandPermissions(permissions: string[] | undefined): Set<string> {
+export function expandPermissions(
+  permissions: string[] | undefined,
+): Set<string> {
   const granted = new Set(permissions ?? []);
   const queue = [...granted];
 
@@ -44,7 +55,10 @@ export function expandPermissions(permissions: string[] | undefined): Set<string
   return granted;
 }
 
-export function hasExpandedPermission(user: PermissionUser, permission: string): boolean {
+export function hasExpandedPermission(
+  user: PermissionUser,
+  permission: string,
+): boolean {
   if (user.isPlatformSuperAdmin) return true;
   return expandPermissions(user.permissions).has(permission);
 }

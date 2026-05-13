@@ -94,7 +94,11 @@ export class ProcurementCaseService {
         tenderTypeId: command.tenderTypeId ?? null,
         tenantId,
       }));
-    await this.assertOwnerAssignmentAllowed(actor, command.entityId, ownerUserId);
+    await this.assertOwnerAssignmentAllowed(
+      actor,
+      command.entityId,
+      ownerUserId,
+    );
 
     const milestones: CaseMilestones = {};
     const stagePolicy = new CaseStagePolicy();
@@ -141,14 +145,19 @@ export class ProcurementCaseService {
         targetType: "procurement_case",
         tenantId,
       });
-      await this.emitCaseEvent(tenantId, result.id, "procurement_case.created", {
-        actorUserId: actor.id,
-        entityId: command.entityId,
-        ownerUserId,
-        prId: command.prId,
-        stageCode,
-        status,
-      });
+      await this.emitCaseEvent(
+        tenantId,
+        result.id,
+        "procurement_case.created",
+        {
+          actorUserId: actor.id,
+          entityId: command.entityId,
+          ownerUserId,
+          prId: command.prId,
+          stageCode,
+          status,
+        },
+      );
 
       return result;
     });
@@ -171,7 +180,10 @@ export class ProcurementCaseService {
 
   async listDeletedCases(
     actor: AuthenticatedUser,
-    filters: Pick<CaseListFilters, "q" | "status"> & { cursor?: string; limit?: number },
+    filters: Pick<CaseListFilters, "q" | "status"> & {
+      cursor?: string;
+      limit?: number;
+    },
   ) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "case.restore");
@@ -195,12 +207,23 @@ export class ProcurementCaseService {
     return this.presentCaseForActor(actor, kase);
   }
 
-  async updateCase(actor: AuthenticatedUser, caseId: string, command: UpdateCaseCommand) {
+  async updateCase(
+    actor: AuthenticatedUser,
+    caseId: string,
+    command: UpdateCaseCommand,
+  ) {
     const tenantId = this.requireTenant(actor);
     await this.assertCanUpdate(actor, caseId);
-    const kase = command.tentativeCompletionDate !== undefined ? await this.getCase(actor, caseId) : null;
+    const kase =
+      command.tentativeCompletionDate !== undefined
+        ? await this.getCase(actor, caseId)
+        : null;
     const targetUpdate = kase
-      ? this.buildTentativeCompletionUpdate(actor, kase, command.tentativeCompletionDate ?? null)
+      ? this.buildTentativeCompletionUpdate(
+          actor,
+          kase,
+          command.tentativeCompletionDate ?? null,
+        )
       : {};
     await this.db.transaction(async () => {
       await this.repository.updateCase({
@@ -225,7 +248,11 @@ export class ProcurementCaseService {
     });
   }
 
-  async assignOwner(actor: AuthenticatedUser, caseId: string, ownerUserId: string) {
+  async assignOwner(
+    actor: AuthenticatedUser,
+    caseId: string,
+    ownerUserId: string,
+  ) {
     const tenantId = this.requireTenant(actor);
     const kase = await this.getCase(actor, caseId);
     this.assertCanUpdateEntityManagedFields(actor, kase.entityId);
@@ -246,25 +273,40 @@ export class ProcurementCaseService {
         targetType: "procurement_case",
         tenantId,
       });
-      await this.emitCaseEvent(tenantId, caseId, "procurement_case.owner_assigned", {
-        actorUserId: actor.id,
-        ownerUserId,
-      });
+      await this.emitCaseEvent(
+        tenantId,
+        caseId,
+        "procurement_case.owner_assigned",
+        {
+          actorUserId: actor.id,
+          ownerUserId,
+        },
+      );
     });
   }
 
-  async updateMilestones(actor: AuthenticatedUser, caseId: string, milestones: CaseMilestones) {
+  async updateMilestones(
+    actor: AuthenticatedUser,
+    caseId: string,
+    milestones: CaseMilestones,
+  ) {
     const tenantId = this.requireTenant(actor);
     await this.assertCanUpdate(actor, caseId);
     const kase = await this.getCase(actor, caseId);
-    const normalizedMilestones = this.normalizeMilestonesForTenderType(kase, milestones);
+    const normalizedMilestones = this.normalizeMilestonesForTenderType(
+      kase,
+      milestones,
+    );
     const chronologyErrors = new CaseChronologyPolicy().validate({
       estimateBenchmark: kase.financials.estimateBenchmark ?? null,
       milestones: normalizedMilestones,
       prReceiptDate: kase.prReceiptDate,
     });
     if (chronologyErrors.length) {
-      throw new BadRequestException({ message: "Chronology validation failed.", chronologyErrors });
+      throw new BadRequestException({
+        message: "Chronology validation failed.",
+        chronologyErrors,
+      });
     }
 
     const stagePolicy = new CaseStagePolicy();
@@ -276,7 +318,10 @@ export class ProcurementCaseService {
       tentativeCompletionDate: kase.tentativeCompletionDate,
     });
 
-    const events: Array<{ eventType: string; payload: Record<string, unknown> }> = [
+    const events: Array<{
+      eventType: string;
+      payload: Record<string, unknown>;
+    }> = [
       {
         eventType: "procurement_case.milestones_updated",
         payload: { actorUserId: actor.id, stageCode, status },
@@ -327,11 +372,16 @@ export class ProcurementCaseService {
     });
   }
 
-  async updateDelay(actor: AuthenticatedUser, caseId: string, delay: CaseDelay) {
+  async updateDelay(
+    actor: AuthenticatedUser,
+    caseId: string,
+    delay: CaseDelay,
+  ) {
     const tenantId = this.requireTenant(actor);
     const kase = await this.getCase(actor, caseId);
     if (
       actor.isPlatformSuperAdmin ||
+      hasExpandedPermission(actor, "case.delay.manage.all") ||
       hasExpandedPermission(actor, "case.update.all") ||
       (hasExpandedPermission(actor, "case.delay.manage.entity") &&
         actor.entityIds.includes(kase.entityId))
@@ -343,11 +393,19 @@ export class ProcurementCaseService {
 
     const errors = new CaseDelayPolicy().validate(delay);
     if (errors.length) {
-      throw new BadRequestException({ message: "Delay validation failed.", errors });
+      throw new BadRequestException({
+        message: "Delay validation failed.",
+        errors,
+      });
     }
 
     await this.db.transaction(async () => {
-      await this.repository.updateDelay({ caseId, delay, tenantId, updatedBy: actor.id });
+      await this.repository.updateDelay({
+        caseId,
+        delay,
+        tenantId,
+        updatedBy: actor.id,
+      });
       await this.audit.write({
         action: "case.delay.update",
         actorUserId: actor.id,
@@ -356,14 +414,23 @@ export class ProcurementCaseService {
         targetType: "procurement_case",
         tenantId,
       });
-      await this.emitCaseEvent(tenantId, caseId, "procurement_case.delay_updated", {
-        actorUserId: actor.id,
-        delayExternalDays: delay.delayExternalDays ?? null,
-      });
+      await this.emitCaseEvent(
+        tenantId,
+        caseId,
+        "procurement_case.delay_updated",
+        {
+          actorUserId: actor.id,
+          delayExternalDays: delay.delayExternalDays ?? null,
+        },
+      );
     });
   }
 
-  async deleteCase(actor: AuthenticatedUser, caseId: string, deleteReason?: string | null) {
+  async deleteCase(
+    actor: AuthenticatedUser,
+    caseId: string,
+    deleteReason?: string | null,
+  ) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "case.delete");
     await this.db.transaction(async () => {
@@ -425,16 +492,29 @@ export class ProcurementCaseService {
   async summary(actor: AuthenticatedUser) {
     const tenantId = this.requireTenant(actor);
     const scope = new CaseVisibilityPolicy().listScope(actor);
-    return this.repository.summary(tenantId, { ...scope, actorUserId: actor.id });
+    return this.repository.summary(tenantId, {
+      ...scope,
+      actorUserId: actor.id,
+    });
   }
 
   private async assertCanUpdate(actor: AuthenticatedUser, caseId: string) {
     const kase = await this.getCase(actor, caseId);
-    if (actor.isPlatformSuperAdmin || hasExpandedPermission(actor, "case.update.all")) return;
-    if (hasExpandedPermission(actor, "case.update.entity") && actor.entityIds.includes(kase.entityId)) {
+    if (
+      actor.isPlatformSuperAdmin ||
+      hasExpandedPermission(actor, "case.update.all")
+    )
+      return;
+    if (
+      hasExpandedPermission(actor, "case.update.entity") &&
+      actor.entityIds.includes(kase.entityId)
+    ) {
       return;
     }
-    if (hasExpandedPermission(actor, "case.update.assigned") && kase.ownerUserId === actor.id) {
+    if (
+      hasExpandedPermission(actor, "case.update.assigned") &&
+      kase.ownerUserId === actor.id
+    ) {
       return;
     }
     throw new ForbiddenException("Case update denied.");
@@ -459,7 +539,16 @@ export class ProcurementCaseService {
     };
   }
 
-  private assertCanUpdateEntityManagedFields(actor: AuthenticatedUser, entityId: string) {
+  private assertCanUpdateEntityManagedFields(
+    actor: AuthenticatedUser,
+    entityId: string,
+  ) {
+    if (actor.isPlatformSuperAdmin) return;
+    if (
+      actor.accessLevel === "GROUP" &&
+      hasExpandedPermission(actor, "case.update.all")
+    )
+      return;
     if (
       actor.accessLevel === "ENTITY" &&
       hasExpandedPermission(actor, "case.update.entity") &&
@@ -468,7 +557,7 @@ export class ProcurementCaseService {
       return;
     }
     throw new ForbiddenException(
-      "Only entity-level users for this entity can update Tender Owner or Tentative Completion Date.",
+      "Only group-level case managers or entity-level users for this entity can update Tender Owner or Tentative Completion Date.",
     );
   }
 
@@ -478,7 +567,10 @@ export class ProcurementCaseService {
     ownerUserId: string,
   ) {
     const tenantId = this.requireTenant(actor);
-    const owner = await this.repository.getCaseOwnerAssignmentProfile(ownerUserId, tenantId);
+    const owner = await this.repository.getCaseOwnerAssignmentProfile(
+      ownerUserId,
+      tenantId,
+    );
     if (!owner) {
       throw new ForbiddenException("Owner must be an active tenant user.");
     }
@@ -494,7 +586,9 @@ export class ProcurementCaseService {
       targetEntityId: entityId,
     });
     if (!allowed) {
-      throw new ForbiddenException("Owner assignment is not allowed for this entity.");
+      throw new ForbiddenException(
+        "Owner assignment is not allowed for this entity.",
+      );
     }
   }
 
@@ -507,6 +601,7 @@ export class ProcurementCaseService {
   private canManageDelay(actor: AuthenticatedUser, kase: { entityId: string }) {
     return (
       actor.isPlatformSuperAdmin ||
+      hasExpandedPermission(actor, "case.delay.manage.all") ||
       hasExpandedPermission(actor, "case.update.all") ||
       (hasExpandedPermission(actor, "case.delay.manage.entity") &&
         actor.entityIds.includes(kase.entityId))
@@ -534,10 +629,15 @@ export class ProcurementCaseService {
     return actor.tenantId;
   }
 
-  private normalizeMilestonesForTenderType(kase: ProcurementCaseAggregate, milestones: CaseMilestones): CaseMilestones {
+  private normalizeMilestonesForTenderType(
+    kase: ProcurementCaseAggregate,
+    milestones: CaseMilestones,
+  ): CaseMilestones {
     if (requiresBidTimelineFields(kase.tenderTypeName)) return milestones;
     if (!kase.prReceiptDate) {
-      throw new BadRequestException("PR Receipt Date is required for this tender type timeline normalization.");
+      throw new BadRequestException(
+        "PR Receipt Date is required for this tender type timeline normalization.",
+      );
     }
     return {
       ...milestones,
@@ -578,7 +678,9 @@ export class ProcurementCaseService {
       !timestamp ||
       !id ||
       Number.isNaN(Date.parse(timestamp)) ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        id,
+      )
     ) {
       throw new BadRequestException("Invalid list cursor.");
     }
@@ -605,7 +707,13 @@ function addDaysToDateString(dateString: string, days: number): string {
   return addDaysToDateOnly(dateString, days);
 }
 
-function requiresBidTimelineFields(tenderTypeName: string | null | undefined): boolean {
+function requiresBidTimelineFields(
+  tenderTypeName: string | null | undefined,
+): boolean {
   const normalized = tenderTypeName?.trim().toLowerCase();
-  return normalized === "open" || normalized === "limited" || normalized === "single party";
+  return (
+    normalized === "open" ||
+    normalized === "limited" ||
+    normalized === "single party"
+  );
 }

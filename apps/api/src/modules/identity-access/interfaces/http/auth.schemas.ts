@@ -1,7 +1,13 @@
 import { z } from "zod";
 
+const OptionalTenantCodeSchema = z.preprocess(
+  (value) =>
+    typeof value === "string" && value.trim() === "" ? undefined : value,
+  z.string().trim().min(1).optional(),
+);
+
 export const LoginRequestSchema = z.object({
-  tenantCode: z.string().trim().min(1).optional(),
+  tenantCode: OptionalTenantCodeSchema,
   usernameOrEmail: z.string().trim().min(1),
   password: z.string().min(1),
 });
@@ -12,11 +18,15 @@ export const UpdateOwnProfileRequestSchema = z.object({
   fullName: z.string().trim().min(2).max(160),
 });
 
-export type UpdateOwnProfileRequest = z.infer<typeof UpdateOwnProfileRequestSchema>;
+export type UpdateOwnProfileRequest = z.infer<
+  typeof UpdateOwnProfileRequestSchema
+>;
 
 export const ChangeOwnPasswordRequestSchema = z.object({
   currentPassword: z.string().min(1).max(1024),
   newPassword: z.string().min(1).max(1024),
 });
 
-export type ChangeOwnPasswordRequest = z.infer<typeof ChangeOwnPasswordRequestSchema>;
+export type ChangeOwnPasswordRequest = z.infer<
+  typeof ChangeOwnPasswordRequestSchema
+>;

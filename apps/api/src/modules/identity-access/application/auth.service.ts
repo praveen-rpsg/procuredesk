@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { createHash, randomBytes } from "node:crypto";
 
@@ -37,16 +42,19 @@ export class AuthService {
 
   async login(input: LoginInput): Promise<LoginResult> {
     const loginId = input.usernameOrEmail.trim().toLowerCase();
+    const tenantCode = input.tenantCode?.trim() || undefined;
     const rateLimitKey = this.rateLimitKey({
       ipAddress: input.ipAddress,
-      tenantCode: input.tenantCode,
+      tenantCode,
       usernameOrEmail: loginId,
     });
     if (await this.rateLimits.isLocked(rateLimitKey)) {
-      throw new UnauthorizedException("Too many login attempts. Try again later.");
+      throw new UnauthorizedException(
+        "Too many login attempts. Try again later.",
+      );
     }
 
-    const user = await this.users.findForLogin(loginId, input.tenantCode);
+    const user = await this.users.findForLogin(loginId, tenantCode);
 
     if (!user || !user.passwordHash) {
       await this.recordRateLimitFailure(rateLimitKey);
@@ -77,16 +85,27 @@ export class AuthService {
           expiryDays: null,
         };
 
-    const isValidPassword = await this.passwords.verify(user.passwordHash, input.password);
+    const isValidPassword = await this.passwords.verify(
+      user.passwordHash,
+      input.password,
+    );
     if (!isValidPassword) {
-      await this.users.recordFailedLogin(user.id, policy.lockoutAttempts, policy.lockoutMinutes);
+      await this.users.recordFailedLogin(
+        user.id,
+        policy.lockoutAttempts,
+        policy.lockoutMinutes,
+      );
       await this.recordRateLimitFailure(rateLimitKey);
       throw new UnauthorizedException("Invalid username or password.");
     }
 
     if (this.isPasswordExpired(user.passwordChangedAt, policy)) {
-      throw new UnauthorizedException("Password expired. Contact an administrator to set a new password.");
+      throw new UnauthorizedException(
+        "Password expired. Contact an administrator to set a new password.",
+      );
     }
+
+    const sessionTenantId = await this.resolveSessionTenantId(user, tenantCode);
 
     await this.users.resetLoginState(user.id);
     await this.rateLimits.clear(rateLimitKey);
@@ -98,14 +117,15 @@ export class AuthService {
 
     await this.sessions.createSession({
       userId: user.id,
-      tenantId: user.tenantId,
+      tenantId: sessionTenantId,
       sessionHash: sessionTokenHash,
       expiresAt,
       ipAddress: input.ipAddress,
       userAgent: input.userAgent,
     });
 
-    const authenticatedUser = await this.sessions.findAuthenticatedUser(sessionTokenHash);
+    const authenticatedUser =
+      await this.sessions.findAuthenticatedUser(sessionTokenHash);
     if (!authenticatedUser) {
       throw new UnauthorizedException("Unable to create session.");
     }
@@ -124,11 +144,15 @@ export class AuthService {
     await this.sessions.revokeSession(this.hashSessionToken(sessionToken));
   }
 
-  async authenticateSession(sessionToken?: string): Promise<AuthenticatedUser | null> {
+  async authenticateSession(
+    sessionToken?: string,
+  ): Promise<AuthenticatedUser | null> {
     if (!sessionToken) {
       return null;
     }
-    return this.sessions.findAuthenticatedUser(this.hashSessionToken(sessionToken));
+    return this.sessions.findAuthenticatedUser(
+      this.hashSessionToken(sessionToken),
+    );
   }
 
   async updateOwnProfile(
@@ -153,7 +177,9 @@ export class AuthService {
     input: { currentPassword: string; newPassword: string },
   ): Promise<{ updated: true }> {
     if (input.currentPassword === input.newPassword) {
-      throw new BadRequestException("New password must be different from the current password.");
+      throw new BadRequestException(
+        "New password must be different from the current password.",
+      );
     }
 
     const passwordRecord = await this.users.findPasswordRecord({
@@ -164,13 +190,19 @@ export class AuthService {
       throw new NotFoundException("User password is not available.");
     }
 
-    const currentPasswordMatches = await this.passwords.verify(passwordRecord.passwordHash, input.currentPassword);
+    const currentPasswordMatches = await this.passwords.verify(
+      passwordRecord.passwordHash,
+      input.currentPassword,
+    );
     if (!currentPasswordMatches) {
       throw new UnauthorizedException("Current password is incorrect.");
     }
 
     const policy = await this.passwordPolicyForUser(actor.tenantId);
-    const errors = this.passwords.validateAgainstPolicy(input.newPassword, policy);
+    const errors = this.passwords.validateAgainstPolicy(
+      input.newPassword,
+      policy,
+    );
     const historicalHashes = await this.users.listOwnPasswordHashes({
       historyCount: policy.passwordHistoryCount,
       tenantId: actor.tenantId,
@@ -179,13 +211,17 @@ export class AuthService {
 
     for (const hash of historicalHashes) {
       if (await this.passwords.verify(hash, input.newPassword)) {
-        errors.push("Password cannot match the current password or recent password history.");
+        errors.push(
+          "Password cannot match the current password or recent password history.",
+        );
         break;
       }
     }
 
     if (errors.length) {
-      throw new BadRequestException(`Password does not satisfy policy: ${errors.join(" ")}`);
+      throw new BadRequestException(
+        `Password does not satisfy policy: ${errors.join(" ")}`,
+      );
     }
 
     const passwordHash = await this.passwords.hash(input.newPassword);
@@ -205,7 +241,9 @@ export class AuthService {
     return createHash("sha256").update(sessionToken).digest("hex");
   }
 
-  private passwordPolicyForUser(tenantId: string | null): Promise<PasswordPolicy> | PasswordPolicy {
+  private passwordPolicyForUser(
+    tenantId: string | null,
+  ): Promise<PasswordPolicy> | PasswordPolicy {
     if (tenantId) {
       return this.passwordPolicies.findByTenantId(tenantId);
     }
@@ -224,22 +262,47 @@ export class AuthService {
     };
   }
 
+  private async resolveSessionTenantId(
+    user: { isPlatformSuperAdmin: boolean; tenantId: string | null },
+    tenantCode?: string | undefined,
+  ): Promise<string | null> {
+    if (!user.isPlatformSuperAdmin) {
+      return user.tenantId;
+    }
+    if (!tenantCode) {
+      return null;
+    }
+
+    const tenantId = await this.users.findTenantIdByCode(tenantCode);
+    if (!tenantId) {
+      throw new UnauthorizedException("Invalid username or password.");
+    }
+    return tenantId;
+  }
+
   private isPasswordExpired(
     passwordChangedAt: Date | null,
     policy: { expiryDays: number | null; forcePeriodicExpiry: boolean },
   ): boolean {
     if (!policy.forcePeriodicExpiry || !policy.expiryDays) return false;
     if (!passwordChangedAt) return true;
-    const expiresAt = passwordChangedAt.getTime() + policy.expiryDays * 24 * 60 * 60 * 1000;
+    const expiresAt =
+      passwordChangedAt.getTime() + policy.expiryDays * 24 * 60 * 60 * 1000;
     return expiresAt <= Date.now();
   }
 
   private async recordRateLimitFailure(key: string): Promise<void> {
     await this.rateLimits.recordFailure({
       key,
-      lockoutMinutes: this.config.get<number>("LOGIN_RATE_LIMIT_LOCKOUT_MINUTES", 15),
+      lockoutMinutes: this.config.get<number>(
+        "LOGIN_RATE_LIMIT_LOCKOUT_MINUTES",
+        15,
+      ),
       maxAttempts: this.config.get<number>("LOGIN_RATE_LIMIT_ATTEMPTS", 10),
-      windowMinutes: this.config.get<number>("LOGIN_RATE_LIMIT_WINDOW_MINUTES", 15),
+      windowMinutes: this.config.get<number>(
+        "LOGIN_RATE_LIMIT_WINDOW_MINUTES",
+        15,
+      ),
     });
   }
 

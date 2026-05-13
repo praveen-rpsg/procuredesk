@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  UseGuards,
+} from "@nestjs/common";
 
 import { CurrentUser } from "../../../../common/auth/current-user.decorator.js";
 import { RequirePermissions } from "../../../../common/auth/permissions.decorator.js";
@@ -16,6 +26,7 @@ import {
 
 @Controller("admin")
 @UseGuards(AuthGuard, PermissionGuard)
+@RequirePermissions("admin.console.access")
 export class AdminRolesController {
   constructor(private readonly adminRoles: AdminRolesService) {}
 
@@ -26,7 +37,7 @@ export class AdminRolesController {
   }
 
   @Get("permissions")
-  @RequirePermissions("role.manage")
+  @RequirePermissions("permission.read")
   listPermissions() {
     return this.adminRoles.listPermissions();
   }
@@ -35,7 +46,8 @@ export class AdminRolesController {
   @RequirePermissions("role.manage")
   createRole(
     @CurrentUser() user: AuthenticatedUser,
-    @Body(new ZodValidationPipe(CreateRoleRequestSchema)) body: CreateRoleRequest,
+    @Body(new ZodValidationPipe(CreateRoleRequestSchema))
+    body: CreateRoleRequest,
   ) {
     return this.adminRoles.createRole(user, {
       code: body.code,
@@ -50,7 +62,8 @@ export class AdminRolesController {
   updateRole(
     @CurrentUser() user: AuthenticatedUser,
     @Param("roleId", ParseUUIDPipe) roleId: string,
-    @Body(new ZodValidationPipe(UpdateRoleRequestSchema)) body: UpdateRoleRequest,
+    @Body(new ZodValidationPipe(UpdateRoleRequestSchema))
+    body: UpdateRoleRequest,
   ) {
     return this.adminRoles.updateRole(user, {
       description: body.description,

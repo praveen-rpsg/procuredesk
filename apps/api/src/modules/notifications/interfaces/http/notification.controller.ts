@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
 
 import { CurrentUser } from "../../../../common/auth/current-user.decorator.js";
 import { RequirePermissions } from "../../../../common/auth/permissions.decorator.js";
@@ -21,6 +30,7 @@ import {
 
 @Controller("notifications")
 @UseGuards(AuthGuard, PermissionGuard)
+@RequirePermissions("admin.console.access")
 export class NotificationController {
   constructor(private readonly notifications: NotificationService) {}
 
@@ -40,17 +50,23 @@ export class NotificationController {
   @RequirePermissions("notification.manage")
   updateRule(
     @CurrentUser() user: AuthenticatedUser,
-    @Param("notificationType", new ZodValidationPipe(NotificationTypeSchema)) notificationType: NotificationType,
-    @Body(new ZodValidationPipe(UpdateNotificationRuleRequestSchema)) body: UpdateNotificationRuleRequest,
+    @Param("notificationType", new ZodValidationPipe(NotificationTypeSchema))
+    notificationType: NotificationType,
+    @Body(new ZodValidationPipe(UpdateNotificationRuleRequestSchema))
+    body: UpdateNotificationRuleRequest,
   ) {
-    return this.notifications.updateRule(user, stripUndefined({ ...body, notificationType }));
+    return this.notifications.updateRule(
+      user,
+      stripUndefined({ ...body, notificationType }),
+    );
   }
 
   @Get("preview")
   @RequirePermissions("notification.manage")
   preview(
     @CurrentUser() user: AuthenticatedUser,
-    @Query(new ZodValidationPipe(NotificationPreviewQuerySchema)) query: NotificationPreviewQuery,
+    @Query(new ZodValidationPipe(NotificationPreviewQuerySchema))
+    query: NotificationPreviewQuery,
   ) {
     return this.notifications.preview(user, query.type);
   }
@@ -59,7 +75,8 @@ export class NotificationController {
   @RequirePermissions("notification.manage")
   createJob(
     @CurrentUser() user: AuthenticatedUser,
-    @Body(new ZodValidationPipe(CreateNotificationJobRequestSchema)) body: CreateNotificationJobRequest,
+    @Body(new ZodValidationPipe(CreateNotificationJobRequestSchema))
+    body: CreateNotificationJobRequest,
   ) {
     return this.notifications.createJob(user, body);
   }

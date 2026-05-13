@@ -15,7 +15,11 @@ export class PermissionRepository {
 
   async listPermissions(): Promise<PermissionListItem[]> {
     const result = await this.db.query<
-      QueryResultRow & { code: string; name: string; description: string | null }
+      QueryResultRow & {
+        code: string;
+        name: string;
+        description: string | null;
+      }
     >(
       `
         select code, name, description
@@ -49,7 +53,8 @@ export class PermissionRepository {
       `
         select distinct p.code
         from iam.user_roles ur
-        join iam.role_permissions rp on rp.role_id = ur.role_id
+        join iam.roles r on r.id = ur.role_id and r.deleted_at is null
+        join iam.role_permissions rp on rp.role_id = r.id
         join iam.permissions p on p.code = rp.permission_code
         where ur.user_id = $1
         order by p.code

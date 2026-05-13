@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Put, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Put,
+  UseGuards,
+} from "@nestjs/common";
 
 import { CurrentUser } from "../../../../common/auth/current-user.decorator.js";
 import { RequirePermissions } from "../../../../common/auth/permissions.decorator.js";
@@ -16,20 +24,22 @@ import {
 
 @Controller("admin/security")
 @UseGuards(AuthGuard, PermissionGuard)
+@RequirePermissions("admin.console.access")
 export class AdminSecurityController {
   constructor(private readonly adminSecurity: AdminSecurityService) {}
 
   @Get("password-policy")
-  @RequirePermissions("user.manage")
+  @RequirePermissions("system.config.manage")
   getPasswordPolicy(@CurrentUser() user: AuthenticatedUser) {
     return this.adminSecurity.getPasswordPolicy(user);
   }
 
   @Put("password-policy")
-  @RequirePermissions("user.manage")
+  @RequirePermissions("system.config.manage")
   updatePasswordPolicy(
     @CurrentUser() user: AuthenticatedUser,
-    @Body(new ZodValidationPipe(PasswordPolicyRequestSchema)) body: PasswordPolicyRequest,
+    @Body(new ZodValidationPipe(PasswordPolicyRequestSchema))
+    body: PasswordPolicyRequest,
   ) {
     return this.adminSecurity.updatePasswordPolicy(user, body);
   }
@@ -39,8 +49,12 @@ export class AdminSecurityController {
   setUserPassword(
     @CurrentUser() user: AuthenticatedUser,
     @Param("userId", ParseUUIDPipe) userId: string,
-    @Body(new ZodValidationPipe(SetUserPasswordRequestSchema)) body: SetUserPasswordRequest,
+    @Body(new ZodValidationPipe(SetUserPasswordRequestSchema))
+    body: SetUserPasswordRequest,
   ) {
-    return this.adminSecurity.setUserPassword(user, { userId, password: body.password });
+    return this.adminSecurity.setUserPassword(user, {
+      userId,
+      password: body.password,
+    });
   }
 }
