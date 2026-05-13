@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import type { CSSProperties, KeyboardEvent } from "react";
+import type { KeyboardEvent } from "react";
 
 export type SecondaryNavItem<TKey extends string = string> = {
   description?: string | undefined;
@@ -22,8 +22,6 @@ export function SecondaryNav<TKey extends string>({
   items,
   onChange,
 }: SecondaryNavProps<TKey>) {
-  const activeIndex = Math.max(0, items.findIndex((item) => item.key === activeKey));
-
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return;
     event.preventDefault();
@@ -47,12 +45,7 @@ export function SecondaryNav<TKey extends string>({
   };
 
   return (
-    <nav
-      aria-label={ariaLabel}
-      className="secondary-nav"
-      style={{ "--secondary-nav-active-index": activeIndex } as CSSProperties}
-    >
-      <div aria-hidden="true" className="secondary-nav-active-track" />
+    <nav aria-label={ariaLabel} className="secondary-nav">
       {items.map((item, index) => (
         <button
           aria-current={activeKey === item.key ? "page" : undefined}
@@ -71,7 +64,6 @@ export function SecondaryNav<TKey extends string>({
           ) : null}
           <span className="secondary-nav-copy">
             <span className="secondary-nav-label">{item.label}</span>
-            {item.description ? <span className="secondary-nav-description">{item.description}</span> : null}
           </span>
         </button>
       ))}

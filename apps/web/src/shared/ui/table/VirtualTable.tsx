@@ -117,7 +117,7 @@ export function VirtualTable<TRow>({
   };
 
   return (
-    <div>
+    <div className="table-frame">
       <div
         aria-label={ariaLabel}
         className="table-shell virtual-table-shell"
@@ -336,9 +336,9 @@ function TableHeader({
   const hasActiveSort = Boolean(sortDirection);
   const isFilterHighlighted = hasActiveFilter || isFilterOpen;
 
-  if (!canFilter && !canSort) return <span>{header}</span>;
+  if (!canFilter && !canSort) return <span title={headerLabel}>{header}</span>;
   return (
-    <div className="table-header-control">
+    <div className="table-header-control" title={headerLabel}>
       <button
         aria-label={canSort ? `Sort by ${headerLabel}` : undefined}
         aria-pressed={canSort ? hasActiveSort : undefined}
@@ -347,7 +347,7 @@ function TableHeader({
         onClick={canSort ? onSort : undefined}
         type="button"
       >
-        <span>{header}</span>
+        <span title={headerLabel}>{header}</span>
         {canSort ? <SortIcon direction={sortDirection} /> : null}
       </button>
       {canFilter ? (

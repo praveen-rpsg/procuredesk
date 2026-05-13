@@ -182,6 +182,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  overflow-x: hidden;
   background:
     linear-gradient(
       180deg,
@@ -237,7 +238,10 @@ textarea:focus:not(:focus-visible) {
 .app-shell {
   display: grid;
   grid-template-columns: 264px minmax(0, 1fr);
+  inline-size: 100%;
+  max-inline-size: 100vw;
   min-height: 100vh;
+  overflow-x: clip;
   transition: grid-template-columns var(--transition-slow);
 }
 
@@ -253,9 +257,12 @@ textarea:focus:not(:focus-visible) {
   flex-direction: column;
   position: sticky;
   top: 0;
+  left: 0;
   height: 100vh;
+  min-width: 0;
   overflow-y: auto;
-  overflow-x: visible;
+  overflow-x: hidden;
+  z-index: calc(var(--z-sticky) + 5);
 }
 
 .brand {
@@ -369,7 +376,7 @@ textarea:focus:not(:focus-visible) {
 /* Collapse toggle — floating button on right edge, bottom position */
 .sidebar-toggle {
   position: absolute;
-  right: -16px;
+  right: var(--space-3);
   bottom: 120px;
   width: 32px;
   height: 32px;
@@ -702,18 +709,16 @@ textarea:focus:not(:focus-visible) {
    SECONDARY NAV (TABS)
    ============================================================ */
 .secondary-nav {
-  --secondary-nav-item-width: 154px;
   display: flex;
-  gap: var(--space-1-5);
+  gap: var(--space-1);
   width: fit-content;
   max-width: 100%;
   overflow-x: auto;
-  border: 1px solid color-mix(in srgb, var(--color-brand-200) 60%, var(--color-border));
-  border-radius: var(--radius-xl);
-  background: color-mix(in srgb, var(--color-neutral-50) 78%, var(--color-surface));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
   box-shadow: var(--shadow-xs);
-  padding: var(--space-1-5);
-  position: relative;
+  padding: var(--space-1);
   scrollbar-width: none;
 }
 
@@ -721,41 +726,22 @@ textarea:focus:not(:focus-visible) {
   display: none;
 }
 
-.secondary-nav-active-track {
-  background: var(--color-surface);
-  border: 1px solid color-mix(in srgb, var(--color-brand-300) 72%, var(--color-border));
-  border-radius: var(--radius-lg);
-  box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.06),
-    0 8px 18px rgba(12, 68, 78, 0.08);
-  height: calc(100% - var(--space-3));
-  left: calc(var(--space-1-5) + (var(--secondary-nav-active-index, 0) * (var(--secondary-nav-item-width) + var(--space-1-5))));
-  pointer-events: none;
-  position: absolute;
-  top: var(--space-1-5);
-  transition:
-    left var(--transition-fast),
-    width var(--transition-fast);
-  width: var(--secondary-nav-item-width);
-  z-index: 0;
-}
-
 .secondary-nav-item {
   align-items: center;
   display: inline-flex;
   gap: var(--space-2);
-  min-height: 46px;
+  min-height: 38px;
   border: 0;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--color-muted);
   cursor: pointer;
-  flex: 0 0 var(--secondary-nav-item-width);
+  flex: 0 0 auto;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   justify-content: flex-start;
   min-width: 0;
-  padding: var(--space-2) var(--space-3);
+  padding: 0 var(--space-3);
   position: relative;
   text-align: left;
   transition:
@@ -786,26 +772,15 @@ textarea:focus:not(:focus-visible) {
 
 .secondary-nav-item-active,
 .secondary-nav-item-active:hover {
-  background: color-mix(in srgb, var(--color-brand-50) 58%, transparent);
+  background: color-mix(in srgb, var(--color-brand-100) 76%, var(--color-surface));
   color: var(--color-deep-teal);
   font-weight: var(--font-weight-semibold);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-brand-300) 70%, transparent);
-}
-
-.secondary-nav-item-active::after {
-  background: var(--color-teal);
-  border-radius: var(--radius-full);
-  bottom: 5px;
-  content: "";
-  height: 2px;
-  left: var(--space-3);
-  position: absolute;
-  right: var(--space-3);
+  box-shadow: inset 0 0 0 1px var(--color-brand-200);
 }
 
 .secondary-nav-icon {
   align-items: center;
-  background: color-mix(in srgb, var(--color-brand-100) 72%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-brand-50) 72%, var(--color-surface));
   border-radius: var(--radius-md);
   color: var(--color-teal);
   display: inline-flex;
@@ -832,51 +807,6 @@ textarea:focus:not(:focus-visible) {
   white-space: nowrap;
 }
 
-.secondary-nav-description {
-  color: var(--color-muted);
-  display: none;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-snug);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-@media (min-width: 1180px) {
-  .module-subnav-shell .secondary-nav {
-    --secondary-nav-item-width: 204px;
-  }
-
-  .case-page-subnav-shell .secondary-nav {
-    --secondary-nav-item-width: 196px;
-  }
-
-  .module-subnav-shell .secondary-nav-item,
-  .case-page-subnav-shell .secondary-nav-item {
-    min-height: 58px;
-  }
-
-  .module-subnav-shell .secondary-nav-description,
-  .case-page-subnav-shell .secondary-nav-description {
-    display: block;
-  }
-}
-
-@media (min-width: 1440px) {
-  .report-command-panel .secondary-nav {
-    --secondary-nav-item-width: 190px;
-  }
-
-  .report-command-panel .secondary-nav-item {
-    min-height: 58px;
-  }
-
-  .report-command-panel .secondary-nav-description {
-    display: block;
-  }
-}
-
 /* ============================================================
    MODULE SUB-NAVIGATION
    ============================================================ */
@@ -892,7 +822,7 @@ textarea:focus:not(:focus-visible) {
   gap: var(--space-3);
   margin-bottom: var(--space-4);
   overflow-x: auto;
-  padding: var(--space-2);
+  padding: var(--space-3);
   position: sticky;
   scrollbar-width: none;
   top: var(--space-4);
@@ -905,7 +835,6 @@ textarea:focus:not(:focus-visible) {
 }
 
 .module-subnav-shell .secondary-nav {
-  --secondary-nav-item-width: 168px;
   background: transparent;
   border: 0;
   box-shadow: none;
@@ -914,7 +843,8 @@ textarea:focus:not(:focus-visible) {
 }
 
 .module-subnav-shell .secondary-nav-item {
-  min-height: 48px;
+  min-height: 38px;
+  padding: 0 var(--space-3-5);
 }
 
 .module-subnav-shell .secondary-nav-item-active {
@@ -924,6 +854,8 @@ textarea:focus:not(:focus-visible) {
 .module-content-area {
   display: grid;
   gap: var(--space-4);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .module-focus-panel {
@@ -938,6 +870,8 @@ textarea:focus:not(:focus-visible) {
 .admin-workspace-horizontal {
   display: grid;
   gap: var(--space-4);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .admin-workspace-horizontal .admin-section-host {
@@ -950,6 +884,8 @@ textarea:focus:not(:focus-visible) {
 .workspace {
   padding: var(--space-8);
   min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .topbar {
@@ -1887,6 +1823,7 @@ textarea:focus:not(:focus-visible) {
 .admin-section-host,
 .admin-section {
   min-width: 0;
+  max-width: 100%;
 }
 
 .admin-grid-wide {
@@ -2853,6 +2790,8 @@ textarea:focus:not(:focus-visible) {
    ============================================================ */
 .workspace-section {
   margin-top: 0;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .stack-form {
@@ -3240,6 +3179,8 @@ textarea:focus:not(:focus-visible) {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  max-width: calc(100% + (2 * var(--space-8)));
+  overflow-x: hidden;
   background: var(--color-neutral-50);
 }
 
@@ -3541,6 +3482,8 @@ textarea:focus:not(:focus-visible) {
   gap: var(--space-5);
   padding: var(--space-5) var(--space-6);
   align-items: start;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .case-page-main {
@@ -3548,6 +3491,7 @@ textarea:focus:not(:focus-visible) {
   flex-direction: column;
   gap: var(--space-4);
   min-width: 0;
+  max-width: 100%;
 }
 
 .case-page-aside {
@@ -3898,6 +3842,8 @@ textarea:focus:not(:focus-visible) {
   display: grid;
   gap: var(--space-4);
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+  max-width: 100%;
 }
 
 .planning-grid-wide {
@@ -4354,6 +4300,8 @@ textarea:focus:not(:focus-visible) {
   box-shadow: 0 14px 36px rgba(15, 23, 42, 0.08);
   padding: var(--space-4);
   backdrop-filter: blur(14px);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .report-command-topline {
@@ -4726,15 +4674,20 @@ textarea:focus:not(:focus-visible) {
   gap: var(--space-4);
   grid-template-columns: minmax(0, 1fr) minmax(300px, 0.38fr);
   margin-top: var(--space-4);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .report-detail-workspace,
 .report-export-jobs-workspace {
   margin-top: var(--space-4);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .report-saved-views-workspace {
   max-width: 760px;
+  min-width: 0;
 }
 
 .report-saved-view-grid {
@@ -5347,6 +5300,7 @@ textarea:focus:not(:focus-visible) {
 .report-main-panel,
 .report-side-stack {
   min-width: 0;
+  max-width: 100%;
 }
 
 .report-main-panel {
@@ -5415,6 +5369,8 @@ textarea:focus:not(:focus-visible) {
 .report-table-suite {
   display: grid;
   gap: var(--space-3);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .report-table-suite .table-shell {
@@ -6803,13 +6759,50 @@ textarea:focus:not(:focus-visible) {
 /* ============================================================
    DATA TABLES
    ============================================================ */
+.table-frame {
+  display: block;
+  inline-size: 100%;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  overflow: hidden;
+}
+
 .table-shell {
-  overflow: auto;
+  contain: inline-size;
+  display: block;
+  inline-size: 100%;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior-x: contain;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
   background: var(--color-surface);
   box-shadow: var(--shadow-xs);
+  scrollbar-color: var(--color-brand-400) var(--color-neutral-100);
   scrollbar-gutter: stable both-edges;
+  scrollbar-width: thin;
+}
+
+.table-shell::-webkit-scrollbar {
+  height: 14px;
+  width: 12px;
+}
+
+.table-shell::-webkit-scrollbar-track {
+  background: var(--color-neutral-100);
+  border-radius: var(--radius-full);
+}
+
+.table-shell::-webkit-scrollbar-thumb {
+  background: var(--color-brand-300);
+  border: 3px solid var(--color-neutral-100);
+  border-radius: var(--radius-full);
+}
+
+.table-shell:hover::-webkit-scrollbar-thumb {
+  background: var(--color-brand-500);
 }
 
 .table-shell:focus-visible {
@@ -6818,10 +6811,10 @@ textarea:focus:not(:focus-visible) {
 }
 
 .table-shell table {
-  width: 100%;
+  width: max-content;
   border-collapse: separate;
   border-spacing: 0;
-  min-width: 760px;
+  min-width: 100%;
 }
 
 .table-shell th,
@@ -6830,11 +6823,12 @@ textarea:focus:not(:focus-visible) {
   border-right: 1px solid var(--color-border);
   padding: var(--space-3) var(--space-4);
   text-align: left;
+  min-width: 128px;
   white-space: nowrap;
 }
 
 .table-shell th {
-  background: color-mix(in srgb, var(--color-brand-50) 72%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-brand-50) 82%, var(--color-surface));
   color: var(--color-deep-teal);
   font-size: var(--font-size-2xs);
   font-weight: var(--font-weight-semibold);
@@ -6846,12 +6840,12 @@ textarea:focus:not(:focus-visible) {
   z-index: 5;
   border-bottom: 1px solid var(--color-border-strong);
   box-shadow: inset 0 -1px 0 var(--color-border);
-  vertical-align: bottom;
-  white-space: normal;
+  vertical-align: middle;
+  white-space: nowrap;
 }
 
 .table-header-control {
-  align-items: flex-start;
+  align-items: center;
   display: flex;
   gap: var(--space-1);
   min-width: 0;
@@ -6880,8 +6874,15 @@ textarea:focus:not(:focus-visible) {
 }
 
 .table-sort-button span {
-  overflow-wrap: anywhere;
+  display: -webkit-box;
+  max-width: 180px;
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
   white-space: normal;
+  word-break: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .table-sort-button:hover {
@@ -6912,7 +6913,6 @@ textarea:focus:not(:focus-visible) {
   flex-shrink: 0;
   height: 24px;
   justify-content: center;
-  margin-top: -3px;
   padding: 0;
   width: 24px;
 }
@@ -7075,6 +7075,8 @@ textarea:focus:not(:focus-visible) {
   background: var(--color-surface);
   padding: var(--space-6);
   box-shadow: var(--shadow-xs);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .state-panel .page-header,
@@ -8113,17 +8115,9 @@ textarea:focus:not(:focus-visible) {
     position: static;
   }
 
-  .module-subnav-shell .secondary-nav {
-    --secondary-nav-item-width: 136px;
-  }
-
-  .secondary-nav {
-    --secondary-nav-item-width: 136px;
-  }
-
   .secondary-nav-item {
-    min-height: 42px;
-    padding: var(--space-2);
+    min-height: 38px;
+    padding: 0 var(--space-3);
   }
 
   .secondary-nav-icon {
