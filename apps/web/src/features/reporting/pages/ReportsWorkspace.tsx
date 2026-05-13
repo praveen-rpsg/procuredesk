@@ -85,17 +85,14 @@ export function ReportsWorkspace() {
   const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
   const [isSavedViewsOpen, setIsSavedViewsOpen] = useState(false);
   const [rcPoExpiryDrafts, setRcPoExpiryDrafts] = useState<Record<string, RcPoExpiryDraft>>({});
-  const [selectedRowsByReport, setSelectedRowsByReport] = useState<Record<string, string[]>>({});
   const initialExportJobId = useMemo(() => new URLSearchParams(location.search).get("jobId") ?? "", [location.search]);
 
   const filters = useReportFilters(reportCode);
-  const selectedExportIds = selectedRowsByReport[activeReport] ?? [];
   const data = useReportData(reportCode, filters.reportParams, filters.analyticsParams);
   const exportState = useReportExport(
     reportCode,
     filters.exportFilters,
     filters.savedViewFilters,
-    selectedExportIds,
     savedViewName,
     setSavedViewName,
     {
@@ -118,6 +115,13 @@ export function ReportsWorkspace() {
       row: ContractExpiryReportRow;
     }) => updateRcPoExpiryReportRow(input.row.sourceType, input.row.sourceId, input.draft),
     onSuccess: async (updatedRow) => {
+      queryClient.setQueriesData<ContractExpiryReportRow[]>(
+        { queryKey: ["report", "rc-po-expiry"] },
+        (currentRows) =>
+          currentRows?.map((row) =>
+            row.sourceType === updatedRow.sourceType && row.sourceId === updatedRow.sourceId ? updatedRow : row,
+          ),
+      );
       setRcPoExpiryDrafts((current) => {
         const next = { ...current };
         delete next[rcPoExpiryDraftKey(updatedRow)];
@@ -136,10 +140,6 @@ export function ReportsWorkspace() {
       navigateToAppPath("/reports/analytics", { replace: true });
     }
   }, [location.pathname]);
-
-  useEffect(() => {
-    setSelectedRowsByReport((current) => ({ ...current, [activeReport]: [] }));
-  }, [activeReport, filters.reportParams]);
 
   const metrics = data.analytics.data;
   const selectedReportLabel = getReportLabel(activeReport);
@@ -601,7 +601,7 @@ export function ReportsWorkspace() {
       { key: "tender", header: "Tender Description", render: (row) => row.tenderDescription ?? "-" },
       { key: "entity", header: "Entity", render: (row) => row.entityCode ?? row.entityName ?? row.entityId },
       { key: "department", header: "Department", render: (row) => row.departmentName ?? "-" },
-      { key: "amount", header: "RC/PO Amount [All Inclusive]", render: (row) => formatAmount(row.rcPoAmount, filters.amountUnit) },
+      { key: "amount", header: "RC/PO Amount (Lakhs) [All Inclusive]", render: (row) => formatAmount(row.rcPoAmount, filters.amountUnit) },
       { key: "awardDate", header: "Award Date", render: (row) => formatDateCell(row.rcPoAwardDate) },
       { key: "validity", header: "Validity Date", render: (row) => row.rcPoValidityDate },
       { key: "owner", header: "Owner", render: (row) => row.ownerFullName ?? "-" },
@@ -682,8 +682,6 @@ export function ReportsWorkspace() {
       setCompletionFys: filters.setSelectedCompletionFys,
       setCompletionMonths: filters.setSelectedCompletionMonths,
       setCpcInvolved: filters.setCpcInvolved,
-      setDateFrom: filters.setDateFrom,
-      setDateTo: filters.setDateTo,
       setDelayStatus: filters.setDelayStatus,
       setDeletedOnly: filters.setDeletedOnly,
       setDepartmentIds: filters.setSelectedDepartmentIds,
@@ -700,10 +698,6 @@ export function ReportsWorkspace() {
       setValueSlabs: filters.setSelectedValueSlabs,
     });
     notify({ message: `Applied view: ${view.name}`, tone: "success" });
-  }
-
-  function setSelectedReportRows(rowIds: string[]) {
-    setSelectedRowsByReport((current) => ({ ...current, [activeReport]: rowIds }));
   }
 
   if (isInvalidReportPath) {
@@ -733,9 +727,7 @@ export function ReportsWorkspace() {
                 onClick={() => exportState.exportMutation.mutate()}
               >
                 <Download size={18} />
-                {exportState.selectedExportCount
-                  ? `Export ${exportState.selectedExportCount} selected`
-                  : `Export ${exportState.exportFormat.toUpperCase()}`}
+                {`Export ${exportState.exportFormat.toUpperCase()}`}
               </Button>
             ) : null}
           </>
@@ -788,20 +780,6 @@ export function ReportsWorkspace() {
               {activeReport === "completed" ? "Completed cases only" : "Running cases only"}
             </span>
           ) : null}
-          <TextInput
-            aria-label="From date"
-            className="report-date-control"
-            onChange={(event) => filters.setDateFrom(event.target.value)}
-            type="date"
-            value={filters.dateFrom}
-          />
-          <TextInput
-            aria-label="To date"
-            className="report-date-control"
-            onChange={(event) => filters.setDateTo(event.target.value)}
-            type="date"
-            value={filters.dateTo}
-          />
           <Button onClick={() => setIsAdvancedFiltersOpen((value) => !value)} variant="secondary">
             <SlidersHorizontal size={17} />
             {isAdvancedFiltersOpen ? "Hide Filters" : "More Filters"}
@@ -947,9 +925,6 @@ export function ReportsWorkspace() {
                   error={data.tenderDetails.error}
                   getRowKey={(row) => row.caseId}
                   isLoading={data.tenderDetails.isLoading}
-                  isSelectionEnabled={canExport}
-                  onSelectedRowIdsChange={setSelectedReportRows}
-                  selectedRowIds={selectedExportIds}
                 />
               </>
             ) : null}
@@ -961,9 +936,6 @@ export function ReportsWorkspace() {
                 error={data.running.error}
                 getRowKey={(row) => row.caseId}
                 isLoading={data.running.isLoading}
-                isSelectionEnabled={canExport}
-                onSelectedRowIdsChange={setSelectedReportRows}
-                selectedRowIds={selectedExportIds}
               />
             ) : null}
             {reportCode === "completed" ? (
@@ -974,9 +946,6 @@ export function ReportsWorkspace() {
                 error={data.completed.error}
                 getRowKey={(row) => row.caseId}
                 isLoading={data.completed.isLoading}
-                isSelectionEnabled={canExport}
-                onSelectedRowIdsChange={setSelectedReportRows}
-                selectedRowIds={selectedExportIds}
               />
             ) : null}
             {reportCode === "vendor_awards" ? (
@@ -987,9 +956,6 @@ export function ReportsWorkspace() {
                 error={data.vendorAwards.error}
                 getRowKey={(row) => row.awardId}
                 isLoading={data.vendorAwards.isLoading}
-                isSelectionEnabled={canExport}
-                onSelectedRowIdsChange={setSelectedReportRows}
-                selectedRowIds={selectedExportIds}
               />
             ) : null}
             {reportCode === "stage_time" ? (
@@ -1000,9 +966,6 @@ export function ReportsWorkspace() {
                 error={data.stageTime.error}
                 getRowKey={(row) => row.caseId}
                 isLoading={data.stageTime.isLoading}
-                isSelectionEnabled={canExport}
-                onSelectedRowIdsChange={setSelectedReportRows}
-                selectedRowIds={selectedExportIds}
               />
             ) : null}
             {reportCode === "rc_po_expiry" ? (
@@ -1013,9 +976,6 @@ export function ReportsWorkspace() {
                 error={data.rcPoExpiry.error}
                 getRowKey={(row) => row.sourceId}
                 isLoading={data.rcPoExpiry.isLoading}
-                isSelectionEnabled={canExport}
-                onSelectedRowIdsChange={setSelectedReportRows}
-                selectedRowIds={selectedExportIds}
               />
             ) : null}
           </section>
@@ -1772,13 +1732,6 @@ function ReportExportStatusPanel({
       },
       {
         enableSort: true,
-        header: "Selected",
-        key: "selected",
-        render: (job) => (job.selectedCount ? job.selectedCount : "All"),
-        sortValue: (job) => job.selectedCount,
-      },
-      {
-        enableSort: true,
         header: "Created",
         key: "created",
         render: (job) => formatDateTime(job.createdAt),
@@ -2222,9 +2175,6 @@ function ReportTable<TRow>({
   error,
   getRowKey,
   isLoading,
-  isSelectionEnabled,
-  onSelectedRowIdsChange,
-  selectedRowIds,
 }: {
   columns: VirtualTableColumn<TRow>[];
   data: TRow[] | undefined;
@@ -2232,55 +2182,8 @@ function ReportTable<TRow>({
   error: Error | null;
   getRowKey: (row: TRow) => string;
   isLoading: boolean;
-  isSelectionEnabled: boolean;
-  onSelectedRowIdsChange: (rowIds: string[]) => void;
-  selectedRowIds: string[];
 }) {
   const rows = data ?? [];
-  const selectedSet = useMemo(() => new Set(selectedRowIds), [selectedRowIds]);
-  const visibleRowIds = useMemo(() => rows.map((row) => getRowKey(row)), [getRowKey, rows]);
-  const selectedVisibleCount = isSelectionEnabled ? visibleRowIds.filter((rowId) => selectedSet.has(rowId)).length : 0;
-  const selectionColumns = useMemo<VirtualTableColumn<TRow>[]>(
-    () => [
-      {
-        key: "select",
-        header: (
-          <SelectVisibleHeader
-            checked={visibleRowIds.length > 0 && selectedVisibleCount === visibleRowIds.length}
-            disabled={visibleRowIds.length === 0}
-            indeterminate={selectedVisibleCount > 0 && selectedVisibleCount < visibleRowIds.length}
-            onChange={(checked) => {
-              if (checked) {
-                onSelectedRowIdsChange([...new Set([...selectedRowIds, ...visibleRowIds])]);
-                return;
-              }
-              onSelectedRowIdsChange(selectedRowIds.filter((selectedId) => !visibleRowIds.includes(selectedId)));
-            }}
-          />
-        ),
-        render: (row) => {
-          const rowId = getRowKey(row);
-          return (
-            <input
-              aria-label={`Select row ${rowId}`}
-              checked={selectedSet.has(rowId)}
-              className="report-row-checkbox"
-              onChange={(event) => {
-                if (event.target.checked) {
-                  onSelectedRowIdsChange([...selectedRowIds, rowId]);
-                  return;
-                }
-                onSelectedRowIdsChange(selectedRowIds.filter((selectedId) => selectedId !== rowId));
-              }}
-              type="checkbox"
-            />
-          );
-        },
-      },
-      ...columns,
-    ],
-    [columns, getRowKey, onSelectedRowIdsChange, selectedRowIds, selectedSet, selectedVisibleCount, visibleRowIds],
-  );
 
   if (isLoading) {
     return (
@@ -2303,7 +2206,7 @@ function ReportTable<TRow>({
   return (
     <div className="report-table-suite">
       <VirtualTable
-        columns={isSelectionEnabled ? selectionColumns : columns}
+        columns={columns}
         emptyMessage={emptyMessage}
         getRowKey={getRowKey}
         maxHeight={520}
@@ -2311,34 +2214,6 @@ function ReportTable<TRow>({
         rows={rows}
       />
     </div>
-  );
-}
-
-function SelectVisibleHeader({
-  checked,
-  disabled,
-  indeterminate,
-  onChange,
-}: {
-  checked: boolean;
-  disabled: boolean;
-  indeterminate: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <label className="report-select-header">
-      <input
-        aria-label="Select visible rows"
-        checked={checked}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.checked)}
-        ref={(input) => {
-          if (input) input.indeterminate = indeterminate;
-        }}
-        type="checkbox"
-      />
-      <span>Select</span>
-    </label>
   );
 }
 
@@ -2372,8 +2247,6 @@ function countActiveReportFilters(
 ): number {
   return [
     filters.searchTerm,
-    filters.dateFrom,
-    filters.dateTo,
     statusFilterApplies && filters.statusFilter !== "all" ? filters.statusFilter : "",
     filters.delayStatus !== "all" ? filters.delayStatus : "",
     filters.deletedOnly ? "deleted" : "",
@@ -2420,8 +2293,6 @@ function buildActiveReportFilterChips(
     filters.loiAwarded !== "all" ? `LOI: ${filters.loiAwarded === "true" ? "Yes" : "No"}` : "",
     filters.cpcInvolved !== "any" ? `CPC: ${filters.cpcInvolved === "true" ? "Yes" : "No"}` : "",
     filters.priorityCase ? "Priority cases" : "",
-    filters.dateFrom ? `From: ${filters.dateFrom}` : "",
-    filters.dateTo ? `To: ${filters.dateTo}` : "",
     ...labelsForSelection("Entity", filters.selectedEntityIds, options.entityOptions),
     ...labelsForSelection("Department", filters.selectedDepartmentIds, options.departmentOptions),
     ...labelsForSelection("Owner", filters.selectedOwnerUserIds, options.ownerOptions),

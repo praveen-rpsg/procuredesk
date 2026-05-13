@@ -4516,8 +4516,7 @@ textarea:focus:not(:focus-visible) {
   padding-left: var(--space-9);
 }
 
-.report-compact-select,
-.report-date-control {
+.report-compact-select {
   min-width: 0;
 }
 
@@ -5763,24 +5762,6 @@ textarea:focus:not(:focus-visible) {
 
 .report-table-suite .table-shell {
   border-radius: var(--radius-lg);
-}
-
-.report-row-checkbox {
-  accent-color: var(--color-primary);
-  height: 16px;
-  width: 16px;
-}
-
-.report-select-header {
-  align-items: center;
-  display: inline-flex;
-  gap: var(--space-2);
-}
-
-.report-select-header input {
-  accent-color: var(--color-primary);
-  height: 16px;
-  width: 16px;
 }
 
 .report-table-skeleton {

@@ -13,8 +13,6 @@ export type ReportFiltersState = {
   amountUnit: AmountUnit;
   analyticsParams: ReportQueryParams;
   cpcInvolved: "any" | "false" | "true";
-  dateFrom: string;
-  dateTo: string;
   delayStatus: "all" | "delayed" | "on_time";
   deletedOnly: boolean;
   exportFilters: Record<string, unknown>;
@@ -37,8 +35,6 @@ export type ReportFiltersState = {
   statusFilter: ReportStatusFilter;
   setAmountUnit: (v: AmountUnit) => void;
   setCpcInvolved: (v: "any" | "false" | "true") => void;
-  setDateFrom: (v: string) => void;
-  setDateTo: (v: string) => void;
   setDelayStatus: (v: "all" | "delayed" | "on_time") => void;
   setDeletedOnly: (v: boolean) => void;
   setLoiAwarded: (v: "all" | "false" | "true") => void;
@@ -62,8 +58,6 @@ export type ReportFiltersState = {
 export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
   const [amountUnit, setAmountUnit] = useState<AmountUnit>("lakh");
   const [cpcInvolved, setCpcInvolved] = useState<"any" | "false" | "true">("any");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
   const [delayStatus, setDelayStatus] = useState<"all" | "delayed" | "on_time">("all");
   const [deletedOnly, setDeletedOnly] = useState(false);
   const [loiAwarded, setLoiAwarded] = useState<"all" | "false" | "true">("all");
@@ -91,8 +85,6 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
       completionFys: includeCompletionFilters ? selectedCompletionFys : [],
       completionMonths: includeCompletionFilters ? selectedCompletionMonths : [],
       cpcInvolved: cpcInvolved === "any" ? undefined : cpcInvolved === "true",
-      dateFrom,
-      dateTo,
       delayStatus: delayStatus === "all" ? undefined : delayStatus,
       deletedOnly: deletedOnly ? true : undefined,
       departmentIds: selectedDepartmentIds,
@@ -111,8 +103,6 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
     }),
     [
       cpcInvolved,
-      dateFrom,
-      dateTo,
       delayStatus,
       deletedOnly,
       loiAwarded,
@@ -155,8 +145,6 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
   );
 
   function clearFilters() {
-    setDateFrom("");
-    setDateTo("");
     setSearchTerm("");
     setSelectedEntityIds([]);
     setSelectedOwnerUserIds([]);
@@ -181,8 +169,6 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
     amountUnit,
     analyticsParams,
     cpcInvolved,
-    dateFrom,
-    dateTo,
     delayStatus,
     deletedOnly,
     exportFilters,
@@ -205,8 +191,6 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
     statusFilter,
     setAmountUnit,
     setCpcInvolved,
-    setDateFrom,
-    setDateTo,
     setDelayStatus,
     setDeletedOnly,
     setLoiAwarded,

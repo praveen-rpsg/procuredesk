@@ -12,8 +12,6 @@ export function buildReportParams(input: {
   completionFys: string[];
   completionMonths: string[];
   cpcInvolved: boolean | undefined;
-  dateFrom: string;
-  dateTo: string;
   delayStatus: "delayed" | "on_time" | undefined;
   deletedOnly: boolean | undefined;
   departmentIds: string[];
@@ -50,8 +48,6 @@ export function buildReportParams(input: {
   assignStringArrayParam(params, "completionFys", input.completionFys);
   assignStringArrayParam(params, "prReceiptMonths", input.prReceiptMonths);
   assignStringArrayParam(params, "completionMonths", input.completionMonths);
-  assignStringParam(params, "dateFrom", input.dateFrom);
-  assignStringParam(params, "dateTo", input.dateTo);
   assignStatusParam(params, input.includeStatus, input.status);
   return params;
 }
@@ -62,8 +58,6 @@ export function buildReportFilterPayload(input: {
   completionFys: string[];
   completionMonths: string[];
   cpcInvolved: boolean | undefined;
-  dateFrom: string;
-  dateTo: string;
   delayStatus: "delayed" | "on_time" | undefined;
   deletedOnly: boolean | undefined;
   departmentIds: string[];
@@ -98,8 +92,6 @@ export function buildReportFilterPayload(input: {
   assignStringArrayParam(payload, "completionFys", input.completionFys);
   assignStringArrayParam(payload, "prReceiptMonths", input.prReceiptMonths);
   assignStringArrayParam(payload, "completionMonths", input.completionMonths);
-  assignStringParam(payload, "dateFrom", input.dateFrom);
-  assignStringParam(payload, "dateTo", input.dateTo);
   assignStatusParam(payload, input.includeStatus, input.status);
   assignAmountUnitParam(payload, input.amountUnit);
   return payload;
@@ -210,8 +202,6 @@ export function applySavedView(
     setCompletionFys: (v: string[]) => void;
     setCompletionMonths: (v: string[]) => void;
     setCpcInvolved: (v: "any" | "false" | "true") => void;
-    setDateFrom: (v: string) => void;
-    setDateTo: (v: string) => void;
     setDelayStatus: (v: "all" | "delayed" | "on_time") => void;
     setDeletedOnly: (v: boolean) => void;
     setDepartmentIds: (v: string[]) => void;
@@ -230,8 +220,6 @@ export function applySavedView(
 ) {
   const filters = view.filters;
   setters.setSearchTerm(typeof filters.q === "string" ? filters.q : "");
-  setters.setDateFrom(typeof filters.dateFrom === "string" ? filters.dateFrom : "");
-  setters.setDateTo(typeof filters.dateTo === "string" ? filters.dateTo : "");
   setters.setEntityIds(stringArray(filters.entityIds));
   setters.setDepartmentIds(stringArray(filters.departmentIds));
   setters.setOwnerUserIds(stringArray(filters.ownerUserIds));

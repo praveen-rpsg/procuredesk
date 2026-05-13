@@ -17,7 +17,6 @@ export function useReportExport(
   reportCode: ReportCode,
   exportFilters: Record<string, unknown>,
   savedViewFilters: Record<string, unknown>,
-  selectedIds: string[],
   savedViewName: string,
   setSavedViewName: (name: string) => void,
   options: {
@@ -69,7 +68,6 @@ export function useReportExport(
         filters: exportFilters,
         format: exportFormat,
         reportCode,
-        ...(selectedIds.length ? { selectedIds } : {}),
       };
       return createExportJob(payload);
     },
@@ -78,9 +76,7 @@ export function useReportExport(
       options.onExportCreated?.(result);
       void queryClient.invalidateQueries({ queryKey: ["report", "export-jobs"] });
       notify({
-        message: selectedIds.length
-          ? `Export queued for ${selectedIds.length} selected rows.`
-          : `Export queued: ${result.id}`,
+        message: `Export queued: ${result.id}`,
         tone: "success",
       });
     },
@@ -113,7 +109,6 @@ export function useReportExport(
     exportJobs,
     exportMutation,
     exportStatus,
-    selectedExportCount: selectedIds.length,
     savedViewMutation,
     setExportFormat,
     setExportJobId,

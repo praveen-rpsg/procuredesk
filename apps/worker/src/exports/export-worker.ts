@@ -565,7 +565,7 @@ async function queryRcPoExpiryExport(input: {
     "Tender Description": row.tender_description ?? null,
     Entity: row.entity ?? null,
     Department: row.department ?? null,
-    "RC/PO Amount [All Inclusive]": row.rc_po_amount ?? null,
+    "RC/PO Amount (Lakhs) [All Inclusive]": amountToLakhs(row.rc_po_amount),
     "Award Date": formatExportDate(row.rc_po_award_date),
     "Validity Date": formatExportDate(row.rc_po_validity_date),
     Owner: row.tender_owner ?? null,
