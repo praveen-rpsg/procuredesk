@@ -640,20 +640,40 @@ export class ProcurementCaseRepository {
     return result.rows.map((row) => row.entity_id);
   }
 
-  async getCaseOwnerEntityScopes(userId: string, tenantId: string): Promise<string[]> {
-    const result = await this.db.query<QueryResultRow & { entity_id: string }>(
+  async getCaseOwnerAssignmentProfile(
+    userId: string,
+    tenantId: string,
+  ): Promise<{
+    accessLevel: "ENTITY" | "GROUP" | "USER";
+    entityIds: string[];
+    userId: string;
+  } | null> {
+    const result = await this.db.query<
+      QueryResultRow & { access_level: "ENTITY" | "GROUP" | "USER"; entity_ids: string[]; id: string }
+    >(
       `
-        select ues.entity_id
-        from iam.user_entity_scopes ues
-        join iam.users u on u.id = ues.user_id
-        where ues.user_id = $1
+        select
+          u.id,
+          u.access_level,
+          coalesce(array_remove(array_agg(distinct ues.entity_id), null), array[]::uuid[]) as entity_ids
+        from iam.users u
+        left join iam.user_entity_scopes ues on ues.user_id = u.id
+        where u.id = $1
           and u.tenant_id = $2
           and u.status = 'active'
           and u.deleted_at is null
+        group by u.id, u.access_level
       `,
       [userId, tenantId],
     );
-    return result.rows.map((row) => row.entity_id);
+    const row = result.rows[0];
+    return row
+      ? {
+          accessLevel: row.access_level,
+          entityIds: row.entity_ids,
+          userId: row.id,
+        }
+      : null;
   }
 
   private async upsertFinancials(

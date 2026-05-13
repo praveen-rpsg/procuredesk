@@ -29,6 +29,7 @@ create table iam.users (
   full_name text not null,
   password_hash text,
   status text not null default 'pending_password_setup',
+  access_level text not null default 'USER',
   is_platform_super_admin boolean not null default false,
   failed_login_count integer not null default 0,
   locked_until timestamptz,
@@ -42,6 +43,9 @@ create table iam.users (
   deleted_by uuid references iam.users(id),
   constraint users_status_check check (
     status in ('pending_password_setup', 'active', 'inactive', 'locked')
+  ),
+  constraint users_access_level_check check (
+    access_level in ('USER', 'ENTITY', 'GROUP')
   ),
   constraint tenant_required_unless_platform_admin check (
     tenant_id is not null or is_platform_super_admin = true
@@ -439,6 +443,8 @@ create table procurement.case_awards (
   po_value numeric(18,2),
   po_award_date date,
   po_validity_date date,
+  tentative_tendering_date date,
+  tender_floated_or_not_required boolean not null default false,
   notes text,
   created_at timestamptz not null default now(),
   created_by uuid references iam.users(id),
@@ -557,6 +563,7 @@ create table reporting.contract_expiry_facts (
   id uuid primary key default gen_random_uuid(),
   tenant_id uuid not null references iam.tenants(id) on delete cascade,
   case_id uuid references procurement.cases(id) on delete cascade,
+  case_award_id uuid references procurement.case_awards(id) on delete cascade,
   rc_po_plan_id uuid references procurement.rc_po_plans(id) on delete cascade,
   entity_id uuid not null,
   department_id uuid,

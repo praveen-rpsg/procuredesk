@@ -30,6 +30,12 @@ export class NotificationController {
     return this.notifications.listRules(user);
   }
 
+  @Get("status")
+  @RequirePermissions("notification.manage")
+  status(@CurrentUser() user: AuthenticatedUser) {
+    return this.notifications.status(user);
+  }
+
   @Put("rules/:notificationType")
   @RequirePermissions("notification.manage")
   updateRule(

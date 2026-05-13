@@ -1,4 +1,4 @@
-import { Building2, CalendarClock, FileClock, LayoutDashboard, ShieldCheck, Tags, UsersRound } from "lucide-react";
+import { Bell, Building2, CalendarClock, FileClock, LayoutDashboard, ShieldCheck, Tags, UsersRound } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo } from "react";
 
@@ -9,9 +9,11 @@ import { AdminOverviewPage, type AdminOverviewItem } from "./overview/AdminOverv
 import { RolesAdminPage } from "./roles/RolesAdminPage";
 import { TenderTypeDaysAdminPage } from "./tender-type-days/TenderTypeDaysAdminPage";
 import { AdminUsersPage } from "./users/AdminUsersPage";
+import { OperationsWorkspace } from "../operations/pages/OperationsWorkspace";
 import { useAuth } from "../../shared/auth/AuthProvider";
 import {
   canAccessAdminWorkspace,
+  canManageNotifications,
   canManageRoles,
   canManageUsers,
   canReadAudit,
@@ -23,7 +25,7 @@ import { navigateToAppPath, useAppLocation } from "../../shared/routing/appLocat
 import { AccessDeniedState, NotFoundState } from "../../shared/ui/app-states/AppStates";
 import { SecondaryNav } from "../../shared/ui/secondary-nav/SecondaryNav";
 
-type AdminSectionKey = "audit" | "catalog" | "entities" | "overview" | "roles" | "tender-rules" | "users";
+type AdminSectionKey = "audit" | "catalog" | "entities" | "operations" | "overview" | "roles" | "tender-rules" | "users";
 
 type AdminSectionDefinition = AdminOverviewItem & {
   icon: LucideIcon;
@@ -35,6 +37,7 @@ const adminSectionPaths: Record<AdminSectionKey, string> = {
   audit: "/admin/audit-logs",
   catalog: "/admin/choice-lists",
   entities: "/admin/entities",
+  operations: "/admin/operations",
   overview: "/admin/overview",
   roles: "/admin/roles",
   "tender-rules": "/admin/tender-types",
@@ -51,6 +54,7 @@ export function AdminFoundation() {
   const hasEntityAccess = canReadEntities(user);
   const hasCatalogAccess = canReadCatalog(user);
   const hasAuditAccess = canReadAudit(user);
+  const hasOperationsAccess = canReadAudit(user) || canManageNotifications(user);
   const hasAdminAccess = canAccessAdminWorkspace(user);
   const sections = useMemo<AdminSectionDefinition[]>(() => {
     const items: AdminSectionDefinition[] = [
@@ -123,8 +127,18 @@ export function AdminFoundation() {
         path: adminSectionPaths.audit,
       });
     }
+    if (hasOperationsAccess) {
+      items.push({
+        group: "Governance",
+        description: "Manage notification rules, previews, queue jobs, and failed events.",
+        icon: Bell,
+        key: "operations",
+        label: "Operations",
+        path: adminSectionPaths.operations,
+      });
+    }
     return items;
-  }, [hasAuditAccess, hasCatalogAccess, hasEntityAccess, hasRoleAccess, hasUserAccess]);
+  }, [hasAuditAccess, hasCatalogAccess, hasEntityAccess, hasOperationsAccess, hasRoleAccess, hasUserAccess]);
 
   const requestedSection = adminSectionFromPath(location.pathname);
   const isRootAdminPath = location.pathname === "/admin";
@@ -146,7 +160,7 @@ export function AdminFoundation() {
     }
   }, [isLegacyDepartmentsPath, location.search]);
 
-  if (!hasAdminAccess || (!hasUserAccess && !hasRoleAccess && !hasEntityAccess && !hasCatalogAccess && !hasAuditAccess)) {
+  if (!hasAdminAccess || (!hasUserAccess && !hasRoleAccess && !hasEntityAccess && !hasCatalogAccess && !hasAuditAccess && !hasOperationsAccess)) {
     return <AccessDeniedState />;
   }
 
@@ -206,10 +220,14 @@ function renderAdminSection(
   }
   if (section === "catalog") return <CatalogAdminPage />;
   if (section === "tender-rules") return <TenderTypeDaysAdminPage />;
+  if (section === "operations") return <OperationsWorkspace />;
   return <AdminAuditPage />;
 }
 
 function adminSectionFromPath(pathname: string): AdminSectionKey | null {
+  if (pathname === "/operations/audit-logs" || pathname === "/admin/operations/audit-logs") return "audit";
+  if (pathname === "/operations" || pathname.startsWith("/operations/")) return "operations";
+  if (pathname === "/admin/operations" || pathname.startsWith("/admin/operations/")) return "operations";
   return (
     (Object.entries(adminSectionPaths).find(([, path]) => path === pathname)?.[0] as AdminSectionKey | undefined) ??
     null

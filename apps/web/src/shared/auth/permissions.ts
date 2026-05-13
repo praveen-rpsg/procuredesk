@@ -68,6 +68,7 @@ const adminWorkspacePermissions: Permission[] = [
   "audit.read",
   "catalog.manage",
   "entity.manage",
+  "notification.manage",
   "role.manage",
   "tenant.manage",
   "user.manage",
@@ -122,9 +123,9 @@ export function canReadCases(user: CurrentUser | null | undefined): boolean {
 
 export function canReadCase(user: CurrentUser | null | undefined, kase: CaseScope): boolean {
   if (!user) return false;
-  if (user.isPlatformSuperAdmin || hasPermission(user, "case.read.all")) return true;
-  if (hasPermission(user, "case.read.entity") && isInUserEntityScope(user, kase.entityId)) return true;
-  return hasPermission(user, "case.read.assigned") && kase.ownerUserId === user.id;
+  if (user.isPlatformSuperAdmin || user.accessLevel === "GROUP") return true;
+  if (user.accessLevel === "ENTITY" && isInUserEntityScope(user, kase.entityId)) return true;
+  return kase.ownerUserId === user.id;
 }
 
 export function canCreateCase(user: CurrentUser | null | undefined): boolean {

@@ -6,36 +6,22 @@ export class CaseVisibilityPolicy {
     entityIds: string[];
     tenantWide: boolean;
   } {
-    if (
-      user.isPlatformSuperAdmin ||
-      user.permissions.includes("case.read.all") ||
-      user.permissions.includes("case.update.all")
-    ) {
+    if (user.isPlatformSuperAdmin || user.accessLevel === "GROUP") {
       return { assignedOnly: false, entityIds: [], tenantWide: true };
     }
-    if (user.permissions.includes("case.read.entity") || user.permissions.includes("case.update.entity")) {
+    if (user.accessLevel === "ENTITY") {
       return { assignedOnly: false, entityIds: user.entityIds, tenantWide: false };
     }
     return { assignedOnly: true, entityIds: [], tenantWide: false };
   }
 
   canReadCase(user: AuthenticatedUser, kase: { entityId: string; ownerUserId: string | null }) {
-    if (
-      user.isPlatformSuperAdmin ||
-      user.permissions.includes("case.read.all") ||
-      user.permissions.includes("case.update.all")
-    ) {
+    if (user.isPlatformSuperAdmin || user.accessLevel === "GROUP") {
       return true;
     }
-    if (
-      (user.permissions.includes("case.read.entity") || user.permissions.includes("case.update.entity")) &&
-      user.entityIds.includes(kase.entityId)
-    ) {
+    if (user.accessLevel === "ENTITY" && user.entityIds.includes(kase.entityId)) {
       return true;
     }
-    return (
-      (user.permissions.includes("case.read.assigned") || user.permissions.includes("case.update.assigned")) &&
-      kase.ownerUserId === user.id
-    );
+    return kase.ownerUserId === user.id;
   }
 }

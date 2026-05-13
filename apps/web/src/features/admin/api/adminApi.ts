@@ -1,6 +1,7 @@
 import { apiRequest } from "../../../shared/api/client";
 
 export type AdminUser = {
+  accessLevel: "ENTITY" | "GROUP" | "USER";
   createdAt: string;
   email: string;
   entityCodes: string[];
@@ -111,6 +112,7 @@ export function listAdminUsers() {
 }
 
 export function createAdminUser(payload: {
+  accessLevel: "ENTITY" | "GROUP" | "USER";
   email: string;
   entityIds?: string[];
   fullName: string;
@@ -141,6 +143,13 @@ export function updateAdminUserStatus(
 ) {
   return apiRequest<void>(`/admin/users/${userId}/status`, {
     body: JSON.stringify({ status }),
+    method: "PATCH",
+  });
+}
+
+export function updateAdminUserAccessLevel(userId: string, accessLevel: AdminUser["accessLevel"]) {
+  return apiRequest<void>(`/admin/users/${userId}/access-level`, {
+    body: JSON.stringify({ accessLevel }),
     method: "PATCH",
   });
 }

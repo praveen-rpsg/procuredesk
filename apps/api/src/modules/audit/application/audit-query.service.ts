@@ -12,6 +12,7 @@ export class AuditQueryService {
     query: {
       action?: string;
       actorUserId?: string;
+      includeTotal?: boolean;
       limit?: number;
       offset?: number;
       q?: string;
@@ -21,12 +22,13 @@ export class AuditQueryService {
   ) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "audit.read");
-    return this.repository.listEvents({
+    const paging = {
       ...query,
       limit: Math.min(query.limit ?? 50, 100),
       offset: query.offset ?? 0,
       tenantId,
-    });
+    };
+    return query.includeTotal ? this.repository.listEventsPage(paging) : this.repository.listEvents(paging);
   }
 
   async getEvent(actor: AuthenticatedUser, eventId: string) {

@@ -10,6 +10,7 @@ export type CurrentUser = {
   email: string;
   username: string;
   fullName: string;
+  accessLevel: "ENTITY" | "GROUP" | "USER";
   isPlatformSuperAdmin: boolean;
   permissions: string[];
   entityIds: string[];

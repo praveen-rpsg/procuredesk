@@ -51,6 +51,15 @@ export class MicrosoftGraphEmailAdapter implements EmailAdapter {
     this.graphConfig();
   }
 
+  isConfigured(): boolean {
+    try {
+      this.graphConfig();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private graphConfig(): {
     clientId: string;
     clientSecret: string;

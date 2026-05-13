@@ -24,6 +24,7 @@ type ReportFilters = {
   dateFrom?: string | undefined;
   dateTo?: string | undefined;
   delayStatus?: "delayed" | "on_time" | undefined;
+  deletedOnly?: boolean | undefined;
   departmentIds: string[];
   entityIds: string[];
   limit: number;
@@ -198,12 +199,21 @@ async function queryExportRows(input: {
   }
   if (input.reportCode === "vendor_awards") {
     const values: unknown[] = [input.tenantId];
-    const where = ["a.tenant_id = $1", "a.deleted_at is null", "c.deleted_at is null"];
+    const where = [
+      "a.tenant_id = $1",
+      "a.deleted_at is null",
+      input.filters.deletedOnly ? "c.deleted_at is not null" : "c.deleted_at is null",
+    ];
     applyScope(where, values, input.scope, "f.entity_id", "f.owner_user_id");
     applyCaseFactFilters(where, values, input.filters, [
       "c.pr_id",
       "c.tender_name",
       "c.pr_description",
+      "e.code",
+      "e.name",
+      "dep.name",
+      "owner.full_name",
+      "a.vendor_code",
       "a.vendor_name",
       "a.po_number",
     ]);
@@ -214,7 +224,13 @@ async function queryExportRows(input: {
       `
         select
           c.pr_id,
+          c.tender_no,
           c.tender_name,
+          coalesce(e.code, e.name) as entity,
+          dep.name as department,
+          owner.full_name as tender_owner,
+          f.approved_amount,
+          a.vendor_code,
           a.vendor_name,
           a.po_number,
           a.po_value,
@@ -223,6 +239,9 @@ async function queryExportRows(input: {
       from procurement.case_awards a
       join procurement.cases c on c.id = a.case_id and c.tenant_id = a.tenant_id
       join reporting.case_facts f on f.case_id = c.id and f.tenant_id = c.tenant_id
+      left join org.entities e on e.id = f.entity_id and e.tenant_id = f.tenant_id
+      left join org.departments dep on dep.id = f.department_id and dep.tenant_id = f.tenant_id
+      left join iam.users owner on owner.id = f.owner_user_id and owner.tenant_id = f.tenant_id
       left join procurement.case_milestones m on m.case_id = c.id and m.tenant_id = c.tenant_id
       where ${where.join(" and ")}
         order by a.po_award_date desc nulls last
@@ -230,7 +249,20 @@ async function queryExportRows(input: {
       `,
       values,
     );
-    return result.rows;
+    return result.rows.map((row) => ({
+      "Tender No.": row.tender_no ?? row.pr_id ?? null,
+      "Tender Name": row.tender_name ?? null,
+      Entity: row.entity ?? null,
+      "User Department": row.department ?? null,
+      "Tender Owner": row.tender_owner ?? null,
+      "NFA Approved Amount (Lakhs) [All Inclusive]": amountToLakhs(row.approved_amount),
+      "Vendor Code": row.vendor_code ?? null,
+      "Vendor Name": row.vendor_name ?? null,
+      "RC/PO No.": row.po_number ?? null,
+      "RC/PO Value (Lakhs)": amountToLakhs(row.po_value),
+      "Award Date": formatExportDate(row.po_award_date),
+      "Validity Date": formatExportDate(row.po_validity_date),
+    }));
   }
 
   const statusClause =
@@ -240,9 +272,20 @@ async function queryExportRows(input: {
         ? "and f.status = 'completed'"
         : "";
   const values: unknown[] = [input.tenantId];
-  const where = ["f.tenant_id = $1", "c.deleted_at is null"];
+  const where = ["f.tenant_id = $1", input.filters.deletedOnly ? "c.deleted_at is not null" : "c.deleted_at is null"];
   applyScope(where, values, input.scope, "f.entity_id", "f.owner_user_id");
-  applyCaseFactFilters(where, values, input.filters, ["c.pr_id", "c.tender_name", "c.pr_description"]);
+  applyCaseFactFilters(where, values, input.filters, [
+    "c.pr_id",
+    "c.tender_no",
+    "c.tender_name",
+    "c.pr_description",
+    "e.code",
+    "e.name",
+    "dep.name",
+    "tt.name",
+    "owner.full_name",
+    "d.delay_reason",
+  ]);
   applyUuidArrayFilter(where, values, input.filters.selectedIds, "f.case_id");
   values.push(input.filters.limit);
   const limitPosition = values.length;
@@ -256,6 +299,7 @@ async function queryExportRows(input: {
         coalesce(e.code, e.name) as entity,
         dep.name as department,
         f.pr_value,
+        f.estimate_benchmark,
         f.approved_amount,
         tt.name as tender_type,
         f.status,
@@ -268,6 +312,7 @@ async function queryExportRows(input: {
           else round((coalesce(f.completed_age_days, f.running_age_days)::numeric / greatest((c.tentative_completion_date - f.pr_receipt_date), 1)) * 100)
         end as percent_time_elapsed,
         f.running_age_days,
+        f.current_stage_aging_days,
         f.pr_receipt_date,
         m.nit_publish_date,
         m.bidders_participated,
@@ -279,6 +324,7 @@ async function queryExportRows(input: {
         f.savings_wrt_estimate,
         owner.full_name as tender_owner,
         d.delay_external_days as uncontrollable_delay_days,
+        d.delay_reason,
         m.loi_issued as loi_awarded,
         m.loi_issued_date as loi_award_date,
         c.pr_remarks,
@@ -298,6 +344,44 @@ async function queryExportRows(input: {
     `,
     values,
   );
+  if (input.reportCode === "running") {
+    return result.rows.map((row) => ({
+      "Tender No.": row.tender_no ?? row.pr_id ?? null,
+      "Tender Name": row.tender_name ?? row.pr_description ?? null,
+      "PR Receipt Date": formatExportDate(row.pr_receipt_date),
+      "PR Value / Approved Budget [All Inclusive]": row.pr_value ?? null,
+      "Tender Owner": row.tender_owner ?? null,
+      Entity: row.entity ?? null,
+      "User Department": row.department ?? null,
+      "Tender Stage": formatExportStage(row.stage_code),
+      "Normative Tender Stage": row.desired_stage_code == null ? null : formatExportStage(row.desired_stage_code),
+      "Running Tender Age": row.running_age_days ?? null,
+      "Current Stage Aging (Days)": row.current_stage_aging_days ?? null,
+      "Uncontrollable Delay (Days)": row.uncontrollable_delay_days ?? null,
+      "Reasons for Delay": row.delay_reason ?? null,
+      "LOI Awarded?": row.loi_awarded ? "Yes" : "No",
+      "LOI Award Date": formatExportDate(row.loi_award_date),
+    }));
+  }
+  if (input.reportCode === "completed") {
+    return result.rows.map((row) => ({
+      "Tender No.": row.tender_no ?? row.pr_id ?? null,
+      "Tender Name": row.tender_name ?? row.pr_description ?? null,
+      "Tender Owner": row.tender_owner ?? null,
+      Entity: row.entity ?? null,
+      "User Department": row.department ?? null,
+      "PR Value / Approved Budget [All Inclusive]": row.pr_value ?? null,
+      "Estimate / Benchmark [All Inclusive]": row.estimate_benchmark ?? null,
+      "Award Value [All Inclusive]": row.total_awarded_amount ?? null,
+      "Cycle Time": row.completed_cycle_time_days ?? null,
+      "Uncontrollable Delay (Days)": row.uncontrollable_delay_days ?? null,
+      "Reasons for Delay": row.delay_reason ?? null,
+      "Savings wrt PR Value / Approved Budget [All Inclusive]": row.savings_wrt_pr ?? null,
+      "Savings wrt Estimate / Benchmark [All Inclusive]": row.savings_wrt_estimate ?? null,
+      "LOI Awarded?": row.loi_awarded ? "Yes" : "No",
+      "LOI Award Date": formatExportDate(row.loi_award_date),
+    }));
+  }
   return result.rows;
 }
 
@@ -309,29 +393,113 @@ async function queryStageTimeExport(input: {
   tenantId: string;
 }): Promise<ExportRow[]> {
   const values: unknown[] = [input.tenantId];
-  const where = ["f.tenant_id = $1", "c.deleted_at is null"];
+  const where = ["f.tenant_id = $1", input.filters.deletedOnly ? "c.deleted_at is not null" : "c.deleted_at is null"];
   applyScope(where, values, input.scope, "f.entity_id", "f.owner_user_id");
-  applyCaseFactFilters(where, values, input.filters, ["c.pr_id", "c.tender_name", "c.pr_description"]);
+  applyCaseFactFilters(where, values, input.filters, [
+    "c.pr_id",
+    "c.tender_no",
+    "c.tender_name",
+    "c.pr_description",
+    "e.code",
+    "e.name",
+    "tt.name",
+    "owner.full_name",
+  ]);
   if (input.filters.selectedIds.length) {
-    values.push(input.filters.selectedIds.map(Number).filter((stageCode) => Number.isInteger(stageCode)));
-    where.push(`f.stage_code = any($${values.length}::int[])`);
+    values.push(input.filters.selectedIds);
+    where.push(`f.case_id::text = any($${values.length}::text[])`);
   }
+  values.push(input.filters.limit);
+  const limitPosition = values.length;
   const result = await input.pool.query<ExportRow>(
     `
       select
+        c.id as case_id,
+        c.pr_id,
+        c.tender_no,
+        c.tender_name,
+        coalesce(e.code, e.name) as entity,
+        f.priority_case,
+        tt.name as tender_type,
+        owner.full_name as tender_owner,
         f.stage_code,
-        count(*)::integer as case_count,
-        round(avg(f.running_age_days)::numeric, 2) as average_running_age_days
+        f.running_age_days,
+        f.current_stage_aging_days,
+        f.completed_age_days as cycle_time_days,
+        case
+          when f.pr_receipt_date is null or m.nit_initiation_date is null then null
+          else m.nit_initiation_date - f.pr_receipt_date
+        end as pr_review_time_days,
+        case
+          when m.nit_publish_date is null then null
+          when m.nit_approval_date is not null then m.nit_publish_date - m.nit_approval_date
+          when m.nit_initiation_date is not null then m.nit_publish_date - m.nit_initiation_date
+          else null
+        end as nit_publish_time_days,
+        case
+          when m.bid_receipt_date is null or m.nit_publish_date is null then null
+          else m.bid_receipt_date - m.nit_publish_date
+        end as bid_receipt_time_days,
+        case
+          when m.bid_receipt_date is null then null
+          when m.commercial_evaluation_date is null and m.technical_evaluation_date is null then null
+          else greatest(
+            coalesce(m.commercial_evaluation_date, m.technical_evaluation_date),
+            coalesce(m.technical_evaluation_date, m.commercial_evaluation_date)
+          ) - m.bid_receipt_date
+        end as bid_evaluation_time_days,
+        case
+          when m.nfa_submission_date is null then null
+          when m.commercial_evaluation_date is not null or m.technical_evaluation_date is not null then
+            m.nfa_submission_date - greatest(
+              coalesce(m.commercial_evaluation_date, m.technical_evaluation_date),
+              coalesce(m.technical_evaluation_date, m.commercial_evaluation_date)
+            )
+          when m.bid_receipt_date is not null then m.nfa_submission_date - m.bid_receipt_date
+          else null
+        end as negotiation_nfa_submission_time_days,
+        case
+          when m.nfa_approval_date is null or m.nfa_submission_date is null then null
+          else m.nfa_approval_date - m.nfa_submission_date
+        end as nfa_approval_time_days,
+        case
+          when m.rc_po_award_date is null or m.nfa_approval_date is null then null
+          else m.rc_po_award_date - m.nfa_approval_date
+        end as contract_issuance_time_days,
+        coalesce(m.loi_issued, false) as loi_awarded
       from reporting.case_facts f
       join procurement.cases c on c.id = f.case_id and c.tenant_id = f.tenant_id
+      left join org.entities e on e.id = f.entity_id and e.tenant_id = f.tenant_id
+      left join catalog.tender_types tt on tt.id = f.tender_type_id and tt.tenant_id = f.tenant_id
+      left join iam.users owner on owner.id = f.owner_user_id and owner.tenant_id = f.tenant_id
       left join procurement.case_milestones m on m.case_id = f.case_id and m.tenant_id = f.tenant_id
       where ${where.join(" and ")}
-      group by f.stage_code
-      order by f.stage_code asc
+      order by f.updated_at desc
+      limit $${limitPosition}
     `,
     values,
   );
-  return result.rows;
+  return result.rows.map((row) => ({
+    "Case ID": row.pr_id ?? null,
+    "PR No.": row.tender_no ?? null,
+    "Tender Name": row.tender_name ?? null,
+    Entity: row.entity ?? null,
+    Priority: row.priority_case ? "Priority" : null,
+    "Tender Type": row.tender_type ?? null,
+    "Tender Owner": row.tender_owner ?? null,
+    "Tender Stage": formatExportStage(row.stage_code),
+    "Running Tender Age": row.running_age_days ?? null,
+    "Current Stage Aging": row.current_stage_aging_days ?? null,
+    "Cycle Time": row.cycle_time_days ?? null,
+    "PR Review Time": row.pr_review_time_days ?? null,
+    "NIT Publish Time": row.nit_publish_time_days ?? null,
+    "Bid Receipt Time": row.bid_receipt_time_days ?? null,
+    "Bid Evaluation Time": row.bid_evaluation_time_days ?? null,
+    "Negotiation & NFA Submission Time": row.negotiation_nfa_submission_time_days ?? null,
+    "NFA Approval Time": row.nfa_approval_time_days ?? null,
+    "Post NFA Contract Issuance Time": row.contract_issuance_time_days ?? null,
+    "LOI Awarded?": row.loi_awarded ? "Yes" : "No",
+  }));
 }
 
 async function queryRcPoExpiryExport(input: {
@@ -352,30 +520,60 @@ async function queryRcPoExpiryExport(input: {
   }
   if (input.filters.selectedIds.length) {
     values.push(input.filters.selectedIds);
-    where.push(`coalesce(e.case_id, e.rc_po_plan_id, e.id)::text = any($${values.length}::text[])`);
+    where.push(`
+      (case
+        when e.source_type = 'case_award' and e.case_award_id is not null then e.case_award_id
+        when e.source_type = 'manual_plan' and e.rc_po_plan_id is not null then e.rc_po_plan_id
+        else e.id
+      end)::text = any($${values.length}::text[])
+    `);
   }
   values.push(input.filters.limit);
   const limitPosition = values.length;
   const result = await input.pool.query<ExportRow>(
     `
       select
-        coalesce(e.case_id, e.rc_po_plan_id, e.id) as source_id,
+        case
+          when e.source_type = 'case_award' and e.case_award_id is not null then e.case_award_id
+          when e.source_type = 'manual_plan' and e.rc_po_plan_id is not null then e.rc_po_plan_id
+          else e.id
+        end as source_id,
         e.source_type,
+        coalesce(ent.code, ent.name) as entity,
+        dep.name as department,
+        owner.full_name as tender_owner,
         e.tender_description,
         e.awarded_vendors,
         e.rc_po_amount,
         e.rc_po_award_date,
         e.rc_po_validity_date,
+        e.tentative_tendering_date,
         e.tender_floated_or_not_required,
         (e.rc_po_validity_date - current_date)::integer as days_to_expiry
       from reporting.contract_expiry_facts e
+      left join org.entities ent on ent.id = e.entity_id and ent.tenant_id = e.tenant_id
+      left join org.departments dep on dep.id = e.department_id and dep.tenant_id = e.tenant_id
+      left join iam.users owner on owner.id = e.owner_user_id and owner.tenant_id = e.tenant_id
       where ${where.join(" and ")}
       order by e.rc_po_validity_date asc
       limit $${limitPosition}
     `,
     values,
   );
-  return result.rows;
+  return result.rows.map((row) => ({
+    Source: row.source_type === "manual_plan" ? "Bulk Upload" : "TenderDB",
+    "Tender Description": row.tender_description ?? null,
+    Entity: row.entity ?? null,
+    Department: row.department ?? null,
+    "RC/PO Amount [All Inclusive]": row.rc_po_amount ?? null,
+    "Award Date": formatExportDate(row.rc_po_award_date),
+    "Validity Date": formatExportDate(row.rc_po_validity_date),
+    Owner: row.tender_owner ?? null,
+    "Awarded Vendors": row.awarded_vendors ?? null,
+    "Tentative Tendering Date": formatExportDate(row.tentative_tendering_date),
+    "Tender Floated? or Not Required": row.tender_floated_or_not_required ? "Yes" : "No",
+    "Days to Expiry": row.days_to_expiry ?? null,
+  }));
 }
 
 async function getExportScope(
@@ -385,11 +583,13 @@ async function getExportScope(
 ): Promise<ExportScope> {
   const result = await pool.query<{
     entity_ids: string[] | null;
+    access_level: "ENTITY" | "GROUP" | "USER";
     is_platform_super_admin: boolean;
     permissions: string[] | null;
   }>(
     `
       select
+        u.access_level,
         u.is_platform_super_admin,
         array_remove(array_agg(distinct p.code::text), null) as permissions,
         array_remove(array_agg(distinct ues.entity_id::text), null) as entity_ids
@@ -406,11 +606,10 @@ async function getExportScope(
     [tenantId, userId],
   );
   const actor = result.rows[0];
-  const permissions = actor?.permissions ?? [];
-  if (actor?.is_platform_super_admin || permissions.includes("case.read.all")) {
+  if (actor?.is_platform_super_admin || actor?.access_level === "GROUP") {
     return { actorUserId: userId, assignedOnly: false, entityIds: [], tenantWide: true };
   }
-  if (permissions.includes("case.read.entity")) {
+  if (actor?.access_level === "ENTITY") {
     return {
       actorUserId: userId,
       assignedOnly: false,
@@ -431,6 +630,7 @@ function normalizeFilters(value: unknown): ReportFilters {
     dateFrom: dateString(record.dateFrom),
     dateTo: dateString(record.dateTo),
     delayStatus: record.delayStatus === "delayed" || record.delayStatus === "on_time" ? record.delayStatus : undefined,
+    deletedOnly: optionalBoolean(record.deletedOnly),
     departmentIds: stringArray(record.departmentIds, 200),
     entityIds: stringArray(record.entityIds, 200),
     limit: positiveLimit(record.limit),
@@ -541,9 +741,11 @@ function applyTextSearch(
   query: string,
   columns: string[],
 ) {
-  values.push(query);
-  const vector = columns.map((column) => `coalesce(${column}, '')`).join(" || ' ' || ");
-  where.push(`to_tsvector('english', ${vector}) @@ plainto_tsquery('english', $${values.length})`);
+  const trimmed = query.trim();
+  if (!trimmed) return;
+  values.push(`%${trimmed.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_")}%`);
+  const position = values.length;
+  where.push(`(${columns.map((column) => `coalesce(${column}, '') ilike $${position} escape '\\'`).join(" or ")})`);
 }
 
 function applyUuidArrayFilter(
@@ -624,6 +826,35 @@ function csvEscape(value: unknown): string {
   const text = String(value);
   if (/[",\n]/.test(text)) return `"${text.replaceAll('"', '""')}"`;
   return text;
+}
+
+function formatExportDate(value: unknown): string | null {
+  if (value == null) return null;
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value).slice(0, 10);
+}
+
+function amountToLakhs(value: unknown): number | null {
+  if (value == null) return null;
+  const amount = Number(value);
+  return Number.isFinite(amount) ? Number((amount / 100000).toFixed(2)) : null;
+}
+
+function formatExportStage(value: unknown): string {
+  const stageCode = Number(value);
+  if (!Number.isInteger(stageCode)) return String(value ?? "-");
+  const stageNames: Record<number, string> = {
+    0: "PR under review by Buyer",
+    1: "NIT Approval Awaited",
+    2: "NIT Approved, Tender to be published",
+    3: "NIT published, Bids awaited",
+    4: "Bids under evaluation",
+    5: "Evaluation completed, in Negotiation stage",
+    6: "NFA Note under approval",
+    7: "NFA Note Approved, RC/PO to be issued",
+    8: "RC/PO issued",
+  };
+  return stageNames[stageCode] ? `Stage ${stageCode} - ${stageNames[stageCode]}` : `Stage ${stageCode}`;
 }
 
 async function createFileAsset(input: {

@@ -54,6 +54,7 @@ export class SessionRepository {
         email: string;
         username: string;
         full_name: string;
+        access_level: "ENTITY" | "GROUP" | "USER";
         is_platform_super_admin: boolean;
         permissions: string[] | null;
         entity_ids: string[] | null;
@@ -66,6 +67,7 @@ export class SessionRepository {
           u.email,
           u.username,
           u.full_name,
+          u.access_level,
           u.is_platform_super_admin,
           coalesce(
             array_agg(distinct p.code::text) filter (where p.code is not null),
@@ -101,6 +103,7 @@ export class SessionRepository {
       email: row.email,
       username: row.username,
       fullName: row.full_name,
+      accessLevel: row.access_level,
       isPlatformSuperAdmin: row.is_platform_super_admin,
       permissions: row.permissions ?? [],
       entityIds: row.entity_ids ?? [],

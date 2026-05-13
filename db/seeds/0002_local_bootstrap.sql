@@ -19,13 +19,14 @@ platform_existing as (
 ),
 platform_inserted as (
   insert into iam.users (
-    tenant_id, email, username, full_name, status, is_platform_super_admin
+    tenant_id, email, username, full_name, access_level, status, is_platform_super_admin
   )
   select
     null,
     'platform.admin@procuredesk.local',
     'platform.admin',
     'Platform Admin',
+    'GROUP',
     'pending_password_setup',
     true
   where not exists (select 1 from platform_existing)
@@ -45,13 +46,14 @@ tenant_existing as (
 ),
 tenant_inserted as (
   insert into iam.users (
-    tenant_id, email, username, full_name, status, created_by, updated_by
+    tenant_id, email, username, full_name, access_level, status, created_by, updated_by
   )
   select
     t.id,
     'tenant.admin@procuredesk.local',
     'tenant.admin',
     'Tenant Admin',
+    'GROUP',
     'pending_password_setup',
     p.id,
     p.id

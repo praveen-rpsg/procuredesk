@@ -13,6 +13,7 @@ export type LoginUserRecord = {
   passwordHash: string | null;
   passwordChangedAt: Date | null;
   status: string;
+  accessLevel: "ENTITY" | "GROUP" | "USER";
   isPlatformSuperAdmin: boolean;
   failedLoginCount: number;
   lockedUntil: Date | null;
@@ -25,6 +26,7 @@ export type UserListItem = {
   username: string;
   fullName: string;
   status: string;
+  accessLevel: "ENTITY" | "GROUP" | "USER";
   isPlatformSuperAdmin: boolean;
   entityCodes: string[];
   entityIds: string[];
@@ -58,6 +60,7 @@ type LoginUserRow = QueryResultRow & {
   password_hash: string | null;
   password_changed_at: Date | null;
   status: string;
+  access_level: "ENTITY" | "GROUP" | "USER";
   is_platform_super_admin: boolean;
   failed_login_count: number;
   locked_until: Date | null;
@@ -83,6 +86,7 @@ export class UserRepository {
           u.password_hash,
           u.password_changed_at,
           u.status,
+          u.access_level,
           u.is_platform_super_admin,
           u.failed_login_count,
           u.locked_until
@@ -118,6 +122,7 @@ export class UserRepository {
         username: string;
         full_name: string;
         status: string;
+        access_level: "ENTITY" | "GROUP" | "USER";
         is_platform_super_admin: boolean;
         entity_codes: string[];
         entity_ids: string[];
@@ -136,6 +141,7 @@ export class UserRepository {
           u.username,
           u.full_name,
           u.status,
+          u.access_level,
           u.is_platform_super_admin,
           u.created_at,
           coalesce(array_remove(array_agg(distinct r.id), null), array[]::uuid[]) as role_ids,
@@ -164,6 +170,7 @@ export class UserRepository {
       username: row.username,
       fullName: row.full_name,
       status: row.status,
+      accessLevel: row.access_level,
       isPlatformSuperAdmin: row.is_platform_super_admin,
       entityCodes: row.entity_codes,
       entityIds: row.entity_ids,
@@ -282,7 +289,13 @@ export class UserRepository {
   async listAssignableOwners(input: {
     entityId: string;
     tenantId: string;
+    userIds?: string[] | undefined;
   }): Promise<AssignableOwnerListItem[]> {
+    const values: unknown[] = [input.tenantId, input.entityId];
+    const userScopePredicate =
+      input.userIds && input.userIds.length > 0
+        ? `and u.id = any($${values.push(input.userIds)}::uuid[])`
+        : "";
     const result = await this.db.query<
       QueryResultRow & {
         email: string;
@@ -294,17 +307,21 @@ export class UserRepository {
       `
         select distinct u.id, u.email, u.username, u.full_name
         from iam.users u
-        join iam.user_entity_scopes ues on ues.user_id = u.id
-        join org.entities e on e.id = ues.entity_id
+        join org.entities e on e.id = $2
+        left join iam.user_entity_scopes ues on ues.user_id = u.id and ues.entity_id = e.id
         where u.tenant_id = $1
           and u.status = 'active'
           and u.deleted_at is null
-          and ues.entity_id = $2
           and e.tenant_id = $1
           and e.deleted_at is null
+          and (
+            u.access_level = 'GROUP'
+            or ues.entity_id is not null
+          )
+          ${userScopePredicate}
         order by u.full_name asc
       `,
-      [input.tenantId, input.entityId],
+      values,
     );
 
     return result.rows.map((row) => ({
@@ -321,6 +338,7 @@ export class UserRepository {
       email: string;
       username: string;
       fullName: string;
+      accessLevel: "ENTITY" | "GROUP" | "USER";
       createdBy: string;
     },
     client?: PoolClient,
@@ -328,9 +346,9 @@ export class UserRepository {
     const row = await this.db.one<QueryResultRow & { id: string }>(
       `
         insert into iam.users (
-          tenant_id, email, username, full_name, status, created_by, updated_by
+          tenant_id, email, username, full_name, access_level, status, created_by, updated_by
         )
-        values ($1, $2, $3, $4, 'pending_password_setup', $5, $5)
+        values ($1, $2, $3, $4, $5, 'pending_password_setup', $6, $6)
         returning id
       `,
       [
@@ -338,6 +356,7 @@ export class UserRepository {
         input.email.toLowerCase(),
         input.username.toLowerCase(),
         input.fullName,
+        input.accessLevel,
         input.createdBy,
       ],
       client,
@@ -364,6 +383,30 @@ export class UserRepository {
           and deleted_at is null
       `,
       [input.userId, input.tenantId, input.status, input.updatedBy],
+      client,
+    );
+  }
+
+  async updateUserAccessLevel(
+    input: {
+      accessLevel: "ENTITY" | "GROUP" | "USER";
+      tenantId: string;
+      updatedBy: string;
+      userId: string;
+    },
+    client?: PoolClient,
+  ): Promise<void> {
+    await this.db.query(
+      `
+        update iam.users
+        set access_level = $3,
+            updated_at = now(),
+            updated_by = $4
+        where id = $1
+          and tenant_id = $2
+          and deleted_at is null
+      `,
+      [input.userId, input.tenantId, input.accessLevel, input.updatedBy],
       client,
     );
   }
@@ -582,6 +625,7 @@ export class UserRepository {
       passwordHash: row.password_hash,
       passwordChangedAt: row.password_changed_at,
       status: row.status,
+      accessLevel: row.access_level,
       isPlatformSuperAdmin: row.is_platform_super_admin,
       failedLoginCount: row.failed_login_count,
       lockedUntil: row.locked_until,

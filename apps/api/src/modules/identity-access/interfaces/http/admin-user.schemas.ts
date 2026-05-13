@@ -1,6 +1,9 @@
 import { z } from "zod";
 
+export const UserAccessLevelSchema = z.enum(["ENTITY", "GROUP", "USER"]);
+
 export const CreateUserRequestSchema = z.object({
+  accessLevel: UserAccessLevelSchema.default("USER"),
   email: z.string().email(),
   username: z.string().trim().min(2).max(80),
   fullName: z.string().trim().min(2).max(200),
@@ -20,6 +23,10 @@ export const UpdateUserStatusRequestSchema = z.object({
   status: z.enum(["active", "inactive", "locked", "pending_password_setup"]),
 });
 
+export const UpdateUserAccessLevelRequestSchema = z.object({
+  accessLevel: UserAccessLevelSchema,
+});
+
 export const AssignableOwnersQuerySchema = z.object({
   entityId: z.string().uuid(),
 });
@@ -35,6 +42,7 @@ export const ReplaceUserEntityScopesRequestSchema = z.object({
 export type CreateUserRequest = z.infer<typeof CreateUserRequestSchema>;
 export type UpdateUserProfileRequest = z.infer<typeof UpdateUserProfileRequestSchema>;
 export type AssignableOwnersQuery = z.infer<typeof AssignableOwnersQuerySchema>;
+export type UpdateUserAccessLevelRequest = z.infer<typeof UpdateUserAccessLevelRequestSchema>;
 export type UpdateUserStatusRequest = z.infer<typeof UpdateUserStatusRequestSchema>;
 export type ReplaceUserRolesRequest = z.infer<typeof ReplaceUserRolesRequestSchema>;
 export type ReplaceUserEntityScopesRequest = z.infer<

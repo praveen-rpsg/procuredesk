@@ -168,10 +168,10 @@ export class PlanningService {
   }
 
   private scope(actor: AuthenticatedUser) {
-    if (actor.isPlatformSuperAdmin || actor.permissions.includes("case.read.all")) {
+    if (actor.isPlatformSuperAdmin || actor.accessLevel === "GROUP") {
       return { actorUserId: actor.id, assignedOnly: false, entityIds: [], tenantWide: true };
     }
-    if (actor.permissions.includes("case.read.entity") || actor.permissions.includes("planning.manage")) {
+    if (actor.accessLevel === "ENTITY") {
       return {
         actorUserId: actor.id,
         assignedOnly: false,

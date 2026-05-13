@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
 
 import type { AuthenticatedUser } from "../../identity-access/domain/authenticated-user.js";
 import { OrganizationRepository } from "../infrastructure/organization.repository.js";
@@ -8,7 +8,11 @@ export class OrganizationService {
   constructor(private readonly organization: OrganizationRepository) {}
 
   listEntities(actor: AuthenticatedUser) {
-    return this.organization.listEntities(this.requireTenant(actor));
+    const tenantId = this.requireTenant(actor);
+    if (actor.isPlatformSuperAdmin || actor.accessLevel === "GROUP") {
+      return this.organization.listEntities(tenantId);
+    }
+    return this.organization.listEntities(tenantId, actor.entityIds);
   }
 
   createEntity(actor: AuthenticatedUser, input: { code: string; departments?: string[] | undefined; name: string }) {
@@ -50,6 +54,7 @@ export class OrganizationService {
   }
 
   listDepartments(actor: AuthenticatedUser, entityId: string) {
+    this.assertEntityReadable(actor, entityId);
     return this.organization.listDepartments(this.requireTenant(actor), entityId);
   }
 
@@ -93,5 +98,11 @@ export class OrganizationService {
       throw new BadRequestException("Tenant context is required.");
     }
     return actor.tenantId;
+  }
+
+  private assertEntityReadable(actor: AuthenticatedUser, entityId: string) {
+    if (actor.isPlatformSuperAdmin || actor.accessLevel === "GROUP") return;
+    if (actor.entityIds.includes(entityId)) return;
+    throw new ForbiddenException("Entity access denied.");
   }
 }

@@ -12,7 +12,7 @@ export type TableColumnControls<TRow> = {
   enableSort?: boolean;
   filterOptions?: TableFilterOption[];
   filterValue?: (row: TRow) => ReactNode;
-  header: string;
+  header: ReactNode;
   key: string;
   render: (row: TRow) => ReactNode;
   sortValue?: (row: TRow) => ReactNode;
@@ -72,7 +72,7 @@ export function nextSortState(key: string, current: TableSortState): TableSortSt
 }
 
 function isDataColumn<TRow>(column: TableColumnControls<TRow>): boolean {
-  return Boolean(column.header.trim()) && !["actions", "select"].includes(column.key);
+  return Boolean(textFromNode(column.header).trim()) && !["actions", "select"].includes(column.key);
 }
 
 function getColumnText<TRow>(row: TRow, column: TableColumnControls<TRow>): string {

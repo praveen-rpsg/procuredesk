@@ -473,16 +473,23 @@ export class ProcurementCaseService {
     ownerUserId: string,
   ) {
     const tenantId = this.requireTenant(actor);
-    const ownerEntityIds = await this.repository.getCaseOwnerEntityScopes(ownerUserId, tenantId);
+    const owner = await this.repository.getCaseOwnerAssignmentProfile(ownerUserId, tenantId);
+    if (!owner) {
+      throw new ForbiddenException("Owner must be an active tenant user.");
+    }
     const allowed = new CaseAssignmentPolicy().canAssignOwner({
+      actorAccessLevel: actor.accessLevel,
       actorEntityIds: actor.entityIds,
       actorIsPlatformSuperAdmin: actor.isPlatformSuperAdmin,
       actorPermissions: actor.permissions,
-      ownerEntityIds,
+      actorUserId: actor.id,
+      ownerAccessLevel: owner.accessLevel,
+      ownerEntityIds: owner.entityIds,
+      ownerUserId: owner.userId,
       targetEntityId: entityId,
     });
     if (!allowed) {
-      throw new ForbiddenException("Owner must be an active user mapped to the same entity.");
+      throw new ForbiddenException("Owner assignment is not allowed for this entity.");
     }
   }
 

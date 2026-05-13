@@ -9,7 +9,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Pencil,
-  ShieldCheck,
   UploadCloud,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -23,7 +22,6 @@ import { Drawer } from "../../shared/ui/drawer/Drawer";
 import { Skeleton } from "../../shared/ui/skeleton/Skeleton";
 import { DashboardPage } from "../../features/dashboard/pages/DashboardPage";
 import { ImportExportWorkspace } from "../../features/import-export/pages/ImportExportWorkspace";
-import { OperationsWorkspace } from "../../features/operations/pages/OperationsWorkspace";
 import { PlanningWorkspace } from "../../features/planning/pages/PlanningWorkspace";
 import { ProfileDrawer } from "../../features/profile/components/ProfileDrawer";
 import { CasesWorkspace } from "../../features/procurement-cases/pages/CasesWorkspace";
@@ -55,7 +53,6 @@ const navigation = [
   { key: "planning", label: "Planning", icon: Activity, path: "/planning" },
   { key: "reports", label: "Reports", icon: BarChart3, path: "/reports" },
   { key: "imports", label: "Imports", icon: UploadCloud, path: "/imports" },
-  { key: "operations", label: "Operations", icon: ShieldCheck, path: "/operations" },
   { key: "admin", label: "Admin", icon: Building2, path: "/admin/overview" },
 ] satisfies Array<{
   icon: LucideIcon;
@@ -90,8 +87,6 @@ const renderWorkspace = (
       return <CasesWorkspace />;
     case "imports":
       return <ImportExportWorkspace />;
-    case "operations":
-      return <OperationsWorkspace />;
     case "planning":
       return <PlanningWorkspace />;
     case "reports":
@@ -368,7 +363,7 @@ function workspaceFromPath(pathname: string): RouteWorkspace {
   if (pathname === "/planning" || pathname.startsWith("/planning/")) return "planning";
   if (pathname === "/reports" || pathname.startsWith("/reports/")) return "reports";
   if (pathname === "/imports" || pathname.startsWith("/imports/")) return "imports";
-  if (pathname === "/operations" || pathname.startsWith("/operations/")) return "operations";
+  if (pathname === "/operations" || pathname.startsWith("/operations/")) return "admin";
   if (pathname === "/admin" || pathname.startsWith("/admin/")) return "admin";
   return "not-found";
 }

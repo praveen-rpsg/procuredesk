@@ -18,6 +18,7 @@ export type ReportQueryParams = {
   dateFrom?: string;
   dateTo?: string;
   delayStatus?: "delayed" | "on_time";
+  deletedOnly?: boolean;
   departmentIds?: string[];
   entityIds?: string[];
   limit?: number;
@@ -97,11 +98,14 @@ export type ReportCaseRow = {
   caseId: string;
   completedCycleTimeDays: number | null;
   completionFy: string | null;
+  currentStageAgingDays: number | null;
+  delayReason: string | null;
   departmentName: string | null;
   desiredStageCode: number | null;
   entityCode: string | null;
   entityId: string;
   entityName: string | null;
+  estimateBenchmark: number | null;
   isDelayed: boolean;
   loiAwardDate: string | null;
   loiAwarded: boolean;
@@ -128,34 +132,67 @@ export type ReportCaseRow = {
 };
 
 export type VendorAwardReportRow = {
+  approvedAmount: number | null;
   awardId: string;
   caseId: string;
+  departmentName: string | null;
+  entityCode: string | null;
   entityId: string;
+  entityName: string | null;
+  ownerFullName: string | null;
   poAwardDate: string | null;
   poNumber: string | null;
   poValue: number | null;
   poValidityDate: string | null;
   prId: string;
+  tenderNo: string | null;
   tenderName: string | null;
+  vendorCode: string | null;
   vendorName: string;
 };
 
 export type StageTimeRow = {
-  averageRunningAgeDays: number | null;
-  caseCount: number;
+  bidEvaluationTimeDays: number | null;
+  bidReceiptTimeDays: number | null;
+  caseId: string;
+  contractIssuanceTimeDays: number | null;
+  currentStageAgingDays: number | null;
+  cycleTimeDays: number | null;
+  entityCode: string | null;
+  entityId: string;
+  entityName: string | null;
+  loiAwarded: boolean;
+  negotiationNfaSubmissionTimeDays: number | null;
+  nfaApprovalTimeDays: number | null;
+  nitPublishTimeDays: number | null;
+  ownerFullName: string | null;
+  prId: string;
+  prReviewTimeDays: number | null;
+  priorityCase: boolean;
+  runningAgeDays: number | null;
   stageCode: number;
+  tenderName: string | null;
+  tenderNo: string | null;
+  tenderTypeName: string | null;
 };
 
 export type ContractExpiryReportRow = {
   awardedVendors: string | null;
+  departmentName: string | null;
   daysToExpiry: number;
+  entityCode: string | null;
   entityId: string;
+  entityName: string | null;
+  ownerFullName: string | null;
+  rcPoAwardDate: string | null;
   rcPoAmount: number | null;
   rcPoValidityDate: string;
+  sourceCaseId: string | null;
   sourceId: string;
   sourceType: "case_award" | "manual_plan";
   tenderDescription: string | null;
   tenderFloatedOrNotRequired: boolean;
+  tentativeTenderingDate: string | null;
 };
 
 export type SavedReportView = {
@@ -220,6 +257,20 @@ export function listRcPoExpiryReport(params: ReportQueryParams = {}) {
   return apiRequest<ContractExpiryReportRow[]>(`/reports/rc-po-expiry${buildReportQuery(params)}`);
 }
 
+export function updateRcPoExpiryReportRow(
+  sourceType: ContractExpiryReportRow["sourceType"],
+  sourceId: string,
+  payload: {
+    tenderFloatedOrNotRequired?: boolean | undefined;
+    tentativeTenderingDate?: string | null | undefined;
+  },
+) {
+  return apiRequest<ContractExpiryReportRow>(`/reports/rc-po-expiry/${sourceType}/${sourceId}`, {
+    body: JSON.stringify(payload),
+    method: "PATCH",
+  });
+}
+
 export function listSavedViews(params: { reportCode?: ReportCode } = {}) {
   const search = new URLSearchParams();
   if (params.reportCode) search.set("reportCode", params.reportCode);
@@ -273,6 +324,7 @@ function buildReportQuery(params: ReportQueryParams) {
   if (params.dateFrom) search.set("dateFrom", params.dateFrom);
   if (params.dateTo) search.set("dateTo", params.dateTo);
   if (params.delayStatus) search.set("delayStatus", params.delayStatus);
+  setBooleanParam(search, "deletedOnly", params.deletedOnly);
   setCsvParam(search, "departmentIds", params.departmentIds);
   setCsvParam(search, "entityIds", params.entityIds);
   if (params.limit != null) search.set("limit", String(params.limit));

@@ -38,36 +38,7 @@ export class AuditRepository {
     targetType?: string;
     tenantId: string;
   }): Promise<AuditEventRecord[]> {
-    const values: unknown[] = [input.tenantId];
-    const where = ["ae.tenant_id = $1"];
-    if (input.action) {
-      values.push(input.action);
-      where.push(`ae.action = $${values.length}`);
-    }
-    if (input.actorUserId) {
-      values.push(input.actorUserId);
-      where.push(`ae.actor_user_id = $${values.length}`);
-    }
-    if (input.targetType) {
-      values.push(input.targetType);
-      where.push(`ae.target_type = $${values.length}`);
-    }
-    if (input.targetId) {
-      values.push(input.targetId);
-      where.push(`ae.target_id = $${values.length}`);
-    }
-    if (input.q) {
-      values.push(`%${input.q}%`);
-      where.push(`
-        (
-          ae.summary ilike $${values.length}
-          or ae.action::text ilike $${values.length}
-          or ae.target_type::text ilike $${values.length}
-          or u.username ilike $${values.length}
-          or u.full_name ilike $${values.length}
-        )
-      `);
-    }
+    const { values, where } = this.auditWhere(input);
     values.push(input.limit);
     const limitPosition = values.length;
     values.push(input.offset);
@@ -98,6 +69,85 @@ export class AuditRepository {
       values,
     );
     return result.rows.map((row) => this.mapEvent(row));
+  }
+
+  async listEventsPage(input: {
+    action?: string;
+    actorUserId?: string;
+    limit: number;
+    offset: number;
+    q?: string;
+    targetId?: string;
+    targetType?: string;
+    tenantId: string;
+  }): Promise<{ rows: AuditEventRecord[]; total: number }> {
+    const [rows, total] = await Promise.all([
+      this.listEvents(input),
+      this.countEvents(input),
+    ]);
+    return { rows, total };
+  }
+
+  private async countEvents(input: {
+    action?: string;
+    actorUserId?: string;
+    q?: string;
+    targetId?: string;
+    targetType?: string;
+    tenantId: string;
+  }): Promise<number> {
+    const { values, where } = this.auditWhere(input);
+    const row = await this.db.one<QueryResultRow & { total: string }>(
+      `
+        select count(*)::text as total
+        from ops.audit_events ae
+        left join iam.users u on u.id = ae.actor_user_id
+        where ${where.join(" and ")}
+      `,
+      values,
+    );
+    return Number(row?.total ?? 0);
+  }
+
+  private auditWhere(input: {
+    action?: string;
+    actorUserId?: string;
+    q?: string;
+    targetId?: string;
+    targetType?: string;
+    tenantId: string;
+  }) {
+    const values: unknown[] = [input.tenantId];
+    const where = ["ae.tenant_id = $1"];
+    if (input.action) {
+      values.push(input.action);
+      where.push(`ae.action = $${values.length}`);
+    }
+    if (input.actorUserId) {
+      values.push(input.actorUserId);
+      where.push(`ae.actor_user_id = $${values.length}`);
+    }
+    if (input.targetType) {
+      values.push(input.targetType);
+      where.push(`ae.target_type = $${values.length}`);
+    }
+    if (input.targetId) {
+      values.push(input.targetId);
+      where.push(`ae.target_id = $${values.length}`);
+    }
+    if (input.q) {
+      values.push(`%${input.q}%`);
+      where.push(`
+        (
+          ae.summary ilike $${values.length}
+          or ae.action::text ilike $${values.length}
+          or ae.target_type::text ilike $${values.length}
+          or u.username ilike $${values.length}
+          or u.full_name ilike $${values.length}
+        )
+      `);
+    }
+    return { values, where };
   }
 
   async getEvent(tenantId: string, eventId: string): Promise<AuditEventRecord | null> {

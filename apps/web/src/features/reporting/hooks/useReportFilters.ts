@@ -16,6 +16,7 @@ export type ReportFiltersState = {
   dateFrom: string;
   dateTo: string;
   delayStatus: "all" | "delayed" | "on_time";
+  deletedOnly: boolean;
   exportFilters: Record<string, unknown>;
   loiAwarded: "all" | "false" | "true";
   priorityCase: boolean;
@@ -39,6 +40,7 @@ export type ReportFiltersState = {
   setDateFrom: (v: string) => void;
   setDateTo: (v: string) => void;
   setDelayStatus: (v: "all" | "delayed" | "on_time") => void;
+  setDeletedOnly: (v: boolean) => void;
   setLoiAwarded: (v: "all" | "false" | "true") => void;
   setPriorityCase: (v: boolean) => void;
   setSearchTerm: (v: string) => void;
@@ -63,6 +65,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [delayStatus, setDelayStatus] = useState<"all" | "delayed" | "on_time">("all");
+  const [deletedOnly, setDeletedOnly] = useState(false);
   const [loiAwarded, setLoiAwarded] = useState<"all" | "false" | "true">("all");
   const [priorityCase, setPriorityCase] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -81,15 +84,17 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 350);
 
   const includeStatus = reportCode === "tender_details" || reportCode === "stage_time";
+  const includeCompletionFilters = reportCode !== "running";
 
   const filterBase = useMemo(
     () => ({
-      completionFys: selectedCompletionFys,
-      completionMonths: selectedCompletionMonths,
+      completionFys: includeCompletionFilters ? selectedCompletionFys : [],
+      completionMonths: includeCompletionFilters ? selectedCompletionMonths : [],
       cpcInvolved: cpcInvolved === "any" ? undefined : cpcInvolved === "true",
       dateFrom,
       dateTo,
       delayStatus: delayStatus === "all" ? undefined : delayStatus,
+      deletedOnly: deletedOnly ? true : undefined,
       departmentIds: selectedDepartmentIds,
       entityIds: selectedEntityIds,
       includeStatus,
@@ -109,9 +114,11 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
       dateFrom,
       dateTo,
       delayStatus,
+      deletedOnly,
       loiAwarded,
       priorityCase,
       includeStatus,
+      includeCompletionFilters,
       selectedBudgetTypeIds,
       selectedCompletionFys,
       selectedCompletionMonths,
@@ -161,6 +168,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
     setCpcInvolved("any");
     setLoiAwarded("all");
     setDelayStatus("all");
+    setDeletedOnly(false);
     setPriorityCase(false);
     setSelectedStageCodes([]);
     setSelectedCompletionFys([]);
@@ -176,6 +184,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
     dateFrom,
     dateTo,
     delayStatus,
+    deletedOnly,
     exportFilters,
     loiAwarded,
     priorityCase,
@@ -199,6 +208,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
     setDateFrom,
     setDateTo,
     setDelayStatus,
+    setDeletedOnly,
     setLoiAwarded,
     setPriorityCase,
     setSearchTerm,

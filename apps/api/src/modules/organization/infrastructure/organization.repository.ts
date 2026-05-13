@@ -25,7 +25,10 @@ export type DepartmentRecord = {
 export class OrganizationRepository {
   constructor(private readonly db: DatabaseService) {}
 
-  async listEntities(tenantId: string): Promise<EntityRecord[]> {
+  async listEntities(tenantId: string, entityIds?: string[] | undefined): Promise<EntityRecord[]> {
+    const values: unknown[] = [tenantId];
+    const entityScopePredicate =
+      entityIds && entityIds.length > 0 ? `and e.id = any($${values.push(entityIds)}::uuid[])` : "";
     const result = await this.db.query<
       QueryResultRow & {
         code: string;
@@ -69,9 +72,10 @@ export class OrganizationRepository {
         left join tender_summary ts on ts.entity_id = e.id
         where e.tenant_id = $1
           and e.deleted_at is null
+          ${entityScopePredicate}
         order by e.code asc
       `,
-      [tenantId],
+      values,
     );
 
     return result.rows.map((row) => ({

@@ -28,6 +28,11 @@ const dateString = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
   .optional();
+const nullableDateString = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .nullable()
+  .optional();
 
 export const ReportQuerySchema = z.object({
   budgetTypeIds: csvUuidList,
@@ -37,6 +42,7 @@ export const ReportQuerySchema = z.object({
   dateFrom: dateString,
   dateTo: dateString,
   delayStatus: z.enum(["delayed", "on_time"]).optional(),
+  deletedOnly: z.enum(["true", "false"]).optional().transform((value) => value === undefined ? undefined : value === "true"),
   departmentIds: csvUuidList,
   entityIds: csvUuidList,
   limit: z.coerce.number().int().min(1).max(100).optional(),
@@ -67,6 +73,13 @@ export const CreateExportJobRequestSchema = z.object({
   selectedIds: z.array(z.string().trim().min(1).max(100)).max(500).optional(),
 });
 
+export const RcPoExpirySourceTypeSchema = z.enum(["case_award", "manual_plan"]);
+
+export const UpdateRcPoExpiryRowRequestSchema = z.object({
+  tenderFloatedOrNotRequired: z.boolean().optional(),
+  tentativeTenderingDate: nullableDateString,
+}).refine((value) => Object.keys(value).length > 0, "At least one field is required.");
+
 export const SavedViewsQuerySchema = z.object({
   reportCode: ReportCodeSchema.optional(),
 });
@@ -74,4 +87,6 @@ export const SavedViewsQuerySchema = z.object({
 export type CreateExportJobRequest = z.infer<typeof CreateExportJobRequestSchema>;
 export type CreateSavedViewRequest = z.infer<typeof CreateSavedViewRequestSchema>;
 export type ReportQuery = z.infer<typeof ReportQuerySchema>;
+export type RcPoExpirySourceType = z.infer<typeof RcPoExpirySourceTypeSchema>;
 export type SavedViewsQuery = z.infer<typeof SavedViewsQuerySchema>;
+export type UpdateRcPoExpiryRowRequest = z.infer<typeof UpdateRcPoExpiryRowRequestSchema>;

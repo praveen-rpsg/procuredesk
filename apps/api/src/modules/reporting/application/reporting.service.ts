@@ -82,6 +82,44 @@ export class ReportingService {
     });
   }
 
+  async updateRcPoExpiryRow(
+    actor: AuthenticatedUser,
+    sourceType: "case_award" | "manual_plan",
+    sourceId: string,
+    input: {
+      tenderFloatedOrNotRequired?: boolean | undefined;
+      tentativeTenderingDate?: string | null | undefined;
+    },
+  ) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "planning.manage");
+    const target = await this.repository.rcPoExpiryEditTarget(tenantId, sourceType, sourceId);
+    if (!target) throw new NotFoundException("RC/PO expiry row not found.");
+    this.assertRcPoEditAllowed(actor, target.entityId);
+    const row = await this.repository.updateRcPoExpiryRow({
+      ...input,
+      actorUserId: actor.id,
+      sourceId,
+      sourceType,
+      tenantId,
+    });
+    if (!row) throw new NotFoundException("RC/PO expiry row not found.");
+    await this.audit.write({
+      action: "report.rc_po_expiry.update",
+      actorUserId: actor.id,
+      details: {
+        sourceType,
+        tenderFloatedOrNotRequired: input.tenderFloatedOrNotRequired,
+        tentativeTenderingDate: input.tentativeTenderingDate,
+      },
+      summary: "Updated RC/PO expiry row",
+      targetId: sourceId,
+      targetType: sourceType,
+      tenantId,
+    });
+    return row;
+  }
+
   async filterMetadata(actor: AuthenticatedUser) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "report.read");
@@ -226,10 +264,10 @@ export class ReportingService {
   }
 
   private scope(actor: AuthenticatedUser) {
-    if (actor.isPlatformSuperAdmin || actor.permissions.includes("case.read.all")) {
+    if (actor.isPlatformSuperAdmin || actor.accessLevel === "GROUP") {
       return { actorUserId: actor.id, assignedOnly: false, entityIds: [], tenantWide: true };
     }
-    if (actor.permissions.includes("case.read.entity")) {
+    if (actor.accessLevel === "ENTITY") {
       return {
         actorUserId: actor.id,
         assignedOnly: false,
@@ -257,6 +295,12 @@ export class ReportingService {
     if (!actor.isPlatformSuperAdmin && !actor.permissions.includes(permission)) {
       throw new ForbiddenException("Missing required permission.");
     }
+  }
+
+  private assertRcPoEditAllowed(actor: AuthenticatedUser, entityId: string) {
+    if (actor.isPlatformSuperAdmin || actor.permissions.includes("case.update.all")) return;
+    if (actor.entityIds.includes(entityId)) return;
+    throw new ForbiddenException("RC/PO expiry updates are restricted to mapped entities.");
   }
 
   private requireTenant(actor: AuthenticatedUser): string {

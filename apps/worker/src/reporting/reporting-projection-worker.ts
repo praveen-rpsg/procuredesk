@@ -13,11 +13,7 @@ export async function processReportingProjection(
   const { aggregateId, eventType, tenantId } = payload;
 
   if (eventType.startsWith("procurement_case.")) {
-    if (eventType === "procurement_case.deleted") {
-      await deleteCaseFact(tenantId, aggregateId, deps.pool);
-    } else {
-      await upsertCaseFact(tenantId, aggregateId, deps.pool);
-    }
+    await upsertCaseFact(tenantId, aggregateId, deps.pool);
     await refreshContractExpiryForCase(tenantId, aggregateId, deps.pool);
   } else if (eventType.startsWith("case_award.")) {
     const caseId = await getCaseIdForAward(aggregateId, deps.pool);
@@ -103,7 +99,6 @@ async function upsertCaseFact(tenantId: string, caseId: string, pool: Pool): Pro
       left join procurement.case_milestones m on m.case_id = c.id
       where c.tenant_id = $1
         and c.id = $2
-        and c.deleted_at is null
       on conflict (case_id) do update
       set entity_id = excluded.entity_id,
           department_id = excluded.department_id,
@@ -135,13 +130,6 @@ async function upsertCaseFact(tenantId: string, caseId: string, pool: Pool): Pro
   );
 }
 
-async function deleteCaseFact(tenantId: string, caseId: string, pool: Pool): Promise<void> {
-  await pool.query(
-    "delete from reporting.case_facts where tenant_id = $1 and case_id = $2",
-    [tenantId, caseId],
-  );
-}
-
 async function getCaseIdForAward(awardId: string, pool: Pool): Promise<string | null> {
   const result = await pool.query<{ case_id: string }>(
     "select case_id from procurement.case_awards where id = $1 limit 1",
@@ -159,9 +147,9 @@ async function refreshContractExpiryForCase(tenantId: string, caseId: string, po
       [tenantId, caseId],
     );
     await client.query(
-      `
+        `
         insert into reporting.contract_expiry_facts (
-          tenant_id, case_id, entity_id, department_id, owner_user_id,
+          tenant_id, case_id, case_award_id, entity_id, department_id, owner_user_id,
           tender_description, awarded_vendors, rc_po_amount, rc_po_award_date,
           rc_po_validity_date, tentative_tendering_date,
           tender_floated_or_not_required, source_type, updated_at
@@ -169,6 +157,7 @@ async function refreshContractExpiryForCase(tenantId: string, caseId: string, po
         select
           c.tenant_id,
           c.id,
+          a.id,
           c.entity_id,
           c.department_id,
           c.owner_user_id,
@@ -177,8 +166,8 @@ async function refreshContractExpiryForCase(tenantId: string, caseId: string, po
           a.po_value,
           a.po_award_date,
           a.po_validity_date,
-          null::date,
-          false,
+          a.tentative_tendering_date,
+          a.tender_floated_or_not_required,
           'case_award',
           now()
         from procurement.case_awards a

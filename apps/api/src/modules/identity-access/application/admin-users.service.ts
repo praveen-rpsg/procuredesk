@@ -33,7 +33,19 @@ export class AdminUsersService {
     entityId: string,
   ): Promise<AssignableOwnerListItem[]> {
     const tenantId = this.requireTenant(actor);
-    return this.users.listAssignableOwners({ entityId, tenantId });
+    const canChooseAcrossOwners =
+      actor.isPlatformSuperAdmin ||
+      actor.accessLevel === "GROUP" ||
+      actor.permissions.includes("case.update.all") ||
+      (actor.accessLevel === "ENTITY" && actor.entityIds.includes(entityId));
+    if (!canChooseAcrossOwners && !actor.entityIds.includes(entityId)) {
+      throw new ForbiddenException("Entity access denied.");
+    }
+    return this.users.listAssignableOwners({
+      entityId,
+      tenantId,
+      userIds: canChooseAcrossOwners ? undefined : [actor.id],
+    });
   }
 
   async createPendingUser(
@@ -46,11 +58,13 @@ export class AdminUsersService {
       roleIds?: string[] | undefined;
       status?: "active" | "inactive" | "pending_password_setup" | undefined;
       username: string;
+      accessLevel: "ENTITY" | "GROUP" | "USER";
     },
   ): Promise<{ id: string }> {
     const tenantId = this.requireTenant(actor);
     const requestedStatus = input.status ?? "pending_password_setup";
     const password = input.password?.trim() ?? "";
+    this.assertAccessLevelAllowed(input.accessLevel, input.entityIds ?? []);
     await this.assertRoleAssignmentAllowed(tenantId, input.roleIds ?? [], input.entityIds ?? []);
 
     if (requestedStatus === "active" && !password) {
@@ -74,6 +88,7 @@ export class AdminUsersService {
           email: input.email,
           username: input.username,
           fullName: input.fullName,
+          accessLevel: input.accessLevel,
           createdBy: actor.id,
         },
         client,
@@ -126,6 +141,7 @@ export class AdminUsersService {
       details: {
         email: input.email,
         entityIds: input.entityIds ?? [],
+        accessLevel: input.accessLevel,
         roleIds: input.roleIds ?? [],
         status: requestedStatus,
         username: input.username,
@@ -176,6 +192,33 @@ export class AdminUsersService {
     });
   }
 
+  async updateAccessLevel(
+    actor: AuthenticatedUser,
+    input: { accessLevel: "ENTITY" | "GROUP" | "USER"; userId: string },
+  ): Promise<void> {
+    const tenantId = this.requireTenant(actor);
+    const before = await this.users.findTenantUserAccess({ tenantId, userId: input.userId });
+    this.assertAccessLevelAllowed(input.accessLevel, before?.entityIds ?? []);
+    await this.users.updateUserAccessLevel({
+      tenantId,
+      userId: input.userId,
+      accessLevel: input.accessLevel,
+      updatedBy: actor.id,
+    });
+    await this.audit.write({
+      action: "user.access_level.update",
+      actorUserId: actor.id,
+      details: {
+        afterAccessLevel: input.accessLevel,
+        beforeAccessLevel: before?.accessLevel ?? null,
+      },
+      summary: `${actor.username} changed user access level`,
+      targetId: input.userId,
+      targetType: "User",
+      tenantId,
+    });
+  }
+
   async replaceRoles(
     actor: AuthenticatedUser,
     input: { userId: string; roleIds: string[] },
@@ -212,6 +255,7 @@ export class AdminUsersService {
   ): Promise<void> {
     const tenantId = this.requireTenant(actor);
     const before = await this.users.findTenantUserAccess({ tenantId, userId: input.userId });
+    this.assertAccessLevelAllowed(before?.accessLevel ?? "USER", input.entityIds);
     await this.db.transaction(async (client) => {
       await this.users.replaceEntityScopes(
         {
@@ -262,6 +306,12 @@ export class AdminUsersService {
     }
   }
 
+  private assertAccessLevelAllowed(accessLevel: "ENTITY" | "GROUP" | "USER", entityIds: string[]) {
+    if (accessLevel === "ENTITY" && entityIds.length === 0) {
+      throw new BadRequestException("Select at least one mapped entity for ENTITY access.");
+    }
+  }
+
   private async assertNotRemovingLastTenantAdminByStatus(
     tenantId: string,
     userId: string,
@@ -293,6 +343,13 @@ export class AdminUsersService {
 }
 
 function roleNeedsEntityScope(role: { permissionCodes: string[] }) {
+  if (
+    role.permissionCodes.some((permission) =>
+      ["case.read.all", "case.update.all", "tenant.manage", "user.manage"].includes(permission),
+    )
+  ) {
+    return false;
+  }
   return role.permissionCodes.some((permission) =>
     [
       "case.create",

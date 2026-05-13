@@ -363,8 +363,8 @@ export class PlanningRepository {
             a.po_value as rc_po_amount,
             a.po_award_date as rc_po_award_date,
             a.po_validity_date as rc_po_validity_date,
-            null::date as tentative_tendering_date,
-            false as tender_floated_or_not_required
+            a.tentative_tendering_date,
+            a.tender_floated_or_not_required
           from procurement.case_awards a
           join procurement.cases c on c.id = a.case_id and c.deleted_at is null
           where ${awardWhere.join(" and ")}

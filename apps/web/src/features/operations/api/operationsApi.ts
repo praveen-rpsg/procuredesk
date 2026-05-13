@@ -30,6 +30,11 @@ export type NotificationRule = {
   updatedAt: string;
 };
 
+export type NotificationStatus = {
+  deliveryMode: "microsoft_graph" | "stub";
+  graphConfigured: boolean;
+};
+
 export type DeadLetterEvent = {
   attempts: number;
   createdAt: string;
@@ -62,6 +67,10 @@ export function notificationPreview(type: "entity_monthly_digest" | "rc_po_expir
 
 export function listNotificationRules() {
   return apiRequest<NotificationRule[]>("/notifications/rules");
+}
+
+export function getNotificationStatus() {
+  return apiRequest<NotificationStatus>("/notifications/status");
 }
 
 export function updateNotificationRule(payload: {

@@ -21,6 +21,11 @@ export type AuditFilterMetadata = {
   targetTypes: string[];
 };
 
+export type AuditEventsPage = {
+  rows: AuditEvent[];
+  total: number;
+};
+
 export function listAdminAuditEvents(params: {
   action?: string | undefined;
   limit?: number | undefined;
@@ -35,6 +40,23 @@ export function listAdminAuditEvents(params: {
   if (params.q) search.set("q", params.q);
   if (params.targetType) search.set("targetType", params.targetType);
   return apiRequest<AuditEvent[]>(`/audit/events?${search.toString()}`);
+}
+
+export function listAdminAuditEventsPage(params: {
+  action?: string | undefined;
+  limit?: number | undefined;
+  offset?: number | undefined;
+  q?: string | undefined;
+  targetType?: string | undefined;
+} = {}) {
+  const search = new URLSearchParams();
+  search.set("includeTotal", "true");
+  search.set("limit", String(params.limit ?? 50));
+  search.set("offset", String(params.offset ?? 0));
+  if (params.action) search.set("action", params.action);
+  if (params.q) search.set("q", params.q);
+  if (params.targetType) search.set("targetType", params.targetType);
+  return apiRequest<AuditEventsPage>(`/audit/events?${search.toString()}`);
 }
 
 export function getAdminAuditFilterMetadata() {

@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { Eye, FileClock, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
+import { Eye, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 
 import {
   getAdminAuditFilterMetadata,
-  listAdminAuditEvents,
+  listAdminAuditEventsPage,
   type AuditEvent,
 } from "./adminAuditApi";
 import { Button } from "../../../shared/ui/button/Button";
@@ -43,7 +43,7 @@ export function AdminAuditPage() {
   });
   const auditEvents = useQuery({
     queryFn: () =>
-      listAdminAuditEvents({
+      listAdminAuditEventsPage({
         action: appliedFilters.action || undefined,
         limit: pageSize,
         offset: appliedFilters.offset,
@@ -88,7 +88,13 @@ export function AdminAuditPage() {
     setAppliedFilters(emptyFilters);
   };
 
-  const rows = auditEvents.data ?? [];
+  const rows = auditEvents.data?.rows ?? [];
+  const totalRows = auditEvents.data?.total ?? 0;
+  const currentPage = Math.floor(appliedFilters.offset / pageSize) + 1;
+  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
+  const rangeStart = totalRows === 0 ? 0 : appliedFilters.offset + 1;
+  const rangeEnd = Math.min(appliedFilters.offset + rows.length, totalRows);
+  const hasNextPage = appliedFilters.offset + rows.length < totalRows;
 
   return (
     <section className="admin-section">
@@ -97,25 +103,6 @@ export function AdminAuditPage() {
       </PageHeader>
 
       <div className="admin-stack">
-        <section className="audit-summary-band">
-          <div className="tender-type-rule-copy">
-            <span className="admin-section-nav-icon">
-              <FileClock size={18} />
-            </span>
-            <div>
-              <p className="eyebrow">Traceability</p>
-              <h2>Tenant Activity Trail</h2>
-              <p>
-                <strong>{rows.length}</strong>
-                <span>visible events</span>
-                <strong>{appliedFilters.offset + 1}</strong>
-                <span>page start</span>
-              </p>
-            </div>
-          </div>
-          <StatusBadge tone="success">Admin only</StatusBadge>
-        </section>
-
         <section className="state-panel">
           <div className="detail-header">
             <div>
@@ -165,7 +152,7 @@ export function AdminAuditPage() {
           </form>
         </section>
 
-        <section className="state-panel">
+        <section className="state-panel audit-events-panel">
           <div className="detail-header">
             <div>
               <p className="eyebrow">Events</p>
@@ -201,11 +188,11 @@ export function AdminAuditPage() {
                   Previous
                 </Button>
                 <span>
-                  Showing {appliedFilters.offset + 1} - {appliedFilters.offset + rows.length}
+                  Page {currentPage} of {totalPages} · Showing {rangeStart} - {rangeEnd} of {totalRows}
                 </span>
                 <Button
                   variant="secondary"
-                  disabled={rows.length < pageSize}
+                  disabled={!hasNextPage}
                   onClick={() =>
                     setAppliedFilters((current) => ({
                       ...current,

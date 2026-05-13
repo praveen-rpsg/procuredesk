@@ -12,12 +12,14 @@ import {
   CreateUserRequestSchema,
   ReplaceUserEntityScopesRequestSchema,
   ReplaceUserRolesRequestSchema,
+  UpdateUserAccessLevelRequestSchema,
   UpdateUserProfileRequestSchema,
   UpdateUserStatusRequestSchema,
   type AssignableOwnersQuery,
   type CreateUserRequest,
   type ReplaceUserEntityScopesRequest,
   type ReplaceUserRolesRequest,
+  type UpdateUserAccessLevelRequest,
   type UpdateUserProfileRequest,
   type UpdateUserStatusRequest,
 } from "./admin-user.schemas.js";
@@ -34,7 +36,7 @@ export class AdminUsersController {
   }
 
   @Get("assignable-owners")
-  @RequirePermissions("case.create")
+  @RequirePermissions("case.read.assigned")
   listAssignableOwners(
     @CurrentUser() user: AuthenticatedUser,
     @Query(new ZodValidationPipe(AssignableOwnersQuerySchema))
@@ -72,6 +74,17 @@ export class AdminUsersController {
     body: UpdateUserStatusRequest,
   ) {
     return this.adminUsers.updateStatus(user, { userId, status: body.status });
+  }
+
+  @Patch(":userId/access-level")
+  @RequirePermissions("user.manage")
+  updateAccessLevel(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("userId", ParseUUIDPipe) userId: string,
+    @Body(new ZodValidationPipe(UpdateUserAccessLevelRequestSchema))
+    body: UpdateUserAccessLevelRequest,
+  ) {
+    return this.adminUsers.updateAccessLevel(user, { userId, accessLevel: body.accessLevel });
   }
 
   @Put(":userId/roles")

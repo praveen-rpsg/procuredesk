@@ -386,7 +386,12 @@ export class ImportExportRepository {
             r.normalized_payload->>'fullName' as full_name,
             r.normalized_payload->>'contactNo' as contact_no,
             r.normalized_payload->>'entityCode' as entity_code,
-            r.normalized_payload->>'accessLevelRequired' as access_level
+            r.normalized_payload->>'accessLevelRequired' as access_level,
+            case
+              when lower(r.normalized_payload->>'accessLevelRequired') in ('group', 'group viewer', 'group_viewer', 'tenant admin', 'tenant_admin', 'report viewer', 'report_viewer') then 'GROUP'
+              when lower(r.normalized_payload->>'accessLevelRequired') in ('entity', 'entity manager', 'entity_manager') then 'ENTITY'
+              else 'USER'
+            end as data_access_level
           from ops.import_job_rows r
           where r.import_job_id = $2
             and r.status = 'accepted'
@@ -394,7 +399,7 @@ export class ImportExportRepository {
         upserted_users as (
           insert into iam.users (
             tenant_id, email, username, full_name, contact_no,
-            status, created_by, updated_by
+            access_level, status, created_by, updated_by
           )
           select
             $1,
@@ -402,6 +407,7 @@ export class ImportExportRepository {
             n.username,
             n.full_name,
             nullif(n.contact_no, ''),
+            n.data_access_level,
             'pending_password_setup',
             $3,
             $3
@@ -410,6 +416,7 @@ export class ImportExportRepository {
           do update set
             full_name = excluded.full_name,
             contact_no = excluded.contact_no,
+            access_level = excluded.access_level,
             updated_at = now(),
             updated_by = $3
           returning id, email

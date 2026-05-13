@@ -24,9 +24,11 @@ import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import {
   getExportDownloadUrl,
   refreshReportProjections,
+  updateRcPoExpiryReportRow,
   type ContractExpiryReportRow,
   type ExportJobListItem,
   type ExportJobStatus,
+  type ReportCode,
   type ReportCaseRow,
   type ReportingAnalytics,
   type SavedReportView,
@@ -50,7 +52,7 @@ import {
   type ReportViewKey,
 } from "../utils/reportUtils";
 import { useAuth } from "../../../shared/auth/AuthProvider";
-import { canExportReports } from "../../../shared/auth/permissions";
+import { canExportReports, canManagePlanning } from "../../../shared/auth/permissions";
 import { formatCaseStage } from "../../../shared/utils/caseStage";
 import { Button } from "../../../shared/ui/button/Button";
 import { navigateToAppPath, useAppLocation } from "../../../shared/routing/appLocation";
@@ -82,10 +84,12 @@ export function ReportsWorkspace() {
   const isSavedViewsView = activeReport === "saved_views";
   const isInvalidReportPath = reportView === null && location.pathname !== "/reports";
   const canExport = canExportReports(user);
+  const canEditRcPoExpiry = canManagePlanning(user);
 
   const [savedViewName, setSavedViewName] = useState("");
   const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
   const [isSavedViewsOpen, setIsSavedViewsOpen] = useState(false);
+  const [rcPoExpiryDrafts, setRcPoExpiryDrafts] = useState<Record<string, RcPoExpiryDraft>>({});
   const [selectedRowsByReport, setSelectedRowsByReport] = useState<Record<string, string[]>>({});
   const initialExportJobId = useMemo(() => new URLSearchParams(location.search).get("jobId") ?? "", [location.search]);
 
@@ -111,6 +115,24 @@ export function ReportsWorkspace() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["report"] });
       notify({ message: "Report projections refreshed.", tone: "success" });
+    },
+  });
+  const updateRcPoExpiryMutation = useMutation({
+    mutationFn: (input: {
+      draft: RcPoExpiryDraft;
+      row: ContractExpiryReportRow;
+    }) => updateRcPoExpiryReportRow(input.row.sourceType, input.row.sourceId, input.draft),
+    onSuccess: async (updatedRow) => {
+      setRcPoExpiryDrafts((current) => {
+        const next = { ...current };
+        delete next[rcPoExpiryDraftKey(updatedRow)];
+        return next;
+      });
+      await queryClient.invalidateQueries({ queryKey: ["report", "rc-po-expiry"] });
+      notify({
+        message: `RC/PO row updated for ${updatedRow.tenderDescription ?? updatedRow.sourceId}.`,
+        tone: "success",
+      });
     },
   });
 
@@ -183,13 +205,15 @@ export function ReportsWorkspace() {
     () => (data.filterMetadata.data?.valueSlabs ?? []).map((slab) => ({ label: slab, value: slab })),
     [data.filterMetadata.data?.valueSlabs],
   );
-  const activeFilterCount = countActiveReportFilters(filters, statusFilterApplies);
+  const includeCompletionFilters = reportCode !== "running";
+  const activeFilterCount = countActiveReportFilters(filters, statusFilterApplies, includeCompletionFilters);
   const activeFilterChips = buildActiveReportFilterChips(filters, {
     completionFyOptions,
     completionMonthOptions,
     departmentOptions,
     entityOptions,
     budgetTypeOptions,
+    includeCompletionFilters,
     natureOfWorkOptions,
     ownerOptions,
     prReceiptMonthOptions,
@@ -311,53 +335,298 @@ export function ReportsWorkspace() {
     ],
     [caseColumnFilterOptions, filters.amountUnit],
   );
-  const vendorColumns = useMemo<VirtualTableColumn<VendorAwardReportRow>[]>(
-    () => {
-      const vendorOptions = uniqueReportFilterOptions(data.vendorAwards.data ?? [], (row) => row.vendorName);
-      return [
-      { key: "vendor", filterOptions: vendorOptions, filterValue: (row) => row.vendorName, header: "Vendor", render: (row) => row.vendorName },
-      { key: "pr", header: "Case ID", render: (row) => row.prId },
-      { key: "po", header: "PO", render: (row) => row.poNumber ?? "-" },
-      { key: "value", header: "PO Value [All Inclusive]", render: (row) => formatAmount(row.poValue, filters.amountUnit) },
-      { key: "awardDate", header: "Award Date", render: (row) => row.poAwardDate ?? "-" },
-      { key: "validity", header: "Validity", render: (row) => row.poValidityDate ?? "-" },
-      ];
-    },
-    [data.vendorAwards.data, filters.amountUnit],
-  );
-  const stageColumns = useMemo<VirtualTableColumn<StageTimeRow>[]>(
+  const runningColumns = useMemo<VirtualTableColumn<ReportCaseRow>[]>(
     () => [
+      { key: "tenderNo", header: "Tender No.", render: (row) => row.tenderNo ?? row.prId },
+      { key: "tenderName", header: "Tender Name", render: (row) => row.tenderName ?? row.prDescription ?? "-" },
+      { key: "prReceiptDate", header: "PR Receipt Date", render: (row) => formatDateCell(row.prReceiptDate) },
+      {
+        key: "prValue",
+        header: `PR Value / Approved Budget (${amountUnitLabel(filters.amountUnit)}) [All Inclusive]`,
+        render: (row) => formatAmount(row.prValue, filters.amountUnit),
+      },
+      {
+        key: "owner",
+        filterOptions: caseColumnFilterOptions.owner,
+        filterValue: (row) => row.ownerFullName ?? "-",
+        header: "Tender Owner",
+        render: (row) => row.ownerFullName ?? "-",
+      },
+      {
+        key: "entity",
+        filterOptions: caseColumnFilterOptions.entity,
+        filterValue: (row) => row.entityCode ?? row.entityName ?? row.entityId,
+        header: "Entity",
+        render: (row) => row.entityCode ?? row.entityName ?? row.entityId,
+      },
+      {
+        key: "department",
+        filterOptions: caseColumnFilterOptions.department,
+        filterValue: (row) => row.departmentName ?? "-",
+        header: "User Department",
+        render: (row) => row.departmentName ?? "-",
+      },
       {
         key: "stage",
-        filterOptions: uniqueReportFilterOptions(data.stageTime.data ?? [], (row) => formatCaseStage(row.stageCode)),
+        filterOptions: caseColumnFilterOptions.stage,
         filterValue: (row) => formatCaseStage(row.stageCode),
-        header: "Stage",
+        header: "Tender Stage",
         render: (row) => formatCaseStage(row.stageCode),
       },
-      { key: "count", header: "Cases", render: (row) => row.caseCount },
       {
-        key: "age",
-        header: "Avg Running Age",
-        render: (row) =>
-          row.averageRunningAgeDays == null ? "-" : `${Math.round(row.averageRunningAgeDays)}d`,
+        key: "normativeStage",
+        filterOptions: caseColumnFilterOptions.normativeStage,
+        filterValue: (row) => row.desiredStageCode == null ? "-" : formatCaseStage(row.desiredStageCode),
+        header: "Normative Tender Stage",
+        render: (row) => row.desiredStageCode == null ? "-" : formatCaseStage(row.desiredStageCode),
       },
+      { key: "age", header: "Running Tender Age", render: (row) => row.runningAgeDays ?? "-" },
+      { key: "currentStageAge", header: "Current Stage Aging (Days)", render: (row) => row.currentStageAgingDays ?? "-" },
+      { key: "delay", header: "Uncontrollable Delay (Days)", render: (row) => row.uncontrollableDelayDays ?? "-" },
+      { key: "delayReason", header: "Reasons for Delay", render: (row) => row.delayReason ?? "-" },
+      {
+        key: "loi",
+        filterOptions: caseColumnFilterOptions.loi,
+        filterValue: (row) => row.loiAwarded ? "Yes" : "No",
+        header: "LOI Awarded?",
+        render: (row) => row.loiAwarded ? "Yes" : "No",
+      },
+      { key: "loiDate", header: "LOI Award Date", render: (row) => formatDateCell(row.loiAwardDate) },
     ],
+    [caseColumnFilterOptions, filters.amountUnit],
+  );
+  const completedColumns = useMemo<VirtualTableColumn<ReportCaseRow>[]>(
+    () => [
+      { key: "tenderNo", header: "Tender No.", render: (row) => row.tenderNo ?? row.prId },
+      { key: "tenderName", header: "Tender Name", render: (row) => row.tenderName ?? row.prDescription ?? "-" },
+      {
+        key: "owner",
+        filterOptions: caseColumnFilterOptions.owner,
+        filterValue: (row) => row.ownerFullName ?? "-",
+        header: "Tender Owner",
+        render: (row) => row.ownerFullName ?? "-",
+      },
+      {
+        key: "entity",
+        filterOptions: caseColumnFilterOptions.entity,
+        filterValue: (row) => row.entityCode ?? row.entityName ?? row.entityId,
+        header: "Entity",
+        render: (row) => row.entityCode ?? row.entityName ?? row.entityId,
+      },
+      {
+        key: "department",
+        filterOptions: caseColumnFilterOptions.department,
+        filterValue: (row) => row.departmentName ?? "-",
+        header: "User Department",
+        render: (row) => row.departmentName ?? "-",
+      },
+      {
+        key: "prValue",
+        header: `PR Value / Approved Budget (${amountUnitLabel(filters.amountUnit)}) [All Inclusive]`,
+        render: (row) => formatAmount(row.prValue, filters.amountUnit),
+      },
+      {
+        key: "estimateBenchmark",
+        header: `Estimate / Benchmark (${amountUnitLabel(filters.amountUnit)}) [All Inclusive]`,
+        render: (row) => formatAmount(row.estimateBenchmark, filters.amountUnit),
+      },
+      {
+        key: "award",
+        header: `Award Value (${amountUnitLabel(filters.amountUnit)}) [All Inclusive]`,
+        render: (row) => formatAmount(row.totalAwardedAmount, filters.amountUnit),
+      },
+      { key: "cycle", header: "Cycle Time", render: (row) => row.completedCycleTimeDays ?? "-" },
+      { key: "delay", header: "Uncontrollable Delay (Days)", render: (row) => row.uncontrollableDelayDays ?? "-" },
+      { key: "delayReason", header: "Reasons for Delay", render: (row) => row.delayReason ?? "-" },
+      {
+        key: "savingsPr",
+        header: `Savings wrt PR Value / Approved Budget (${amountUnitLabel(filters.amountUnit)}) [All Inclusive]`,
+        render: (row) => formatAmount(row.savingsWrtPr, filters.amountUnit),
+      },
+      {
+        key: "savingsEstimate",
+        header: `Savings wrt Estimate / Benchmark (${amountUnitLabel(filters.amountUnit)}) [All Inclusive]`,
+        render: (row) => formatAmount(row.savingsWrtEstimate, filters.amountUnit),
+      },
+      {
+        key: "loi",
+        filterOptions: caseColumnFilterOptions.loi,
+        filterValue: (row) => row.loiAwarded ? "Yes" : "No",
+        header: "LOI Awarded?",
+        render: (row) => row.loiAwarded ? "Yes" : "No",
+      },
+      { key: "loiDate", header: "LOI Award Date", render: (row) => formatDateCell(row.loiAwardDate) },
+    ],
+    [caseColumnFilterOptions, filters.amountUnit],
+  );
+  const vendorColumns = useMemo<VirtualTableColumn<VendorAwardReportRow>[]>(
+    () => {
+      const entityOptions = uniqueReportFilterOptions(data.vendorAwards.data ?? [], (row) => row.entityCode ?? row.entityName ?? row.entityId);
+      const departmentOptions = uniqueReportFilterOptions(data.vendorAwards.data ?? [], (row) => row.departmentName ?? "-");
+      const ownerOptions = uniqueReportFilterOptions(data.vendorAwards.data ?? [], (row) => row.ownerFullName ?? "-");
+      const vendorOptions = uniqueReportFilterOptions(data.vendorAwards.data ?? [], (row) => row.vendorName);
+      const poOptions = uniqueReportFilterOptions(data.vendorAwards.data ?? [], (row) => row.poNumber ?? "-");
+      return [
+        { key: "tenderNo", header: "Tender No.", render: (row) => row.tenderNo ?? row.prId },
+        { key: "tenderName", header: "Tender Name", render: (row) => row.tenderName ?? "-" },
+        {
+          key: "entity",
+          filterOptions: entityOptions,
+          filterValue: (row) => row.entityCode ?? row.entityName ?? row.entityId,
+          header: "Entity",
+          render: (row) => row.entityCode ?? row.entityName ?? row.entityId,
+        },
+        {
+          key: "department",
+          filterOptions: departmentOptions,
+          filterValue: (row) => row.departmentName ?? "-",
+          header: "User Department",
+          render: (row) => row.departmentName ?? "-",
+        },
+        {
+          key: "owner",
+          filterOptions: ownerOptions,
+          filterValue: (row) => row.ownerFullName ?? "-",
+          header: "Tender Owner",
+          render: (row) => row.ownerFullName ?? "-",
+        },
+        {
+          key: "approved",
+          header: "NFA Approved Amount (Lakhs) [All Inclusive]",
+          render: (row) => formatAmount(row.approvedAmount, "lakh"),
+        },
+        { key: "vendorCode", header: "Vendor Code", render: (row) => row.vendorCode ?? "-" },
+        { key: "vendor", filterOptions: vendorOptions, filterValue: (row) => row.vendorName, header: "Vendor Name", render: (row) => row.vendorName },
+        { key: "po", filterOptions: poOptions, filterValue: (row) => row.poNumber ?? "-", header: "RC/PO No.", render: (row) => row.poNumber ?? "-" },
+        { key: "value", header: "RC/PO Value (Lakhs)", render: (row) => formatAmount(row.poValue, "lakh") },
+        { key: "awardDate", header: "Award Date", render: (row) => row.poAwardDate ?? "-" },
+        { key: "validity", header: "Validity Date", render: (row) => row.poValidityDate ?? "-" },
+      ];
+    },
+    [data.vendorAwards.data],
+  );
+  const stageColumns = useMemo<VirtualTableColumn<StageTimeRow>[]>(
+    () => {
+      const rows = data.stageTime.data ?? [];
+      const entityOptions = uniqueReportFilterOptions(rows, (row) => row.entityCode ?? row.entityName ?? row.entityId);
+      const priorityOptions = [
+        { label: "Priority", value: "Priority" },
+        { label: "Normal", value: "Normal" },
+      ];
+      const tenderTypeOptions = uniqueReportFilterOptions(rows, (row) => row.tenderTypeName ?? "-");
+      const ownerOptions = uniqueReportFilterOptions(rows, (row) => row.ownerFullName ?? "-");
+      const stageOptions = uniqueReportFilterOptions(rows, (row) => formatCaseStage(row.stageCode));
+      const loiOptions = [
+        { label: "Yes", value: "Yes" },
+        { label: "No", value: "No" },
+      ];
+      return [
+        { key: "caseId", header: "Case ID", render: (row) => row.prId },
+        { key: "prNo", header: "PR No.", render: (row) => row.tenderNo ?? "-" },
+        { key: "tenderName", header: "Tender Name", render: (row) => row.tenderName ?? "-" },
+        {
+          key: "entity",
+          filterOptions: entityOptions,
+          filterValue: (row) => row.entityCode ?? row.entityName ?? row.entityId,
+          header: "Entity",
+          render: (row) => row.entityCode ?? row.entityName ?? row.entityId,
+        },
+        {
+          key: "priority",
+          filterOptions: priorityOptions,
+          filterValue: (row) => (row.priorityCase ? "Priority" : "Normal"),
+          header: "Priority",
+          render: (row) => (row.priorityCase ? <StatusBadge tone="warning">Priority</StatusBadge> : "-"),
+        },
+        {
+          key: "tenderType",
+          filterOptions: tenderTypeOptions,
+          filterValue: (row) => row.tenderTypeName ?? "-",
+          header: "Tender Type",
+          render: (row) => row.tenderTypeName ?? "-",
+        },
+        {
+          key: "owner",
+          filterOptions: ownerOptions,
+          filterValue: (row) => row.ownerFullName ?? "-",
+          header: "Tender Owner",
+          render: (row) => row.ownerFullName ?? "-",
+        },
+      {
+        key: "stage",
+        filterOptions: stageOptions,
+        filterValue: (row) => formatCaseStage(row.stageCode),
+        header: "Tender Stage",
+        render: (row) => formatCaseStage(row.stageCode),
+      },
+        { key: "runningAge", header: "Running Tender Age", render: (row) => formatNullableDays(row.runningAgeDays) },
+        { key: "currentStageAging", header: "Current Stage Aging", render: (row) => formatNullableDays(row.currentStageAgingDays) },
+        { key: "cycleTime", header: "Cycle Time", render: (row) => formatNullableDays(row.cycleTimeDays) },
+        { key: "prReview", header: "PR Review Time", render: (row) => formatNullableDays(row.prReviewTimeDays) },
+        { key: "nitPublish", header: "NIT Publish Time", render: (row) => formatNullableDays(row.nitPublishTimeDays) },
+        { key: "bidReceipt", header: "Bid Receipt Time", render: (row) => formatNullableDays(row.bidReceiptTimeDays) },
+        { key: "bidEvaluation", header: "Bid Evaluation Time", render: (row) => formatNullableDays(row.bidEvaluationTimeDays) },
+        {
+          key: "negotiation",
+          header: "Negotiation & NFA Submission Time",
+          render: (row) => formatNullableDays(row.negotiationNfaSubmissionTimeDays),
+        },
+        { key: "nfaApproval", header: "NFA Approval Time", render: (row) => formatNullableDays(row.nfaApprovalTimeDays) },
+        { key: "contractIssuance", header: "Post NFA Contract Issuance Time", render: (row) => formatNullableDays(row.contractIssuanceTimeDays) },
+        {
+          key: "loi",
+          filterOptions: loiOptions,
+          filterValue: (row) => (row.loiAwarded ? "Yes" : "No"),
+          header: "LOI Awarded?",
+          render: (row) => (row.loiAwarded ? <StatusBadge tone="info">Yes</StatusBadge> : "No"),
+        },
+      ];
+    },
     [data.stageTime.data],
   );
+  const setRcPoExpiryDraft = (
+    row: ContractExpiryReportRow,
+    patch: Partial<RcPoExpiryDraft>,
+  ) => {
+    setRcPoExpiryDrafts((current) => {
+      const key = rcPoExpiryDraftKey(row);
+      const currentDraft = current[key] ?? rcPoExpiryDraftFromRow(row);
+      const nextDraft = { ...currentDraft, ...patch };
+      if (isRcPoExpiryDraftUnchanged(row, nextDraft)) {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      }
+      return { ...current, [key]: nextDraft };
+    });
+  };
   const rcPoColumns = useMemo<VirtualTableColumn<ContractExpiryReportRow>[]>(
     () => [
-      { key: "tender", header: "Tender", render: (row) => row.tenderDescription ?? "-" },
-      { key: "vendors", header: "Vendors", render: (row) => row.awardedVendors ?? "-" },
+      { key: "source", header: "Source", render: (row) => (row.sourceType === "manual_plan" ? <StatusBadge tone="warning">Bulk Upload</StatusBadge> : <StatusBadge>TenderDB</StatusBadge>) },
+      { key: "tender", header: "Tender Description", render: (row) => row.tenderDescription ?? "-" },
+      { key: "entity", header: "Entity", render: (row) => row.entityCode ?? row.entityName ?? row.entityId },
+      { key: "department", header: "Department", render: (row) => row.departmentName ?? "-" },
       { key: "amount", header: "RC/PO Amount [All Inclusive]", render: (row) => formatAmount(row.rcPoAmount, filters.amountUnit) },
-      { key: "validity", header: "Validity", render: (row) => row.rcPoValidityDate },
+      { key: "awardDate", header: "Award Date", render: (row) => formatDateCell(row.rcPoAwardDate) },
+      { key: "validity", header: "Validity Date", render: (row) => row.rcPoValidityDate },
+      { key: "owner", header: "Owner", render: (row) => row.ownerFullName ?? "-" },
+      { key: "vendors", header: "Awarded Vendors", render: (row) => row.awardedVendors ?? "-" },
       {
-        key: "days",
-        header: "Days",
-        render: (row) => (
-          <StatusBadge tone={row.daysToExpiry <= 30 ? "danger" : row.daysToExpiry <= 90 ? "warning" : "neutral"}>
-            {row.daysToExpiry}
-          </StatusBadge>
-        ),
+        key: "tentativeTenderingDate",
+        header: "Tentative Tendering Date",
+        render: (row) => {
+          const draft = rcPoExpiryDrafts[rcPoExpiryDraftKey(row)] ?? rcPoExpiryDraftFromRow(row);
+          return canEditRcPoExpiry ? (
+            <TextInput
+              aria-label={`Tentative tendering date for ${row.tenderDescription ?? row.sourceId}`}
+              onChange={(event) => setRcPoExpiryDraft(row, { tentativeTenderingDate: event.target.value || null })}
+              type="date"
+              value={draft.tentativeTenderingDate ?? ""}
+            />
+          ) : (
+            formatDateCell(row.tentativeTenderingDate)
+          );
+        },
       },
       {
         key: "floated",
@@ -366,11 +635,48 @@ export function ReportsWorkspace() {
           { label: "No", value: "No" },
         ],
         filterValue: (row) => (row.tenderFloatedOrNotRequired ? "Yes" : "No"),
-        header: "Floated",
-        render: (row) => (row.tenderFloatedOrNotRequired ? "Yes" : "No"),
+        header: "Tender Floated? or Not Required",
+        render: (row) => {
+          const draft = rcPoExpiryDrafts[rcPoExpiryDraftKey(row)] ?? rcPoExpiryDraftFromRow(row);
+          return canEditRcPoExpiry ? (
+            <Checkbox
+              aria-label={`Tender floated or not required for ${row.tenderDescription ?? row.sourceId}`}
+              checked={draft.tenderFloatedOrNotRequired}
+              label=""
+              onChange={(event) => setRcPoExpiryDraft(row, { tenderFloatedOrNotRequired: event.target.checked })}
+            />
+          ) : row.tenderFloatedOrNotRequired ? (
+            "Yes"
+          ) : (
+            "No"
+          );
+        },
+      },
+      {
+        key: "actions",
+        header: "Actions",
+        render: (row) => {
+          if (!canEditRcPoExpiry) return "-";
+          const key = rcPoExpiryDraftKey(row);
+          const draft = rcPoExpiryDrafts[key];
+          const isSaving = updateRcPoExpiryMutation.isPending && updateRcPoExpiryMutation.variables?.row.sourceId === row.sourceId;
+          return (
+            <Button
+              disabled={!draft || isSaving}
+              onClick={() => {
+                if (draft) updateRcPoExpiryMutation.mutate({ draft, row });
+              }}
+              size="sm"
+              variant={draft ? "primary" : "secondary"}
+            >
+              <Save aria-hidden="true" size={16} />
+              {isSaving ? "Saving" : "Save"}
+            </Button>
+          );
+        },
       },
     ],
-    [filters.amountUnit],
+    [canEditRcPoExpiry, filters.amountUnit, rcPoExpiryDrafts, updateRcPoExpiryMutation],
   );
 
   function handleApplySavedView(view: SavedReportView) {
@@ -384,6 +690,7 @@ export function ReportsWorkspace() {
       setDateFrom: filters.setDateFrom,
       setDateTo: filters.setDateTo,
       setDelayStatus: filters.setDelayStatus,
+      setDeletedOnly: filters.setDeletedOnly,
       setDepartmentIds: filters.setSelectedDepartmentIds,
       setEntityIds: filters.setSelectedEntityIds,
       setLoiAwarded: filters.setLoiAwarded,
@@ -456,9 +763,6 @@ export function ReportsWorkspace() {
             }))}
             onChange={(key) => navigateToAppPath(reportPathForKey(key as ReportViewKey))}
           />
-          <span className="report-command-timestamp">
-            Updated {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-          </span>
         </div>
 
         {!isExportJobsView && !isSavedViewsView ? (
@@ -580,6 +884,7 @@ export function ReportsWorkspace() {
             onClose={() => setIsAdvancedFiltersOpen(false)}
             ownerOptions={ownerOptions}
             prReceiptMonthOptions={prReceiptMonthOptions}
+            reportCode={reportCode}
             setExportFormat={exportState.setExportFormat}
             stageOptions={stageOptions}
             tenderTypeOptions={tenderTypeOptions}
@@ -654,7 +959,7 @@ export function ReportsWorkspace() {
             ) : null}
             {reportCode === "running" ? (
               <ReportTable
-                columns={caseColumns}
+                columns={runningColumns}
                 data={data.running.data}
                 emptyMessage="No running tenders match the current filters."
                 error={data.running.error}
@@ -667,7 +972,7 @@ export function ReportsWorkspace() {
             ) : null}
             {reportCode === "completed" ? (
               <ReportTable
-                columns={caseColumns}
+                columns={completedColumns}
                 data={data.completed.data}
                 emptyMessage="No completed tenders match the current filters."
                 error={data.completed.error}
@@ -697,7 +1002,7 @@ export function ReportsWorkspace() {
                 data={data.stageTime.data}
                 emptyMessage="No stage aging rows match the current filters."
                 error={data.stageTime.error}
-                getRowKey={(row) => String(row.stageCode)}
+                getRowKey={(row) => row.caseId}
                 isLoading={data.stageTime.isLoading}
                 isSelectionEnabled={canExport}
                 onSelectedRowIdsChange={setSelectedReportRows}
@@ -725,6 +1030,28 @@ export function ReportsWorkspace() {
 }
 
 type ReportOption = { label: string; value: string };
+type RcPoExpiryDraft = {
+  tenderFloatedOrNotRequired: boolean;
+  tentativeTenderingDate: string | null;
+};
+
+function rcPoExpiryDraftKey(row: ContractExpiryReportRow): string {
+  return `${row.sourceType}:${row.sourceId}`;
+}
+
+function rcPoExpiryDraftFromRow(row: ContractExpiryReportRow): RcPoExpiryDraft {
+  return {
+    tenderFloatedOrNotRequired: row.tenderFloatedOrNotRequired,
+    tentativeTenderingDate: row.tentativeTenderingDate,
+  };
+}
+
+function isRcPoExpiryDraftUnchanged(row: ContractExpiryReportRow, draft: RcPoExpiryDraft): boolean {
+  return (
+    draft.tenderFloatedOrNotRequired === row.tenderFloatedOrNotRequired &&
+    (draft.tentativeTenderingDate ?? null) === (row.tentativeTenderingDate ?? null)
+  );
+}
 
 function ReportSavedViewsWorkspace({
   error,
@@ -843,10 +1170,7 @@ function ReportAnalyticsDashboard({
     secondaryValue: row.delayedCount,
     value: row.caseCount,
   }));
-  const stageChartRows = (stageRows ?? []).map((row) => ({
-    label: formatCaseStage(row.stageCode),
-    value: row.caseCount,
-  }));
+  const stageChartRows = buildStageBreakdownRows(stageRows ?? []);
   const completedRatio = metrics?.totalCases ? Math.round(((metrics.completedCases ?? 0) / metrics.totalCases) * 100) : 0;
   const delayedRatio = metrics?.totalCases ? Math.round(((metrics.delayedCases ?? 0) / metrics.totalCases) * 100) : 0;
   const runningRatio = metrics?.totalCases ? Math.round(((metrics.runningCases ?? 0) / metrics.totalCases) * 100) : 0;
@@ -1047,6 +1371,14 @@ function ReportInsightCard({
   );
 }
 
+function buildStageBreakdownRows(rows: StageTimeRow[]) {
+  const counts = new Map<number, number>();
+  rows.forEach((row) => counts.set(row.stageCode, (counts.get(row.stageCode) ?? 0) + 1));
+  return [...counts.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([stageCode, value]) => ({ label: formatCaseStage(stageCode), value }));
+}
+
 function formatInteger(value: number) {
   return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
@@ -1224,7 +1556,7 @@ function ReportAnalyticsPanel({
       <div className="report-chart-card">
         <div>
           <p className="report-chart-title">By Stage</p>
-          <span>{stageRows?.length ?? 0} stages</span>
+          <span>{buildStageBreakdownRows(stageRows ?? []).length} stages</span>
         </div>
         {stageIsLoading ? (
           <Skeleton height={20} />
@@ -1232,10 +1564,7 @@ function ReportAnalyticsPanel({
           <p className="inline-error">{stageError.message}</p>
         ) : (
           <ReportBarChart
-            rows={(stageRows ?? []).map((row) => ({
-              label: formatCaseStage(row.stageCode),
-              value: row.caseCount,
-            }))}
+            rows={buildStageBreakdownRows(stageRows ?? [])}
           />
         )}
       </div>
@@ -1519,6 +1848,7 @@ function ReportFilterPanel({
   onClose,
   ownerOptions,
   prReceiptMonthOptions,
+  reportCode,
   setExportFormat,
   stageOptions,
   tenderTypeOptions,
@@ -1537,11 +1867,13 @@ function ReportFilterPanel({
   onClose: () => void;
   ownerOptions: ReportOption[];
   prReceiptMonthOptions: ReportOption[];
+  reportCode: ReportCode;
   setExportFormat: (format: "csv" | "xlsx") => void;
   stageOptions: ReportOption[];
   tenderTypeOptions: ReportOption[];
   valueSlabOptions: ReportOption[];
 }) {
+  const showCompletionFilters = reportCode !== "running";
   return (
     <section className="report-filter-panel" aria-label="Advanced report filters">
       <div className="report-filter-panel-header">
@@ -1579,7 +1911,7 @@ function ReportFilterPanel({
           />
           <ReportMultiSelectFilter
             disabled={dataIsLoading}
-            label="Tender Types"
+            label="Tender Type"
             onChange={filters.setSelectedTenderTypeIds}
             options={tenderTypeOptions}
             value={filters.selectedTenderTypeIds}
@@ -1612,13 +1944,15 @@ function ReportFilterPanel({
             options={valueSlabOptions}
             value={filters.selectedValueSlabs}
           />
-          <ReportMultiSelectFilter
-            disabled={dataIsLoading}
-            label="Completion FY"
-            onChange={filters.setSelectedCompletionFys}
-            options={completionFyOptions}
-            value={filters.selectedCompletionFys}
-          />
+          {showCompletionFilters ? (
+            <ReportMultiSelectFilter
+              disabled={dataIsLoading}
+              label="Completion FY"
+              onChange={filters.setSelectedCompletionFys}
+              options={completionFyOptions}
+              value={filters.selectedCompletionFys}
+            />
+          ) : null}
           <ReportMultiSelectFilter
             disabled={dataIsLoading}
             label="PR Receipt Month"
@@ -1626,13 +1960,15 @@ function ReportFilterPanel({
             options={prReceiptMonthOptions}
             value={filters.selectedPrReceiptMonths}
           />
-          <ReportMultiSelectFilter
-            disabled={dataIsLoading}
-            label="Completion Month"
-            onChange={filters.setSelectedCompletionMonths}
-            options={completionMonthOptions}
-            value={filters.selectedCompletionMonths}
-          />
+          {showCompletionFilters ? (
+            <ReportMultiSelectFilter
+              disabled={dataIsLoading}
+              label="Completion Month"
+              onChange={filters.setSelectedCompletionMonths}
+              options={completionMonthOptions}
+              value={filters.selectedCompletionMonths}
+            />
+          ) : null}
           <FormField label="LOI Awarded?">
             <Select
               onChange={(event) => filters.setLoiAwarded(event.target.value as "all" | "false" | "true")}
@@ -1664,6 +2000,14 @@ function ReportFilterPanel({
               type="checkbox"
             />
             <span>Priority cases only</span>
+          </label>
+          <label className="report-inline-check report-deletion-flag">
+            <input
+              checked={filters.deletedOnly}
+              onChange={(event) => filters.setDeletedOnly(event.target.checked)}
+              type="checkbox"
+            />
+            <span>Show deleted cases only</span>
           </label>
         </section>
         <div className="report-actions-row report-drawer-actions">
@@ -1819,12 +2163,7 @@ function ReportTable<TRow>({
   onSelectedRowIdsChange: (rowIds: string[]) => void;
   selectedRowIds: string[];
 }) {
-  const [tableSearch, setTableSearch] = useState("");
-  const [density, setDensity] = useState<"comfortable" | "dense">("comfortable");
-  const rows = useMemo(
-    () => filterTableRows(data ?? [], tableSearch),
-    [data, tableSearch],
-  );
+  const rows = data ?? [];
   const selectedSet = useMemo(() => new Set(selectedRowIds), [selectedRowIds]);
   const visibleRowIds = useMemo(() => rows.map((row) => getRowKey(row)), [getRowKey, rows]);
   const selectedVisibleCount = isSelectionEnabled ? visibleRowIds.filter((rowId) => selectedSet.has(rowId)).length : 0;
@@ -1832,7 +2171,20 @@ function ReportTable<TRow>({
     () => [
       {
         key: "select",
-        header: "Select",
+        header: (
+          <SelectVisibleHeader
+            checked={visibleRowIds.length > 0 && selectedVisibleCount === visibleRowIds.length}
+            disabled={visibleRowIds.length === 0}
+            indeterminate={selectedVisibleCount > 0 && selectedVisibleCount < visibleRowIds.length}
+            onChange={(checked) => {
+              if (checked) {
+                onSelectedRowIdsChange([...new Set([...selectedRowIds, ...visibleRowIds])]);
+                return;
+              }
+              onSelectedRowIdsChange(selectedRowIds.filter((selectedId) => !visibleRowIds.includes(selectedId)));
+            }}
+          />
+        ),
         render: (row) => {
           const rowId = getRowKey(row);
           return (
@@ -1854,12 +2206,8 @@ function ReportTable<TRow>({
       },
       ...columns,
     ],
-    [columns, getRowKey, onSelectedRowIdsChange, selectedRowIds, selectedSet],
+    [columns, getRowKey, onSelectedRowIdsChange, selectedRowIds, selectedSet, selectedVisibleCount, visibleRowIds],
   );
-
-  function selectVisibleRows() {
-    onSelectedRowIdsChange([...new Set([...selectedRowIds, ...visibleRowIds])]);
-  }
 
   if (isLoading) {
     return (
@@ -1880,63 +2228,45 @@ function ReportTable<TRow>({
     return <p className="inline-error">{error.message}</p>;
   }
   return (
-    <div className={`report-table-suite report-table-${density}`}>
-      <div className="report-table-toolbar">
-        <div className="report-search-control report-table-search">
-          <Search aria-hidden="true" size={16} />
-          <TextInput
-            aria-label="Search within table"
-            onChange={(event) => setTableSearch(event.target.value)}
-            placeholder="Search table"
-            value={tableSearch}
-          />
-        </div>
-        <div className="segmented-control" role="group" aria-label="Table density">
-          {(["comfortable", "dense"] as const).map((value) => (
-            <button
-              className={density === value ? "segmented-control-active" : ""}
-              key={value}
-              onClick={() => setDensity(value)}
-              type="button"
-            >
-              {value === "comfortable" ? "Comfortable" : "Dense"}
-            </button>
-          ))}
-        </div>
-      </div>
-      {isSelectionEnabled ? (
-        <div className="report-selection-toolbar">
-          <span>
-            {selectedRowIds.length
-              ? `${selectedRowIds.length} selected${selectedVisibleCount ? ` (${selectedVisibleCount} visible)` : ""}`
-              : "Select rows to export only those records."}
-          </span>
-          <div>
-            <Button disabled={visibleRowIds.length === 0} onClick={selectVisibleRows} variant="secondary">
-              Select visible
-            </Button>
-            <Button disabled={selectedRowIds.length === 0} onClick={() => onSelectedRowIdsChange([])} variant="ghost">
-              Clear selection
-            </Button>
-          </div>
-        </div>
-      ) : null}
+    <div className="report-table-suite">
       <VirtualTable
         columns={isSelectionEnabled ? selectionColumns : columns}
         emptyMessage={emptyMessage}
         getRowKey={getRowKey}
-        maxHeight={density === "dense" ? 560 : 520}
-        rowHeight={density === "dense" ? 40 : 48}
+        maxHeight={520}
+        rowHeight={48}
         rows={rows}
       />
     </div>
   );
 }
 
-function filterTableRows<TRow>(rows: TRow[], query: string): TRow[] {
-  const normalizedQuery = query.trim().toLowerCase();
-  if (!normalizedQuery) return rows;
-  return rows.filter((row) => JSON.stringify(row).toLowerCase().includes(normalizedQuery));
+function SelectVisibleHeader({
+  checked,
+  disabled,
+  indeterminate,
+  onChange,
+}: {
+  checked: boolean;
+  disabled: boolean;
+  indeterminate: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="report-select-header">
+      <input
+        aria-label="Select visible rows"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        ref={(input) => {
+          if (input) input.indeterminate = indeterminate;
+        }}
+        type="checkbox"
+      />
+      <span>Select</span>
+    </label>
+  );
 }
 
 function ReportBarChart({ rows }: { rows: Array<{ label: string; value: number }> }) {
@@ -1965,6 +2295,7 @@ function ReportBarChart({ rows }: { rows: Array<{ label: string; value: number }
 function countActiveReportFilters(
   filters: ReturnType<typeof useReportFilters>,
   statusFilterApplies: boolean,
+  includeCompletionFilters: boolean,
 ): number {
   return [
     filters.searchTerm,
@@ -1972,6 +2303,7 @@ function countActiveReportFilters(
     filters.dateTo,
     statusFilterApplies && filters.statusFilter !== "all" ? filters.statusFilter : "",
     filters.delayStatus !== "all" ? filters.delayStatus : "",
+    filters.deletedOnly ? "deleted" : "",
     filters.loiAwarded !== "all" ? filters.loiAwarded : "",
     filters.cpcInvolved !== "any" ? filters.cpcInvolved : "",
     filters.priorityCase ? "priority" : "",
@@ -1983,9 +2315,9 @@ function countActiveReportFilters(
     ...filters.selectedBudgetTypeIds,
     ...filters.selectedValueSlabs,
     ...filters.selectedStageCodes,
-    ...filters.selectedCompletionFys,
+    ...(includeCompletionFilters ? filters.selectedCompletionFys : []),
     ...filters.selectedPrReceiptMonths,
-    ...filters.selectedCompletionMonths,
+    ...(includeCompletionFilters ? filters.selectedCompletionMonths : []),
   ].filter(Boolean).length;
 }
 
@@ -1997,6 +2329,7 @@ function buildActiveReportFilterChips(
     departmentOptions: ReportOption[];
     entityOptions: ReportOption[];
     budgetTypeOptions: ReportOption[];
+    includeCompletionFilters: boolean;
     natureOfWorkOptions: ReportOption[];
     ownerOptions: ReportOption[];
     prReceiptMonthOptions: ReportOption[];
@@ -2010,6 +2343,7 @@ function buildActiveReportFilterChips(
     filters.searchTerm ? `Search: ${filters.searchTerm}` : "",
     options.statusFilterApplies && filters.statusFilter !== "all" ? `Status: ${filters.statusFilter}` : "",
     filters.delayStatus !== "all" ? `Delay: ${filters.delayStatus === "delayed" ? "Delayed" : "On Time"}` : "",
+    filters.deletedOnly ? "Deletion Flag: deleted only" : "",
     filters.loiAwarded !== "all" ? `LOI: ${filters.loiAwarded === "true" ? "Yes" : "No"}` : "",
     filters.cpcInvolved !== "any" ? `CPC: ${filters.cpcInvolved === "true" ? "Yes" : "No"}` : "",
     filters.priorityCase ? "Priority cases" : "",
@@ -2023,9 +2357,9 @@ function buildActiveReportFilterChips(
     ...labelsForSelection("Budget", filters.selectedBudgetTypeIds, options.budgetTypeOptions),
     ...labelsForSelection("Value", filters.selectedValueSlabs, options.valueSlabOptions),
     ...labelsForSelection("Stage", filters.selectedStageCodes, options.stageOptions),
-    ...labelsForSelection("FY", filters.selectedCompletionFys, options.completionFyOptions),
+    ...(options.includeCompletionFilters ? labelsForSelection("FY", filters.selectedCompletionFys, options.completionFyOptions) : []),
     ...labelsForSelection("PR Month", filters.selectedPrReceiptMonths, options.prReceiptMonthOptions),
-    ...labelsForSelection("Completion", filters.selectedCompletionMonths, options.completionMonthOptions),
+    ...(options.includeCompletionFilters ? labelsForSelection("Completion", filters.selectedCompletionMonths, options.completionMonthOptions) : []),
   ].filter(Boolean);
 }
 

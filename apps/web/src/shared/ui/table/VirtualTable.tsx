@@ -18,7 +18,7 @@ export type VirtualTableColumn<TRow> = {
   filterOptions?: TableFilterOption[];
   filterValue?: (row: TRow) => ReactNode;
   key: string;
-  header: string;
+  header: ReactNode;
   render: (row: TRow) => ReactNode;
   sortValue?: (row: TRow) => ReactNode;
 };
@@ -180,7 +180,7 @@ function TableHeader({
   canSort: boolean;
   filterOptions?: TableFilterOption[] | undefined;
   filterValue: string;
-  header: string;
+  header: ReactNode;
   isFilterOpen: boolean;
   onClearFilter: () => void;
   onFilterChange: (value: string) => void;
@@ -188,6 +188,7 @@ function TableHeader({
   onToggleFilter: () => void;
   sortDirection?: TableSortDirection | undefined;
 }) {
+  const headerLabel = textFromNode(header) || "column";
   const hasActiveFilter = Boolean(filterValue.trim());
   const hasActiveSort = Boolean(sortDirection);
   const isFilterHighlighted = hasActiveFilter || isFilterOpen;
@@ -196,7 +197,7 @@ function TableHeader({
   return (
     <div className="table-header-control">
       <button
-        aria-label={canSort ? `Sort by ${header}` : undefined}
+        aria-label={canSort ? `Sort by ${headerLabel}` : undefined}
         aria-pressed={canSort ? hasActiveSort : undefined}
         className={`table-sort-button ${hasActiveSort ? "table-sort-button-active" : ""}`.trim()}
         disabled={!canSort}
@@ -208,7 +209,7 @@ function TableHeader({
       </button>
       {canFilter ? (
         <button
-          aria-label={`Filter ${header}`}
+          aria-label={`Filter ${headerLabel}`}
           aria-expanded={isFilterOpen}
           aria-pressed={isFilterHighlighted}
           className={`table-filter-button ${isFilterHighlighted ? "table-filter-button-active" : ""}`.trim()}
@@ -223,11 +224,11 @@ function TableHeader({
           {filterOptions?.length ? (
             <select
               autoFocus
-              aria-label={`Filter ${header}`}
+              aria-label={`Filter ${headerLabel}`}
               onChange={(event) => onFilterChange(event.target.value)}
               value={filterValue}
             >
-              <option value="">All {header}</option>
+              <option value="">All {headerLabel}</option>
               {filterOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -238,17 +239,24 @@ function TableHeader({
             <input
               autoFocus
               onChange={(event) => onFilterChange(event.target.value)}
-              placeholder={`Filter ${header}`}
+              placeholder={`Filter ${headerLabel}`}
               value={filterValue}
             />
           )}
-          <button aria-label={`Clear ${header} filter`} onClick={onClearFilter} type="button">
+          <button aria-label={`Clear ${headerLabel} filter`} onClick={onClearFilter} type="button">
             <X aria-hidden="true" size={13} />
           </button>
         </div>
       ) : null}
     </div>
   );
+}
+
+function textFromNode(value: ReactNode): string {
+  if (value == null || typeof value === "boolean") return "";
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (Array.isArray(value)) return value.map(textFromNode).join(" ");
+  return "";
 }
 
 function SortIcon({ direction }: { direction?: TableSortDirection | undefined }) {

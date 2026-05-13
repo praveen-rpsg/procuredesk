@@ -11,6 +11,7 @@ import {
   replaceAdminUserEntityScopes,
   replaceAdminUserRoles,
   setAdminUserPassword,
+  updateAdminUserAccessLevel,
   updateAdminUserProfile,
   updateAdminUserStatus,
   updatePasswordPolicy,
@@ -30,29 +31,29 @@ import { StatusBadge } from "../../../shared/ui/status/StatusBadge";
 import { DataTable, type DataTableColumn } from "../../../shared/ui/table/DataTable";
 import { useToast } from "../../../shared/ui/toast/ToastProvider";
 
-type PrimaryRole = "custom" | "entity_manager" | "group_viewer" | "tenant_admin" | "tender_owner";
+type AccessLevel = "ENTITY" | "GROUP" | "USER";
 
 type EditUserForm = {
   customRoleIds: string[];
   email: string;
   entityIds: string[];
   fullName: string;
+  isAdmin: boolean;
   isActive: boolean;
   password: string;
-  primaryRole: PrimaryRole;
+  accessLevel: AccessLevel;
   username: string;
 };
 
 const managedRoleCodes = new Set(["entity_manager", "group_viewer", "tenant_admin", "tender_owner"]);
-const primaryRoleOptions: Array<{
-  code: Exclude<PrimaryRole, "custom">;
+const accessLevelOptions: Array<{
+  code: AccessLevel;
   description: string;
   label: string;
 }> = [
-  { code: "tender_owner", description: "Assigned procurement work with mapped entity context.", label: "Tender Owner" },
-  { code: "entity_manager", description: "Manage cases, awards, plans, and reports for selected entities.", label: "Entity Manager" },
-  { code: "group_viewer", description: "Tenant-wide read access for cases and reports.", label: "Group Viewer" },
-  { code: "tenant_admin", description: "Full tenant administration including users, roles, entities, and imports.", label: "Tenant Admin" },
+  { code: "USER", description: "Sees only tenders allocated to them.", label: "USER" },
+  { code: "ENTITY", description: "Sees tenders for mapped entities.", label: "ENTITY" },
+  { code: "GROUP", description: "Sees tenders across all entities.", label: "GROUP" },
 ];
 
 const defaultPolicy: Omit<PasswordPolicy, "tenantId"> = {
@@ -78,8 +79,8 @@ const userColumns = (
   { key: "email", header: "Email", render: (row) => row.email },
   {
     key: "access",
-    header: "Primary Role",
-    render: (row) => <AccessLevelBadge label={derivePrimaryRoleLabel(row)} tone={row.roleCodes.includes("tenant_admin") ? "warning" : "neutral"} />,
+    header: "Access Level",
+    render: (row) => <AccessLevelBadge label={row.accessLevel} tone={row.accessLevel === "GROUP" ? "success" : "neutral"} />,
   },
   {
     key: "entities",
@@ -160,8 +161,9 @@ export function AdminUsersPage() {
   const createUserMutation = useMutation({
     mutationFn: () =>
       createAdminUser({
+        accessLevel: newUser.accessLevel,
         email: newUser.email,
-        entityIds: roleSelectionNeedsEntityScope(newUser, roles.data ?? []) ? newUser.entityIds : [],
+        entityIds: newUser.accessLevel === "GROUP" ? [] : newUser.entityIds,
         fullName: newUser.fullName,
         password: newUser.password,
         roleIds: buildRoleIds(roles.data ?? [], newUser),
@@ -193,10 +195,13 @@ export function AdminUsersPage() {
         fullName: editUser.fullName,
         username: editUser.username,
       });
-      await replaceAdminUserEntityScopes(
-        userToEdit.id,
-        roleSelectionNeedsEntityScope(editUser, roles.data ?? []) ? editUser.entityIds : [],
-      );
+      if (editUser.accessLevel === "GROUP") {
+        await updateAdminUserAccessLevel(userToEdit.id, editUser.accessLevel);
+        await replaceAdminUserEntityScopes(userToEdit.id, []);
+      } else {
+        await replaceAdminUserEntityScopes(userToEdit.id, editUser.entityIds);
+        await updateAdminUserAccessLevel(userToEdit.id, editUser.accessLevel);
+      }
       await replaceAdminUserRoles(
         userToEdit.id,
         buildRoleIds(roles.data ?? [], editUser),
@@ -244,9 +249,10 @@ export function AdminUsersPage() {
       email: user.email,
       entityIds: user.entityIds,
       fullName: user.fullName,
+      isAdmin: user.roleCodes.includes("tenant_admin"),
       isActive: user.status === "active",
       password: "",
-      primaryRole: derivePrimaryRole(user),
+      accessLevel: user.accessLevel,
       username: user.username,
     });
   };
@@ -310,8 +316,7 @@ export function AdminUsersPage() {
             />
           )}
           <p className="admin-help-text">
-            Primary roles control the main access path. Custom roles are selected only when a user needs a
-            configured permission bundle outside the standard templates.
+            Access level controls tender visibility. Administrator is independent and grants management rights.
           </p>
         </section>
 
@@ -462,62 +467,37 @@ export function AdminUsersPage() {
 }
 
 const emptyEditUserForm: EditUserForm = {
+  accessLevel: "USER",
   customRoleIds: [],
   email: "",
   entityIds: [],
   fullName: "",
+  isAdmin: false,
   isActive: false,
   password: "",
-  primaryRole: "tender_owner",
   username: "",
 };
-
-function derivePrimaryRole(user: AdminUser): PrimaryRole {
-  if (user.roleCodes.includes("tenant_admin")) return "tenant_admin";
-  if (user.roleCodes.includes("group_viewer")) return "group_viewer";
-  if (user.roleCodes.includes("entity_manager")) return "entity_manager";
-  if (user.roleCodes.includes("tender_owner")) return "tender_owner";
-  return "custom";
-}
-
-function derivePrimaryRoleLabel(user: AdminUser) {
-  const primaryRole = derivePrimaryRole(user);
-  if (primaryRole === "custom") return "Custom";
-  return primaryRoleOptions.find((option) => option.code === primaryRole)?.label ?? primaryRole;
-}
 
 function buildRoleIds(roles: AdminRole[], value: EditUserForm) {
   const roleByCode = new Map(roles.map((role) => [role.code, role]));
   const roleById = new Map(roles.map((role) => [role.id, role]));
   const nextRoleIds: string[] = [];
-  if (value.primaryRole === "custom") {
-    for (const roleId of value.customRoleIds) {
-      const role = roleById.get(roleId);
-      if (role && isAdditionalAssignableRole(role)) nextRoleIds.push(roleId);
-    }
-  } else {
-    const role = roleByCode.get(value.primaryRole);
-    if (role) nextRoleIds.push(role.id);
+  const accessRoleCodeByLevel: Record<AccessLevel, string> = {
+    ENTITY: "entity_manager",
+    GROUP: "group_viewer",
+    USER: "tender_owner",
+  };
+  const accessRole = roleByCode.get(accessRoleCodeByLevel[value.accessLevel]);
+  if (accessRole) nextRoleIds.push(accessRole.id);
+  if (value.isAdmin) {
+    const adminRole = roleByCode.get("tenant_admin");
+    if (adminRole) nextRoleIds.push(adminRole.id);
   }
-  if (value.primaryRole !== "custom") {
-    for (const roleId of value.customRoleIds) {
-      const role = roleById.get(roleId);
-      if (role && isAdditionalAssignableRole(role)) nextRoleIds.push(roleId);
-    }
+  for (const roleId of value.customRoleIds) {
+    const role = roleById.get(roleId);
+    if (role && isAdditionalAssignableRole(role)) nextRoleIds.push(roleId);
   }
   return Array.from(new Set(nextRoleIds));
-}
-
-function roleSelectionNeedsEntityScope(value: EditUserForm, roles: AdminRole[]) {
-  return roles
-    .filter((role) => buildRoleIds(roles, value).includes(role.id))
-    .some(roleNeedsEntityScope);
-}
-
-function roleNeedsEntityScope(role: AdminRole) {
-  return role.permissionCodes.some((permission) =>
-    ["case.create", "case.delay.manage.entity", "case.read.entity", "case.update.entity", "planning.manage"].includes(permission),
-  );
 }
 
 type UserAccessFormProps = {
@@ -534,7 +514,6 @@ function UserAccessForm({ entityOptions, isNewUser = false, onChange, roleOption
   const effectiveRoles = roles.filter((role) => effectiveRoleIds.includes(role.id));
   const effectivePermissions = Array.from(new Set(effectiveRoles.flatMap((role) => role.permissionCodes))).sort();
   const riskyPermissions = effectivePermissions.filter(isRiskyPermission);
-  const needsEntityScope = roleSelectionNeedsEntityScope(value, roles);
   const toggleEntity = (entityId: string) => {
     onChange((currentValue) => {
       if (currentValue.entityIds.includes(entityId)) {
@@ -592,6 +571,14 @@ function UserAccessForm({ entityOptions, isNewUser = false, onChange, roleOption
         <div className="user-edit-checks">
           <label className="checkbox-row">
             <input
+              checked={value.isAdmin}
+              onChange={(event) => onChange((currentValue) => ({ ...currentValue, isAdmin: event.target.checked }))}
+              type="checkbox"
+            />
+            Administrator
+          </label>
+          <label className="checkbox-row">
+            <input
               checked={value.isActive}
               onChange={(event) => onChange((currentValue) => ({ ...currentValue, isActive: event.target.checked }))}
               type="checkbox"
@@ -604,69 +591,38 @@ function UserAccessForm({ entityOptions, isNewUser = false, onChange, roleOption
       <section className="user-role-section">
         <div className="user-role-section-heading">
           <div>
-            <p className="eyebrow">Access Role</p>
-            <h3>Choose how this user works in ProcureDesk</h3>
+            <p className="eyebrow">Access Level</p>
+            <h3>Choose tender visibility</h3>
           </div>
         </div>
         <div className="user-role-card-grid">
-          {primaryRoleOptions.map((option) => (
+          {accessLevelOptions.map((option) => (
             <button
-              className={`user-role-card ${value.primaryRole === option.code ? "user-role-card-selected" : ""}`.trim()}
+              className={`user-role-card ${value.accessLevel === option.code ? "user-role-card-selected" : ""}`.trim()}
               key={option.code}
               onClick={() =>
                 onChange((currentValue) => ({
                   ...currentValue,
-                  customRoleIds: currentValue.primaryRole === "custom" ? [] : currentValue.customRoleIds,
-                  primaryRole: option.code,
+                  accessLevel: option.code,
                 }))
               }
               type="button"
             >
               <span className="user-role-card-icon">
-                {value.primaryRole === option.code ? <CheckCircle2 size={16} /> : <ShieldCheck size={16} />}
+                {value.accessLevel === option.code ? <CheckCircle2 size={16} /> : <ShieldCheck size={16} />}
               </span>
               <strong>{option.label}</strong>
               <small>{option.description}</small>
             </button>
           ))}
-          <button
-            className={`user-role-card ${value.primaryRole === "custom" ? "user-role-card-selected" : ""}`.trim()}
-            onClick={() => onChange((currentValue) => ({ ...currentValue, primaryRole: "custom" }))}
-            type="button"
-          >
-            <span className="user-role-card-icon">
-              {value.primaryRole === "custom" ? <CheckCircle2 size={16} /> : <ShieldCheck size={16} />}
-            </span>
-            <strong>Custom Role</strong>
-            <small>Choose one or more configured tenant role bundles.</small>
-          </button>
         </div>
       </section>
 
-      {value.primaryRole === "custom" ? (
-        <section className="mapped-entity-section">
-          <div>
-            <strong>Custom Roles</strong>
-            <span>Select configured roles from Admin &gt; Roles.</span>
-          </div>
-          <div className="mapped-entity-grid">
-            {roleOptions.map((role) => (
-              <label className="mapped-entity-option" key={role.value}>
-                <input checked={value.customRoleIds.includes(role.value)} onChange={() => toggleRole(role.value)} type="checkbox" />
-                <span>
-                  {role.label}
-                  {role.description ? <small>{role.description}</small> : null}
-                </span>
-              </label>
-            ))}
-          </div>
-          {roleOptions.length === 0 ? <p className="admin-help-text">No custom roles are available yet.</p> : null}
-        </section>
-      ) : roleOptions.length > 0 ? (
+      {roleOptions.length > 0 ? (
         <section className="mapped-entity-section">
           <div>
             <strong>Optional Role Add-ons</strong>
-            <span>Add a configured permission bundle only when the primary role is not enough.</span>
+            <span>Add configured permission bundles only when access level and admin flag are not enough.</span>
           </div>
           <div className="mapped-entity-grid">
             {roleOptions.map((role) => (
@@ -685,14 +641,20 @@ function UserAccessForm({ entityOptions, isNewUser = false, onChange, roleOption
       <section className="mapped-entity-section">
         <div>
           <strong>Mapped Entities</strong>
-          <span>{needsEntityScope ? "Required for this role selection." : "Not required for tenant-wide access."}</span>
+          <span>
+            {value.accessLevel === "GROUP"
+              ? "Not required for group-wide access."
+              : value.accessLevel === "ENTITY"
+                ? "Required for ENTITY access."
+                : "Used for owner assignment eligibility; tender visibility stays assigned-only."}
+          </span>
         </div>
-        <div className={`mapped-entity-grid ${!needsEntityScope ? "mapped-entity-grid-disabled" : ""}`.trim()}>
+        <div className={`mapped-entity-grid ${value.accessLevel === "GROUP" ? "mapped-entity-grid-disabled" : ""}`.trim()}>
           {entityOptions.map((entity) => (
             <label className="mapped-entity-option" key={entity.value}>
               <input
                 checked={value.entityIds.includes(entity.value)}
-                disabled={!needsEntityScope}
+                disabled={value.accessLevel === "GROUP"}
                 onChange={() => toggleEntity(entity.value)}
                 type="checkbox"
               />
@@ -718,7 +680,11 @@ function UserAccessForm({ entityOptions, isNewUser = false, onChange, roleOption
           </div>
           <div>
             <strong>Entity Scope</strong>
-            <p>{needsEntityScope ? `${value.entityIds.length} mapped entities` : "Tenant-wide or unrestricted by entity"}</p>
+            <p>{value.accessLevel === "GROUP" ? "All entities" : `${value.entityIds.length} mapped entities`}</p>
+          </div>
+          <div>
+            <strong>Administrator</strong>
+            <p>{value.isAdmin ? "Full management rights" : "Standard rights"}</p>
           </div>
           <div>
             <strong>Risk Signals</strong>

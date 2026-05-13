@@ -15,6 +15,7 @@ export function buildReportParams(input: {
   dateFrom: string;
   dateTo: string;
   delayStatus: "delayed" | "on_time" | undefined;
+  deletedOnly: boolean | undefined;
   departmentIds: string[];
   entityIds: string[];
   includeStatus: boolean;
@@ -36,6 +37,7 @@ export function buildReportParams(input: {
   assignTrimmedStringParam(params, "q", input.q);
   assignBooleanParam(params, "cpcInvolved", input.cpcInvolved);
   assignStringParam(params, "delayStatus", input.delayStatus ?? "");
+  assignBooleanParam(params, "deletedOnly", input.deletedOnly);
   assignStringArrayParam(params, "departmentIds", input.departmentIds);
   assignStringArrayParam(params, "entityIds", input.entityIds);
   assignBooleanParam(params, "loiAwarded", input.loiAwarded);
@@ -63,6 +65,7 @@ export function buildReportFilterPayload(input: {
   dateFrom: string;
   dateTo: string;
   delayStatus: "delayed" | "on_time" | undefined;
+  deletedOnly: boolean | undefined;
   departmentIds: string[];
   entityIds: string[];
   includeStatus: boolean;
@@ -82,6 +85,7 @@ export function buildReportFilterPayload(input: {
   assignTrimmedStringParam(payload, "q", input.q);
   assignBooleanParam(payload, "cpcInvolved", input.cpcInvolved);
   assignStringParam(payload, "delayStatus", input.delayStatus ?? "");
+  assignBooleanParam(payload, "deletedOnly", input.deletedOnly);
   assignStringArrayParam(payload, "departmentIds", input.departmentIds);
   assignStringArrayParam(payload, "entityIds", input.entityIds);
   assignBooleanParam(payload, "loiAwarded", input.loiAwarded);
@@ -217,6 +221,7 @@ export function applySavedView(
     setDateFrom: (v: string) => void;
     setDateTo: (v: string) => void;
     setDelayStatus: (v: "all" | "delayed" | "on_time") => void;
+    setDeletedOnly: (v: boolean) => void;
     setDepartmentIds: (v: string[]) => void;
     setEntityIds: (v: string[]) => void;
     setLoiAwarded: (v: "all" | "false" | "true") => void;
@@ -248,6 +253,7 @@ export function applySavedView(
   setters.setCompletionMonths(stringArray(filters.completionMonths));
   setters.setStatusFilter(toStatusFilter(typeof filters.status === "string" ? filters.status : "all"));
   setters.setDelayStatus(filters.delayStatus === "delayed" || filters.delayStatus === "on_time" ? filters.delayStatus : "all");
+  setters.setDeletedOnly(filters.deletedOnly === true);
   setters.setLoiAwarded(typeof filters.loiAwarded === "boolean" ? String(filters.loiAwarded) as "false" | "true" : "all");
   setters.setCpcInvolved(typeof filters.cpcInvolved === "boolean" ? String(filters.cpcInvolved) as "false" | "true" : "any");
   setters.setPriorityCase(filters.priorityCase === true);

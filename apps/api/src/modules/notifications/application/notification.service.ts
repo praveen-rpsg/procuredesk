@@ -31,6 +31,16 @@ export class NotificationService {
     return this.repository.listRules(tenantId);
   }
 
+  status(actor: AuthenticatedUser) {
+    this.requireTenant(actor);
+    this.requirePermission(actor, "notification.manage");
+    const graphConfigured = this.graph.isConfigured();
+    return {
+      deliveryMode: graphConfigured ? "microsoft_graph" : "stub",
+      graphConfigured,
+    };
+  }
+
   async updateRule(
     actor: AuthenticatedUser,
     input: {
