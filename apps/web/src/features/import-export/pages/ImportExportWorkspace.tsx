@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, FileUp, ListChecks, UploadCloud } from "lucide-react";
+import { Download, FileSpreadsheet, FileUp, ListChecks, UploadCloud, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import {
@@ -200,7 +200,7 @@ export function ImportExportWorkspace() {
               <UploadCloud size={16} />
             </div>
           </div>
-          <form className="stack-form" onSubmit={onCreateJob}>
+          <form className="import-create-form" onSubmit={onCreateJob}>
             <FormField label="Import Type">
               <select
                 className="text-input"
@@ -217,28 +217,54 @@ export function ImportExportWorkspace() {
                 <option value="rc_po_plan">RC/PO Plan</option>
               </select>
             </FormField>
-            {selectedTemplateUrl ? (
-              <Button href={selectedTemplateUrl} variant="secondary">
-                <Download size={16} />
-                Download Template
-              </Button>
-            ) : null}
             <FormField
-              helperText={selectedFile ? `${selectedFile.name} · ${Math.ceil(selectedFile.size / 1024)} KB` : undefined}
               label="Import File"
             >
-              <input
-                accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                className="text-input"
-                onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-                required
-                type="file"
-              />
+              <label className={selectedFile ? "import-file-dropzone has-file" : "import-file-dropzone"}>
+                <input
+                  accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                  required
+                  type="file"
+                />
+                <span className="import-file-icon">
+                  {selectedFile ? <FileSpreadsheet size={22} /> : <UploadCloud size={22} />}
+                </span>
+                <span className="import-file-copy">
+                  <strong>{selectedFile ? selectedFile.name : "Choose CSV or XLSX file"}</strong>
+                  <small>
+                    {selectedFile
+                      ? `${formatFileSize(selectedFile.size)} selected`
+                      : "Use the matching template before uploading."}
+                  </small>
+                </span>
+                {selectedFile ? (
+                  <button
+                    aria-label="Clear selected import file"
+                    className="import-file-clear"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      setSelectedFile(null);
+                    }}
+                    type="button"
+                  >
+                    <X size={16} />
+                  </button>
+                ) : null}
+              </label>
             </FormField>
-            <Button disabled={createJobMutation.isPending || !selectedFile} type="submit">
-              <FileUp size={18} />
-              Upload And Queue
-            </Button>
+            <div className="import-create-actions">
+              {selectedTemplateUrl ? (
+                <Button href={selectedTemplateUrl} variant="secondary">
+                  <Download size={16} />
+                  Download Template
+                </Button>
+              ) : null}
+              <Button disabled={createJobMutation.isPending || !selectedFile} type="submit">
+                <FileUp size={18} />
+                {createJobMutation.isPending ? "Uploading" : "Upload And Queue"}
+              </Button>
+            </div>
           </form>
           {createJobMutation.error ? <p className="inline-error">{createJobMutation.error.message}</p> : null}
         </section>
@@ -333,6 +359,12 @@ function templateDownloadUrl(importType: ImportType): string | null {
   if (importType === "old_contracts") return oldContractsTemplateDownloadUrl();
   if (importType === "rc_po_plan") return rcPoPlanTemplateDownloadUrl();
   return null;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toLocaleString(undefined, { maximumFractionDigits: 1 })} MB`;
 }
 
 function jobProgressMessage(row: ImportJob): string {

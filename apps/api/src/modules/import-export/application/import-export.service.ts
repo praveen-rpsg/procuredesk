@@ -1,6 +1,6 @@
 import { Readable as ReadableStream, type Readable } from "node:stream";
 
-import { BadRequestException, ForbiddenException, Injectable, StreamableFile } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, HttpException, Injectable, StreamableFile } from "@nestjs/common";
 import ExcelJS from "exceljs";
 
 import { PrivateFileStorageService } from "../../../common/storage/private-file-storage.service.js";
@@ -273,26 +273,35 @@ export class ImportExportService {
   async commit(actor: AuthenticatedUser, importJobId: string) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "import.manage");
-    await this.db.transaction(async () => {
-      const committed = await this.repository.commitImportJob({
-        committedBy: actor.id,
-        importJobId,
-        tenantId,
+    try {
+      await this.db.transaction(async () => {
+        const committed = await this.repository.commitImportJob({
+          committedBy: actor.id,
+          importJobId,
+          tenantId,
+        });
+        if (!committed) {
+          throw new BadRequestException(
+            "Import job must be parsed with zero rejected or staged unknown rows before commit.",
+          );
+        }
+        await this.audit.write({
+          action: "import_job.commit",
+          actorUserId: actor.id,
+          summary: "Committed import job",
+          targetId: importJobId,
+          targetType: "import_job",
+          tenantId,
+        });
       });
-      if (!committed) {
-        throw new BadRequestException(
-          "Import job must be parsed with zero rejected or staged unknown rows before commit.",
-        );
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
       }
-      await this.audit.write({
-        action: "import_job.commit",
-        actorUserId: actor.id,
-        summary: "Committed import job",
-        targetId: importJobId,
-        targetType: "import_job",
-        tenantId,
-      });
-    });
+      throw new BadRequestException(
+        "Import commit failed. Review the accepted rows and master data, then try again. If the file was parsed before a recent fix, upload it again and commit the new job.",
+      );
+    }
     return { committed: true };
   }
 

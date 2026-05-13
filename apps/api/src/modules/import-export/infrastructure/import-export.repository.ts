@@ -519,6 +519,7 @@ export class ImportExportRepository {
             r.normalized_payload->>'departmentName' as department_name,
             r.normalized_payload->>'tenderType' as tender_type,
             r.normalized_payload->>'prReceivingMedium' as pr_receiving_medium,
+            r.normalized_payload->>'budgetType' as budget_type,
             r.normalized_payload->>'natureOfWork' as nature_of_work,
             r.normalized_payload->>'ownerUsername' as owner_username,
             r.normalized_payload->>'prDescription' as pr_description,
@@ -540,6 +541,8 @@ export class ImportExportRepository {
             nullif(r.normalized_payload->>'commercialEvaluationDate', '')::date as commercial_evaluation_date,
             nullif(r.normalized_payload->>'technicalEvaluationDate', '')::date as technical_evaluation_date,
             nullif(r.normalized_payload->>'qualifiedBidders', '')::integer as qualified_bidders,
+            nullif(r.normalized_payload->>'nfaSubmissionDate', '')::date as nfa_submission_date,
+            nullif(r.normalized_payload->>'nfaApprovalDate', '')::date as nfa_approval_date,
             coalesce((r.normalized_payload->>'loiIssued')::boolean, false) as loi_issued,
             nullif(r.normalized_payload->>'loiIssuedDate', '')::date as loi_issued_date,
             nullif(r.normalized_payload->>'rcPoAwardDate', '')::date as rc_po_award_date,
@@ -555,6 +558,7 @@ export class ImportExportRepository {
             d.id as department_id,
             tt.id as tender_type_id,
             prm.id as pr_receiving_medium_id,
+            btv.id as budget_type_id,
             nowv.id as nature_of_work_id,
             u.id as owner_user_id,
             case
@@ -587,6 +591,11 @@ export class ImportExportRepository {
            and lower(prm.label) = lower(n.pr_receiving_medium)
            and prm.deleted_at is null
            and prm.category_id = (select id from catalog.reference_categories where code = 'pr_receiving_medium')
+          left join catalog.reference_values btv
+            on btv.tenant_id = $1
+           and lower(btv.label) = lower(n.budget_type)
+           and btv.deleted_at is null
+           and btv.category_id = (select id from catalog.reference_categories where code = 'budget_type')
           left join catalog.reference_values nowv
             on nowv.tenant_id = $1
            and lower(nowv.label) = lower(n.nature_of_work)
@@ -600,7 +609,7 @@ export class ImportExportRepository {
         upserted as (
           insert into procurement.cases (
             tenant_id, pr_id, entity_id, department_id, tender_type_id,
-            pr_receiving_medium_id, nature_of_work_id, owner_user_id,
+            pr_receiving_medium_id, budget_type_id, nature_of_work_id, owner_user_id,
             created_by, updated_by, status, stage_code, desired_stage_code,
             is_delayed, priority_case, cpc_involved, pr_scheme_no,
             pr_receipt_date, pr_description, pr_remarks, tender_name, tender_no,
@@ -608,7 +617,7 @@ export class ImportExportRepository {
           )
           select
             $1, r.pr_id, r.entity_id, r.department_id, r.tender_type_id,
-            r.pr_receiving_medium_id, r.nature_of_work_id, r.owner_user_id,
+            r.pr_receiving_medium_id, r.budget_type_id, r.nature_of_work_id, r.owner_user_id,
             $3, $3,
             case when r.rc_po_award_date is not null then 'completed' else 'running' end,
             r.stage_code,
@@ -630,6 +639,7 @@ export class ImportExportRepository {
             department_id = excluded.department_id,
             tender_type_id = excluded.tender_type_id,
             pr_receiving_medium_id = excluded.pr_receiving_medium_id,
+            budget_type_id = excluded.budget_type_id,
             nature_of_work_id = excluded.nature_of_work_id,
             owner_user_id = excluded.owner_user_id,
             status = excluded.status,
