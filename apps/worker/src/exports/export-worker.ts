@@ -21,8 +21,6 @@ type ReportFilters = {
   completionFys: string[];
   completionMonths: string[];
   cpcInvolved?: boolean | undefined;
-  dateFrom?: string | undefined;
-  dateTo?: string | undefined;
   delayStatus?: "delayed" | "on_time" | undefined;
   deletedOnly?: boolean | undefined;
   departmentIds: string[];
@@ -34,7 +32,6 @@ type ReportFilters = {
   prReceiptMonths: string[];
   priorityCase?: boolean | undefined;
   q?: string | undefined;
-  selectedIds: string[];
   stageCodes: number[];
   status?: "completed" | "running" | undefined;
   tenderTypeIds: string[];
@@ -217,7 +214,6 @@ async function queryExportRows(input: {
       "a.vendor_name",
       "a.po_number",
     ]);
-    applyUuidArrayFilter(where, values, input.filters.selectedIds, "a.id");
     values.push(input.filters.limit);
     const limitPosition = values.length;
     const result = await input.pool.query<ExportRow>(
@@ -286,7 +282,6 @@ async function queryExportRows(input: {
     "owner.full_name",
     "d.delay_reason",
   ]);
-  applyUuidArrayFilter(where, values, input.filters.selectedIds, "f.case_id");
   values.push(input.filters.limit);
   const limitPosition = values.length;
   const result = await input.pool.query<ExportRow>(
@@ -405,10 +400,6 @@ async function queryStageTimeExport(input: {
     "tt.name",
     "owner.full_name",
   ]);
-  if (input.filters.selectedIds.length) {
-    values.push(input.filters.selectedIds);
-    where.push(`f.case_id::text = any($${values.length}::text[])`);
-  }
   values.push(input.filters.limit);
   const limitPosition = values.length;
   const result = await input.pool.query<ExportRow>(
@@ -514,19 +505,8 @@ async function queryRcPoExpiryExport(input: {
   applyScope(where, values, input.scope, "e.entity_id", "e.owner_user_id");
   applyUuidArrayFilter(where, values, input.filters.entityIds, "e.entity_id");
   applyUuidArrayFilter(where, values, input.filters.ownerUserIds, "e.owner_user_id");
-  applyDateFilters(where, values, input.filters, "e.rc_po_validity_date");
   if (input.filters.q) {
     applyTextSearch(where, values, input.filters.q, ["e.tender_description", "e.awarded_vendors"]);
-  }
-  if (input.filters.selectedIds.length) {
-    values.push(input.filters.selectedIds);
-    where.push(`
-      (case
-        when e.source_type = 'case_award' and e.case_award_id is not null then e.case_award_id
-        when e.source_type = 'manual_plan' and e.rc_po_plan_id is not null then e.rc_po_plan_id
-        else e.id
-      end)::text = any($${values.length}::text[])
-    `);
   }
   values.push(input.filters.limit);
   const limitPosition = values.length;
@@ -627,8 +607,6 @@ function normalizeFilters(value: unknown): ReportFilters {
     completionFys: stringArray(record.completionFys, 50),
     completionMonths: stringArray(record.completionMonths, 60),
     cpcInvolved: optionalBoolean(record.cpcInvolved),
-    dateFrom: dateString(record.dateFrom),
-    dateTo: dateString(record.dateTo),
     delayStatus: record.delayStatus === "delayed" || record.delayStatus === "on_time" ? record.delayStatus : undefined,
     deletedOnly: optionalBoolean(record.deletedOnly),
     departmentIds: stringArray(record.departmentIds, 200),
@@ -640,7 +618,6 @@ function normalizeFilters(value: unknown): ReportFilters {
     prReceiptMonths: stringArray(record.prReceiptMonths, 60),
     priorityCase: optionalBoolean(record.priorityCase),
     q: optionalSearch(record.q),
-    selectedIds: stringArray(record.selectedIds, 500),
     stageCodes: intArray(record.stageCodes, 20).filter((stageCode) => stageCode >= 0 && stageCode <= 8),
     status: record.status === "completed" || record.status === "running" ? record.status : undefined,
     tenderTypeIds: stringArray(record.tenderTypeIds, 100),
@@ -692,7 +669,6 @@ function applyCaseFactFilters(
     values.push(filters.completionMonths);
     where.push(`to_char(f.rc_po_award_date, 'YYYY-MM') = any($${values.length}::text[])`);
   }
-  applyDateFilters(where, values, filters, "f.pr_receipt_date");
   if (filters.delayStatus) {
     where.push(filters.delayStatus === "delayed" ? "f.is_delayed" : "not f.is_delayed");
   }
@@ -707,22 +683,6 @@ function applyCaseFactFilters(
   }
   if (filters.q) {
     applyTextSearch(where, values, filters.q, searchColumns);
-  }
-}
-
-function applyDateFilters(
-  where: string[],
-  values: unknown[],
-  filters: Pick<ReportFilters, "dateFrom" | "dateTo">,
-  column: string,
-) {
-  if (filters.dateFrom) {
-    values.push(filters.dateFrom);
-    where.push(`${column} >= $${values.length}`);
-  }
-  if (filters.dateTo) {
-    values.push(filters.dateTo);
-    where.push(`${column} <= $${values.length}`);
   }
 }
 
@@ -786,10 +746,6 @@ function intArray(value: unknown, maxLength: number) {
     .map((item) => Number(item))
     .filter((item) => Number.isInteger(item))
     .slice(0, maxLength);
-}
-
-function dateString(value: unknown) {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
 }
 
 function optionalSearch(value: unknown) {

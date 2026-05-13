@@ -25,8 +25,6 @@ export type ReportFilters = {
   completionFys?: string[];
   completionMonths?: string[];
   cpcInvolved?: boolean;
-  dateFrom?: string;
-  dateTo?: string;
   delayStatus?: "delayed" | "on_time";
   deletedOnly?: boolean;
   departmentIds?: string[];
@@ -677,7 +675,6 @@ export class ReportingRepository {
     this.applyScope(where, values, input.scope, "e.entity_id", "e.owner_user_id");
     this.applyEntityFilter(where, values, input.filters, "e.entity_id");
     this.applyUuidArrayFilter(where, values, input.filters.ownerUserIds, "e.owner_user_id");
-    this.applyDateFilters(where, values, input.filters, "e.rc_po_validity_date");
     if (input.filters.q) {
       this.applyTextSearch(where, values, input.filters.q, ["e.tender_description", "e.awarded_vendors"]);
     }
@@ -1173,19 +1170,13 @@ export class ReportingRepository {
         progress_message: string | null;
         progress_percent: number;
         report_code: string;
-        selected_count: number;
         status: string;
       }
     >(
       `
         select
           id, report_code, format, status, progress_percent, progress_message,
-          file_asset_id, created_at, completed_at, expires_at,
-          case
-            when jsonb_typeof(filters->'selectedIds') = 'array'
-              then jsonb_array_length(filters->'selectedIds')
-            else 0
-          end as selected_count
+          file_asset_id, created_at, completed_at, expires_at
         from ops.export_jobs
         where tenant_id = $1
           and created_by = $2
@@ -1275,7 +1266,6 @@ export class ReportingRepository {
       values.push(filters.completionMonths);
       where.push(`to_char(f.rc_po_award_date, 'YYYY-MM') = any($${values.length}::text[])`);
     }
-    this.applyDateFilters(where, values, filters, "f.pr_receipt_date");
     if (filters.q) {
       this.applyTextSearch(where, values, filters.q, searchColumns);
     }
@@ -1291,22 +1281,6 @@ export class ReportingRepository {
 
   private caseDeletionPredicate(filters: Pick<ReportFilters, "deletedOnly">) {
     return filters.deletedOnly ? "c.deleted_at is not null" : "c.deleted_at is null";
-  }
-
-  private applyDateFilters(
-    where: string[],
-    values: unknown[],
-    filters: ReportFilters,
-    column: string,
-  ) {
-    if (filters.dateFrom) {
-      values.push(filters.dateFrom);
-      where.push(`${column} >= $${values.length}`);
-    }
-    if (filters.dateTo) {
-      values.push(filters.dateTo);
-      where.push(`${column} <= $${values.length}`);
-    }
   }
 
   private applyEntityFilter(

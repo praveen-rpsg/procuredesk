@@ -24,10 +24,6 @@ const csvTextList = z
   .optional()
   .transform((value) => (value ? value.split(",").map((item) => item.trim()).filter(Boolean) : undefined))
   .pipe(z.array(z.string().min(1).max(32)).optional());
-const dateString = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/)
-  .optional();
 const nullableDateString = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -39,8 +35,6 @@ export const ReportQuerySchema = z.object({
   completionFys: csvTextList,
   completionMonths: csvTextList,
   cpcInvolved: z.enum(["true", "false"]).optional().transform((value) => value === undefined ? undefined : value === "true"),
-  dateFrom: dateString,
-  dateTo: dateString,
   delayStatus: z.enum(["delayed", "on_time"]).optional(),
   deletedOnly: z.enum(["true", "false"]).optional().transform((value) => value === undefined ? undefined : value === "true"),
   departmentIds: csvUuidList,
@@ -70,7 +64,6 @@ export const CreateExportJobRequestSchema = z.object({
   filters: z.record(z.unknown()).default({}),
   format: z.enum(["xlsx", "csv"]),
   reportCode: ReportCodeSchema,
-  selectedIds: z.array(z.string().trim().min(1).max(100)).max(500).optional(),
 });
 
 export const RcPoExpirySourceTypeSchema = z.enum(["case_award", "manual_plan"]);

@@ -223,7 +223,7 @@ function validateImportRow(input: ValidateImportRowInput): ParsedImportRow {
   }
 
   validateCatalogFields(errors, normalizedPayload, catalog);
-  validateOwner(errors, normalizedPayload.ownerUsername, entity?.id, users);
+  normalizeTenderOwner(errors, normalizedPayload, entity?.id, users);
   validateDepartment(errors, normalizedPayload.departmentName, entity?.id, departments);
   validateTenderIdentifiers(errors, normalizedPayload, existingCases, seenPrIds, seenTenderNos);
   validateRequiredText(
@@ -662,6 +662,23 @@ function validateOwner(
   }
   if (entityId && !user.entityIds.has(entityId)) {
     errors.push("Owner user is not mapped to the row entity.");
+  }
+}
+
+function normalizeTenderOwner(
+  errors: string[],
+  payload: Record<string, unknown>,
+  entityId: string | undefined,
+  users: Map<string, { entityIds: Set<string>; id: string }>,
+): void {
+  if (!hasValue(payload.ownerUsername)) return;
+  const user = users.get(textValue(payload.ownerUsername).toLowerCase());
+  if (!user) {
+    errors.push(UNKNOWN_USER_ERROR);
+    return;
+  }
+  if (entityId && !user.entityIds.has(entityId)) {
+    payload.ownerUsername = null;
   }
 }
 

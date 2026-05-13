@@ -163,18 +163,13 @@ export class ReportingService {
       filters: Record<string, unknown>;
       format: "csv" | "xlsx";
       reportCode: ReportCode;
-      selectedIds?: string[] | undefined;
     },
   ) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "report.export");
     return this.db.transaction(async () => {
-      const filters = input.selectedIds?.length
-        ? { ...input.filters, selectedIds: input.selectedIds }
-        : input.filters;
       const result = await this.repository.createExportJob({
         ...input,
-        filters,
         createdBy: actor.id,
         tenantId,
       });
@@ -231,7 +226,6 @@ export class ReportingService {
       progressMessage: job.progress_message,
       progressPercent: job.progress_percent,
       reportCode: job.report_code,
-      selectedCount: job.selected_count,
       status: job.status,
     }));
   }

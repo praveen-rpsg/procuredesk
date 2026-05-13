@@ -15,8 +15,6 @@ export type ReportQueryParams = {
   completionFys?: string[];
   completionMonths?: string[];
   cpcInvolved?: boolean;
-  dateFrom?: string;
-  dateTo?: string;
   delayStatus?: "delayed" | "on_time";
   deletedOnly?: boolean;
   departmentIds?: string[];
@@ -218,9 +216,7 @@ export type ExportJobStatus = {
   status: string;
 };
 
-export type ExportJobListItem = ExportJobStatus & {
-  selectedCount: number;
-};
+export type ExportJobListItem = ExportJobStatus;
 
 export function refreshReportProjections() {
   return apiRequest<{ refreshed: boolean }>("/reports/projections/refresh", { method: "POST" });
@@ -321,8 +317,6 @@ function buildReportQuery(params: ReportQueryParams) {
   setCsvParam(search, "completionFys", params.completionFys);
   setCsvParam(search, "completionMonths", params.completionMonths);
   setBooleanParam(search, "cpcInvolved", params.cpcInvolved);
-  if (params.dateFrom) search.set("dateFrom", params.dateFrom);
-  if (params.dateTo) search.set("dateTo", params.dateTo);
   if (params.delayStatus) search.set("delayStatus", params.delayStatus);
   setBooleanParam(search, "deletedOnly", params.deletedOnly);
   setCsvParam(search, "departmentIds", params.departmentIds);
