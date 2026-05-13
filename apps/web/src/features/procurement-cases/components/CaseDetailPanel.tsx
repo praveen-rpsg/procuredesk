@@ -160,7 +160,7 @@ export function CaseDetailPanel({ caseId, onAward, onDeleted, onEdit, onOpenFull
         <Metric label="PR Receipt" value={formatDate(kase.prReceiptDate)} />
         <Metric label="Target" value={formatDate(kase.tentativeCompletionDate)} />
         <Metric label="PR Value / Approved Budget [All Inclusive]" value={formatMoney(kase.financials.prValue)} />
-        <Metric label="NFA Approved [All Inclusive]" value={formatMoney(kase.financials.approvedAmount)} />
+        <Metric label="NFA Approved Amount (Rs.) [All Inclusive]" value={formatMoney(kase.financials.approvedAmount)} />
         <Metric label="Awarded [All Inclusive]" value={formatMoney(kase.financials.totalAwardedAmount)} />
         <Metric
           label={`Savings wrt PR Value/Approved Budget (Rs) ${formatSavingsPctBracket(

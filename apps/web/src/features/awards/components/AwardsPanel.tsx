@@ -362,11 +362,11 @@ function AwardSummary({
         <strong>{kase.prDescription || "-"}</strong>
       </div>
       <div>
-        <span>NFA Approved Amount (Rs.)</span>
+        <span>NFA Approved Amount (Rs.) [All Inclusive]</span>
         <strong>{formatNumber(kase.financials.approvedAmount)}</strong>
       </div>
       <div className={exceedsApproved ? "award-summary-danger" : ""}>
-        <span>Total RC/PO Awarded (Rs.)</span>
+        <span>Total RC/PO Awarded (Rs.) [All Inclusive]</span>
         <strong>{formatNumber(totalAwarded)}</strong>
         {exceedsApproved ? <small>Exceeds approved amount</small> : null}
       </div>

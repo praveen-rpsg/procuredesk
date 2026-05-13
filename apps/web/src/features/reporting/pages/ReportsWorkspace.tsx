@@ -1123,7 +1123,7 @@ function TenderDetailsKpis({
         <strong>{formatAmount(metrics?.totalPrValue ?? 0, amountUnit)}</strong>
       </article>
       <article>
-        <span>NFA Approved ({amountUnitLabel(amountUnit)}) [All Inclusive]</span>
+        <span>NFA Approved Amount ({amountUnitLabel(amountUnit)}) [All Inclusive]</span>
         <strong>{formatAmount(metrics?.totalApprovedAmount ?? 0, amountUnit)}</strong>
       </article>
       <article className="report-tender-kpi-positive">
@@ -1190,7 +1190,7 @@ function ReportAnalyticsDashboard({
       value: formatAmount(metrics?.totalPrValue ?? 0, amountUnit),
     },
     {
-      label: `NFA Approved (${amountUnitLabel(amountUnit)}) [All Inclusive]`,
+      label: `NFA Approved Amount (${amountUnitLabel(amountUnit)}) [All Inclusive]`,
       meta: "",
       tone: "success",
       value: formatAmount(metrics?.totalApprovedAmount ?? 0, amountUnit),
