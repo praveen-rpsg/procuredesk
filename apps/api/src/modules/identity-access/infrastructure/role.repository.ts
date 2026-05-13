@@ -64,7 +64,10 @@ export class RoleRepository {
     }));
   }
 
-  async findRoleForTenant(roleId: string, tenantId: string): Promise<RoleListItem | null> {
+  async findRoleForTenant(
+    roleId: string,
+    tenantId: string,
+  ): Promise<RoleListItem | null> {
     const result = await this.db.one<
       QueryResultRow & {
         id: string;
@@ -129,7 +132,11 @@ export class RoleRepository {
         client,
       );
       await this.replaceRolePermissions(
-        { permissionCodes: input.permissionCodes, roleId: result?.id ?? "", tenantId: input.tenantId },
+        {
+          permissionCodes: input.permissionCodes,
+          roleId: result?.id ?? "",
+          tenantId: input.tenantId,
+        },
         client,
       );
       return { id: result?.id ?? "" };
@@ -164,7 +171,10 @@ export class RoleRepository {
     });
   }
 
-  async deleteTenantRole(input: { roleId: string; tenantId: string }): Promise<boolean> {
+  async deleteTenantRole(input: {
+    roleId: string;
+    tenantId: string;
+  }): Promise<boolean> {
     const result = await this.db.query(
       `
         update iam.roles
@@ -210,7 +220,10 @@ export class RoleRepository {
     );
   }
 
-  async countValidAssignableRoles(input: { roleIds: string[]; tenantId: string }): Promise<number> {
+  async countValidAssignableRoles(input: {
+    roleIds: string[];
+    tenantId: string;
+  }): Promise<number> {
     if (input.roleIds.length === 0) return 0;
     const result = await this.db.one<QueryResultRow & { count: string }>(
       `
@@ -218,7 +231,6 @@ export class RoleRepository {
         from iam.roles
         where id = any($1::uuid[])
           and deleted_at is null
-          and code <> 'platform_super_admin'
           and (tenant_id = $2 or tenant_id is null)
       `,
       [input.roleIds, input.tenantId],
@@ -226,7 +238,10 @@ export class RoleRepository {
     return Number(result?.count ?? 0);
   }
 
-  async listRoleCodesByIds(input: { roleIds: string[]; tenantId: string }): Promise<string[]> {
+  async listRoleCodesByIds(input: {
+    roleIds: string[];
+    tenantId: string;
+  }): Promise<string[]> {
     if (input.roleIds.length === 0) return [];
     const result = await this.db.query<QueryResultRow & { code: string }>(
       `
@@ -242,7 +257,10 @@ export class RoleRepository {
     return result.rows.map((row) => row.code);
   }
 
-  async listRolesByIds(input: { roleIds: string[]; tenantId: string }): Promise<RoleListItem[]> {
+  async listRolesByIds(input: {
+    roleIds: string[];
+    tenantId: string;
+  }): Promise<RoleListItem[]> {
     if (input.roleIds.length === 0) return [];
     const result = await this.db.query<
       QueryResultRow & {
@@ -272,7 +290,6 @@ export class RoleRepository {
         left join iam.user_roles ur on ur.role_id = r.id
         where r.id = any($1::uuid[])
           and r.deleted_at is null
-          and r.code <> 'platform_super_admin'
           and (r.tenant_id = $2 or r.tenant_id is null)
         group by r.id
         order by r.name
@@ -291,7 +308,12 @@ export class RoleRepository {
   }
 
   async replaceUserRoles(
-    input: { userId: string; tenantId: string; roleIds: string[]; assignedBy: string },
+    input: {
+      userId: string;
+      tenantId: string;
+      roleIds: string[];
+      assignedBy: string;
+    },
     client?: PoolClient,
   ): Promise<void> {
     await this.db.query(

@@ -17,7 +17,11 @@ import {
 } from "../infrastructure/user.repository.js";
 import { PasswordService } from "./password.service.js";
 
-const ADMINISTRATION_ROLE_CODES = ["administration_manager", "tenant_admin"];
+const ADMINISTRATION_ROLE_CODES = [
+  "administration_manager",
+  "platform_super_admin",
+  "tenant_admin",
+];
 const GROUP_ACCESS_ROLE_CODES = [
   "administration_manager",
   "group_manager",

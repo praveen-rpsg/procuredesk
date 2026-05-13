@@ -75,7 +75,11 @@ const accessRoleCodeByLevel: Record<AccessLevel, string> = {
   USER: "tender_owner",
 };
 
-const administrationRoleCodes = ["administration_manager", "tenant_admin"];
+const administrationRoleCodes = [
+  "administration_manager",
+  "platform_super_admin",
+  "tenant_admin",
+];
 
 const accessLevelOptions: Array<{
   code: AccessLevel;
@@ -700,11 +704,8 @@ function UserAccessForm({
   ).sort();
   const riskyPermissions = effectivePermissions.filter(isRiskyPermission);
   const primaryRoleOptions = roles.map((role) => ({
-    disabled: !isPrimaryAssignableRole(role),
-    label:
-      role.code === "platform_super_admin"
-        ? `${formatRoleName(role)} - Platform only`
-        : `${formatRoleName(role)}${role.isSystemRole ? " - System" : " - Custom"}`,
+    disabled: false,
+    label: `${formatRoleName(role)}${role.isSystemRole ? " - System" : " - Custom"}`,
     value: role.id,
   }));
   const setPrimaryRole = (roleId: string) => {
@@ -854,10 +855,6 @@ function UserAccessForm({
                 : "Required"}
             </StatusBadge>
           </div>
-        </div>
-        <div className="platform-super-admin-note">
-          Platform Super Admin is not assigned here. It is a platform-level
-          account flag managed outside tenant user setup.
         </div>
       </section>
 
@@ -1012,8 +1009,8 @@ function resolvePrimaryRoleId(roles: AdminRole[], user: AdminUser) {
   );
 }
 
-function isPrimaryAssignableRole(role: AdminRole) {
-  return role.code !== "platform_super_admin";
+function isPrimaryAssignableRole(_role: AdminRole) {
+  return true;
 }
 
 function requiredAccessLevelForRole(

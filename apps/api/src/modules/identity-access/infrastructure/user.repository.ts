@@ -243,7 +243,7 @@ export class UserRepository {
           and u.deleted_at is null
           and u.status = 'active'
           and r.deleted_at is null
-          and r.code in ('administration_manager', 'tenant_admin')
+          and r.code in ('administration_manager', 'platform_super_admin', 'tenant_admin')
       `,
       [tenantId],
     );
