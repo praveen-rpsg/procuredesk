@@ -772,7 +772,11 @@ textarea:focus:not(:focus-visible) {
 
 .secondary-nav-item-active,
 .secondary-nav-item-active:hover {
-  background: color-mix(in srgb, var(--color-brand-100) 76%, var(--color-surface));
+  background: color-mix(
+    in srgb,
+    var(--color-brand-100) 76%,
+    var(--color-surface)
+  );
   color: var(--color-deep-teal);
   font-weight: var(--font-weight-semibold);
   box-shadow: inset 0 0 0 1px var(--color-brand-200);
@@ -780,7 +784,11 @@ textarea:focus:not(:focus-visible) {
 
 .secondary-nav-icon {
   align-items: center;
-  background: color-mix(in srgb, var(--color-brand-50) 72%, var(--color-surface));
+  background: color-mix(
+    in srgb,
+    var(--color-brand-50) 72%,
+    var(--color-surface)
+  );
   border-radius: var(--radius-md);
   color: var(--color-teal);
   display: inline-flex;
@@ -812,9 +820,14 @@ textarea:focus:not(:focus-visible) {
    ============================================================ */
 .module-subnav-shell {
   align-items: center;
-  border: 1px solid color-mix(in srgb, var(--color-brand-200) 58%, var(--color-border));
+  border: 1px solid
+    color-mix(in srgb, var(--color-brand-200) 58%, var(--color-border));
   border-radius: var(--radius-xl);
-  background: color-mix(in srgb, var(--color-surface) 92%, var(--color-brand-50));
+  background: color-mix(
+    in srgb,
+    var(--color-surface) 92%,
+    var(--color-brand-50)
+  );
   box-shadow:
     var(--shadow-xs),
     inset 0 1px 0 rgba(255, 255, 255, 0.82);
@@ -2172,7 +2185,11 @@ textarea:focus:not(:focus-visible) {
 }
 
 .admin-overview-metric:hover {
-  border-color: color-mix(in srgb, var(--color-brand-400) 42%, var(--color-border));
+  border-color: color-mix(
+    in srgb,
+    var(--color-brand-400) 42%,
+    var(--color-border)
+  );
   box-shadow: 0 12px 26px rgba(15, 23, 42, 0.1);
   transform: translateY(-2px);
 }
@@ -2629,10 +2646,18 @@ textarea:focus:not(:focus-visible) {
   margin: 0;
 }
 
+.user-role-section-heading span {
+  color: var(--color-muted);
+  display: block;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  margin-top: var(--space-1);
+}
+
 .user-role-card-grid {
   display: grid;
   gap: var(--space-3);
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .user-role-card {
@@ -2686,7 +2711,14 @@ textarea:focus:not(:focus-visible) {
 
 .user-role-card strong {
   color: var(--color-ink);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+}
+
+.user-role-card em {
+  color: var(--color-primary);
+  font-size: var(--font-size-xs);
+  font-style: normal;
   font-weight: var(--font-weight-semibold);
 }
 
@@ -2694,6 +2726,114 @@ textarea:focus:not(:focus-visible) {
   color: var(--color-muted);
   font-size: var(--font-size-xs);
   line-height: var(--line-height-snug);
+}
+
+.selected-role-strip {
+  align-items: center;
+  background: color-mix(in srgb, var(--color-brand-50) 55%, #fff);
+  border: 1px solid color-mix(in srgb, var(--color-brand-200) 60%, var(--color-border));
+  border-radius: var(--radius-lg);
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+  padding: var(--space-3);
+}
+
+.role-select-grid {
+  align-items: end;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: minmax(260px, 0.75fr) minmax(0, 1.25fr);
+}
+
+.platform-super-admin-note {
+  background: var(--color-surface-subtle);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-relaxed);
+  padding: var(--space-2-5) var(--space-3);
+}
+
+.selected-role-strip > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.selected-role-strip span {
+  color: var(--color-muted);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.selected-role-strip strong {
+  color: var(--color-ink);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+}
+
+.selected-role-strip small {
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-snug);
+}
+
+.role-option-grid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.role-option-card {
+  align-items: flex-start;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  display: flex;
+  gap: var(--space-2-5);
+  min-height: 84px;
+  padding: var(--space-3);
+}
+
+.role-option-card-selected {
+  background: color-mix(in srgb, var(--color-primary) 7%, #fff);
+  border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+}
+
+.role-option-card input {
+  margin-top: 2px;
+}
+
+.role-option-card span {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.role-option-card strong {
+  color: var(--color-ink);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.role-option-card small {
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-snug);
+}
+
+.empty-role-options {
+  background: var(--color-surface-subtle);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  color: var(--color-muted);
+  font-size: var(--font-size-sm);
+  padding: var(--space-3);
 }
 
 .mapped-entity-section > div:first-child {
@@ -3098,7 +3238,11 @@ textarea:focus:not(:focus-visible) {
 
 .case-edit-save-bar {
   align-items: center;
-  background: color-mix(in srgb, var(--color-surface) 94%, var(--color-brand-50));
+  background: color-mix(
+    in srgb,
+    var(--color-surface) 94%,
+    var(--color-brand-50)
+  );
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
   bottom: var(--space-4);
@@ -3637,7 +3781,8 @@ textarea:focus:not(:focus-visible) {
 
 .case-financial-cell dt em {
   background: color-mix(in srgb, var(--color-brand-500) 8%, #fff);
-  border: 1px solid color-mix(in srgb, var(--color-brand-500) 18%, var(--color-border));
+  border: 1px solid
+    color-mix(in srgb, var(--color-brand-500) 18%, var(--color-border));
   border-radius: 999px;
   color: var(--color-brand-600);
   flex: 0 0 auto;
@@ -4064,10 +4209,9 @@ textarea:focus:not(:focus-visible) {
   align-items: end;
   display: grid;
   gap: var(--space-3);
-  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(
-      220px,
-      1.4fr
-    ) minmax(150px, 0.8fr) auto;
+  grid-template-columns:
+    minmax(180px, 1fr) minmax(180px, 1fr) minmax(220px, 1.4fr)
+    minmax(150px, 0.8fr) auto;
 }
 
 .planning-filter-grid-tenders {
@@ -4083,6 +4227,25 @@ textarea:focus:not(:focus-visible) {
 
 .planning-filter-grid .text-input {
   min-height: 40px;
+}
+
+.planning-inline-filters {
+  align-items: end;
+  border-top: 1px solid var(--color-border-subtle);
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-bottom: var(--space-5);
+  padding-top: var(--space-4);
+}
+
+.planning-inline-filter-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  min-width: max-content;
 }
 
 .planning-search-input {
@@ -4266,6 +4429,13 @@ textarea:focus:not(:focus-visible) {
   display: grid;
   gap: var(--space-4);
   margin-bottom: var(--space-4);
+}
+
+.case-toolbar-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
 .case-filter-panel-header {
@@ -4491,10 +4661,9 @@ textarea:focus:not(:focus-visible) {
   align-items: center;
   display: grid;
   gap: var(--space-2);
-  grid-template-columns: minmax(280px, 1.6fr) minmax(150px, 0.65fr) minmax(
-      150px,
-      0.65fr
-    ) minmax(150px, 0.65fr) auto auto auto;
+  grid-template-columns:
+    minmax(280px, 1.6fr) minmax(150px, 0.65fr) minmax(150px, 0.65fr)
+    minmax(150px, 0.65fr) auto auto auto;
 }
 
 .report-search-control {
@@ -4771,10 +4940,9 @@ textarea:focus:not(:focus-visible) {
 }
 
 .report-filter-grid-v2 {
-  grid-template-columns: minmax(260px, 1.7fr) minmax(180px, 0.8fr) minmax(
-      170px,
-      0.75fr
-    ) minmax(170px, 0.75fr);
+  grid-template-columns:
+    minmax(260px, 1.7fr) minmax(180px, 0.8fr) minmax(170px, 0.75fr)
+    minmax(170px, 0.75fr);
 }
 
 .report-filter-matrix {
@@ -5232,7 +5400,10 @@ textarea:focus:not(:focus-visible) {
   aspect-ratio: 1;
   background:
     radial-gradient(circle at center, #ffffff 0 54%, transparent 55%),
-    conic-gradient(var(--color-teal) var(--progress), var(--color-neutral-200) 0);
+    conic-gradient(
+      var(--color-teal) var(--progress),
+      var(--color-neutral-200) 0
+    );
   border-radius: var(--radius-full);
   color: var(--color-ink);
   display: inline-flex;
@@ -5456,7 +5627,11 @@ textarea:focus:not(:focus-visible) {
 }
 
 .report-tender-type-bar-on-track {
-  background: linear-gradient(180deg, var(--color-teal), var(--color-deep-teal));
+  background: linear-gradient(
+    180deg,
+    var(--color-teal),
+    var(--color-deep-teal)
+  );
   flex-basis: var(--on-track-share);
 }
 
@@ -5642,7 +5817,11 @@ textarea:focus:not(:focus-visible) {
   align-content: center;
   border: 1px solid color-mix(in srgb, var(--color-border) 86%, transparent);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, var(--color-surface) 0%, color-mix(in srgb, var(--color-neutral-50) 42%, var(--color-surface)) 100%);
+  background: linear-gradient(
+    180deg,
+    var(--color-surface) 0%,
+    color-mix(in srgb, var(--color-neutral-50) 42%, var(--color-surface)) 100%
+  );
   box-shadow: var(--shadow-xs);
   display: grid;
   gap: var(--space-1-5);
@@ -5670,7 +5849,11 @@ textarea:focus:not(:focus-visible) {
 }
 
 .report-tender-kpi-grid article:hover {
-  border-color: color-mix(in srgb, var(--color-brand-400) 48%, var(--color-border));
+  border-color: color-mix(
+    in srgb,
+    var(--color-brand-400) 48%,
+    var(--color-border)
+  );
   box-shadow: 0 12px 26px rgba(15, 23, 42, 0.1);
   transform: translateY(-2px);
 }
@@ -5715,7 +5898,11 @@ textarea:focus:not(:focus-visible) {
 }
 
 .report-tender-kpi-positive {
-  border-color: color-mix(in srgb, var(--color-success-700) 20%, var(--color-border));
+  border-color: color-mix(
+    in srgb,
+    var(--color-success-700) 20%,
+    var(--color-border)
+  );
   background: linear-gradient(180deg, #ffffff 0%, #f4fbf7 100%);
 }
 
@@ -5724,7 +5911,11 @@ textarea:focus:not(:focus-visible) {
 }
 
 .report-tender-kpi-positive:hover {
-  border-color: color-mix(in srgb, var(--color-success-700) 36%, var(--color-border));
+  border-color: color-mix(
+    in srgb,
+    var(--color-success-700) 36%,
+    var(--color-border)
+  );
 }
 
 .report-tender-kpi-positive:hover::before {
@@ -6049,6 +6240,14 @@ textarea:focus:not(:focus-visible) {
   min-height: 30px;
 }
 
+.report-export-modal-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
 .report-export-status-head {
   align-items: flex-start;
   display: flex;
@@ -6290,7 +6489,8 @@ textarea:focus:not(:focus-visible) {
 .import-file-dropzone:focus-within {
   background: var(--color-brand-50);
   border-color: var(--color-brand-400);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand-400) 16%, transparent);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--color-brand-400) 16%, transparent);
 }
 
 .import-file-dropzone.has-file {
@@ -7307,7 +7507,11 @@ textarea:focus:not(:focus-visible) {
 }
 
 .table-shell th {
-  background: color-mix(in srgb, var(--color-brand-50) 82%, var(--color-surface));
+  background: color-mix(
+    in srgb,
+    var(--color-brand-50) 82%,
+    var(--color-surface)
+  );
   color: var(--color-deep-teal);
   font-size: var(--font-size-2xs);
   font-weight: var(--font-weight-semibold);
@@ -7989,7 +8193,9 @@ textarea:focus:not(:focus-visible) {
   align-items: end;
   display: grid;
   gap: var(--space-3-5);
-  grid-template-columns: minmax(180px, 0.8fr) minmax(180px, 0.8fr) minmax(220px, 1.4fr) auto;
+  grid-template-columns:
+    minmax(180px, 0.8fr) minmax(180px, 0.8fr) minmax(220px, 1.4fr)
+    auto;
   margin-top: var(--space-4);
 }
 
@@ -8506,6 +8712,11 @@ textarea:focus:not(:focus-visible) {
     width: 100%;
   }
 
+  .case-toolbar-actions,
+  .case-toolbar-actions .button {
+    width: 100%;
+  }
+
   .import-create-actions {
     grid-template-columns: 1fr;
   }
@@ -8924,6 +9135,26 @@ textarea:focus:not(:focus-visible) {
   .planning-filter-grid,
   .planning-filter-grid-tenders {
     grid-template-columns: 1fr;
+  }
+
+  .role-select-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .planning-inline-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .planning-inline-filter-actions {
+    align-items: stretch;
+    flex-direction: column;
+    justify-content: flex-start;
+    min-width: 0;
+  }
+
+  .planning-inline-filter-actions .button {
+    justify-content: center;
+    width: 100%;
   }
 
   .planning-expiry-actions,

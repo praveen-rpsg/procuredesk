@@ -1,5 +1,10 @@
-import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+} from "@nestjs/common";
 
+import { hasExpandedPermission } from "../../../common/auth/permission-utils.js";
 import type { AuthenticatedUser } from "../../identity-access/domain/authenticated-user.js";
 import { DeadLetterRepository } from "../infrastructure/dead-letter.repository.js";
 
@@ -14,7 +19,7 @@ export class OperationsService {
   }
 
   private requirePermission(actor: AuthenticatedUser, permission: string) {
-    if (!actor.isPlatformSuperAdmin && !actor.permissions.includes(permission)) {
+    if (!hasExpandedPermission(actor, permission)) {
       throw new ForbiddenException("Missing required permission.");
     }
   }

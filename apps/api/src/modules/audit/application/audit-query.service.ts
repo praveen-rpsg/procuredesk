@@ -1,5 +1,11 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 
+import { hasExpandedPermission } from "../../../common/auth/permission-utils.js";
 import type { AuthenticatedUser } from "../../identity-access/domain/authenticated-user.js";
 import { AuditRepository } from "../infrastructure/audit.repository.js";
 
@@ -28,7 +34,9 @@ export class AuditQueryService {
       offset: query.offset ?? 0,
       tenantId,
     };
-    return query.includeTotal ? this.repository.listEventsPage(paging) : this.repository.listEvents(paging);
+    return query.includeTotal
+      ? this.repository.listEventsPage(paging)
+      : this.repository.listEvents(paging);
   }
 
   async getEvent(actor: AuthenticatedUser, eventId: string) {
@@ -46,7 +54,7 @@ export class AuditQueryService {
   }
 
   private requirePermission(actor: AuthenticatedUser, permission: string) {
-    if (!actor.isPlatformSuperAdmin && !actor.permissions.includes(permission)) {
+    if (!hasExpandedPermission(actor, permission)) {
       throw new ForbiddenException("Missing required permission.");
     }
   }

@@ -1,5 +1,10 @@
-import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+} from "@nestjs/common";
 
+import { hasExpandedPermission } from "../../../common/auth/permission-utils.js";
 import { DatabaseService } from "../../../database/database.service.js";
 import { AuditWriterService } from "../../audit/application/audit-writer.service.js";
 import type { AuthenticatedUser } from "../../identity-access/domain/authenticated-user.js";
@@ -17,11 +22,16 @@ export class NotificationService {
     private readonly graph: MicrosoftGraphEmailAdapter,
   ) {}
 
-  preview(actor: AuthenticatedUser, type: "entity_monthly_digest" | "rc_po_expiry" | "stale_tender") {
+  preview(
+    actor: AuthenticatedUser,
+    type: "entity_monthly_digest" | "rc_po_expiry" | "stale_tender",
+  ) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "notification.manage");
-    if (type === "stale_tender") return this.repository.staleTenderPreview(tenantId);
-    if (type === "entity_monthly_digest") return this.repository.monthlyDigestPreview(tenantId);
+    if (type === "stale_tender")
+      return this.repository.staleTenderPreview(tenantId);
+    if (type === "entity_monthly_digest")
+      return this.repository.monthlyDigestPreview(tenantId);
     return this.repository.rcPoExpiryPreview(tenantId);
   }
 
@@ -46,7 +56,10 @@ export class NotificationService {
     input: {
       cadence: "daily" | "manual" | "monthly" | "weekly";
       isEnabled: boolean;
-      notificationType: "entity_monthly_digest" | "rc_po_expiry" | "stale_tender";
+      notificationType:
+        | "entity_monthly_digest"
+        | "rc_po_expiry"
+        | "stale_tender";
       recipientMode: "entity_admin" | "explicit" | "owner" | "owner_or_entity";
       subjectTemplate?: string | null;
       thresholdDays?: number | null;
@@ -81,18 +94,28 @@ export class NotificationService {
 
   async createJob(
     actor: AuthenticatedUser,
-    input: { notificationType: string; recipientEmail: string; subject: string },
+    input: {
+      notificationType: string;
+      recipientEmail: string;
+      subject: string;
+    },
   ) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "notification.manage");
     this.graph.assertConfigured();
     return this.db.transaction(async () => {
-      const result = await this.repository.createNotificationJob({ ...input, tenantId });
+      const result = await this.repository.createNotificationJob({
+        ...input,
+        tenantId,
+      });
       await this.outbox.write({
         aggregateId: result.id,
         aggregateType: "notification_job",
         eventType: "notification_job.created",
-        payload: { actorUserId: actor.id, notificationType: input.notificationType },
+        payload: {
+          actorUserId: actor.id,
+          notificationType: input.notificationType,
+        },
         tenantId,
       });
       await this.audit.write({
@@ -108,7 +131,7 @@ export class NotificationService {
   }
 
   private requirePermission(actor: AuthenticatedUser, permission: string) {
-    if (!actor.isPlatformSuperAdmin && !actor.permissions.includes(permission)) {
+    if (!hasExpandedPermission(actor, permission)) {
       throw new ForbiddenException("Missing required permission.");
     }
   }

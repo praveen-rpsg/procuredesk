@@ -22,13 +22,18 @@ export type RcPoExpiryRow = {
   awardedVendors: string | null;
   daysToExpiry: number | null;
   departmentId: string | null;
+  departmentName: string | null;
+  entityCode: string | null;
   entityId: string;
+  entityName: string | null;
+  ownerFullName: string | null;
   ownerUserId: string | null;
   rcPoAmount: number | null;
   rcPoAwardDate: string | null;
   rcPoValidityDate: string;
   sourceCaseId: string | null;
   sourceId: string;
+  sourceOrigin: "bulk_upload" | "manual_entry" | "tenderdb";
   sourceType: "case_award" | "manual_plan";
   tenderDescription: string | null;
   tenderFloatedOrNotRequired: boolean;
@@ -49,11 +54,15 @@ export function listTenderPlans(
   } = {},
 ) {
   const search = new URLSearchParams();
-  if (params.departmentIds?.length) search.set("departmentIds", params.departmentIds.join(","));
-  if (params.entityIds?.length) search.set("entityIds", params.entityIds.join(","));
+  if (params.departmentIds?.length)
+    search.set("departmentIds", params.departmentIds.join(","));
+  if (params.entityIds?.length)
+    search.set("entityIds", params.entityIds.join(","));
   if (params.limit) search.set("limit", String(params.limit));
   if (params.q) search.set("q", params.q);
-  return apiRequest<TenderPlanCase[]>(`/planning/tender-plans?${search.toString()}`);
+  return apiRequest<TenderPlanCase[]>(
+    `/planning/tender-plans?${search.toString()}`,
+  );
 }
 
 export function createTenderPlan(payload: {
@@ -70,7 +79,10 @@ export function createTenderPlan(payload: {
   });
 }
 
-export function updateTenderPlan(planId: string, payload: Record<string, unknown>) {
+export function updateTenderPlan(
+  planId: string,
+  payload: Record<string, unknown>,
+) {
   return apiRequest<void>(`/planning/tender-plans/${planId}`, {
     body: JSON.stringify(payload),
     method: "PATCH",
@@ -93,7 +105,10 @@ export function createRcPoPlan(payload: {
   });
 }
 
-export function updateRcPoPlan(planId: string, payload: Record<string, unknown>) {
+export function updateRcPoPlan(
+  planId: string,
+  payload: Record<string, unknown>,
+) {
   return apiRequest<void>(`/planning/rc-po-plans/${planId}`, {
     body: JSON.stringify(payload),
     method: "PATCH",
@@ -112,10 +127,15 @@ export function listRcPoExpiry(
 ) {
   const search = new URLSearchParams();
   if (params.days) search.set("days", String(params.days));
-  if (params.departmentIds?.length) search.set("departmentIds", params.departmentIds.join(","));
-  if (params.entityIds?.length) search.set("entityIds", params.entityIds.join(","));
-  if (typeof params.includeCompleted === "boolean") search.set("includeCompleted", String(params.includeCompleted));
+  if (params.departmentIds?.length)
+    search.set("departmentIds", params.departmentIds.join(","));
+  if (params.entityIds?.length)
+    search.set("entityIds", params.entityIds.join(","));
+  if (typeof params.includeCompleted === "boolean")
+    search.set("includeCompleted", String(params.includeCompleted));
   if (params.limit) search.set("limit", String(params.limit));
   if (params.q) search.set("q", params.q);
-  return apiRequest<RcPoExpiryRow[]>(`/planning/rc-po-expiry?${search.toString()}`);
+  return apiRequest<RcPoExpiryRow[]>(
+    `/planning/rc-po-expiry?${search.toString()}`,
+  );
 }

@@ -77,7 +77,14 @@ export class PlanningRepository {
     const values: unknown[] = [input.tenantId];
     const where = ["tenant_id = $1", "deleted_at is null"];
     this.applyScope(where, values, input.scope, "entity_id", null);
-    this.applyPlanningFilters(where, values, input.filters, "tender_description", "entity_id", "department_id");
+    this.applyPlanningFilters(
+      where,
+      values,
+      input.filters,
+      "tender_description",
+      "entity_id",
+      "department_id",
+    );
     values.push(input.filters.limit ?? 25);
     const limitPosition = values.length;
 
@@ -97,10 +104,12 @@ export class PlanningRepository {
     return result.rows.map((row) => this.mapTenderPlan(row));
   }
 
-  async createTenderPlan(input: TenderPlanInput & {
-    actorUserId: string;
-    tenantId: string;
-  }): Promise<{ id: string }> {
+  async createTenderPlan(
+    input: TenderPlanInput & {
+      actorUserId: string;
+      tenantId: string;
+    },
+  ): Promise<{ id: string }> {
     const row = await this.db.one<QueryResultRow & { id: string }>(
       `
         insert into procurement.tender_plan_cases (
@@ -130,7 +139,12 @@ export class PlanningRepository {
     const fields: Array<[string, unknown]> = [];
     this.pushIfPresent(fields, input, "entityId", "entity_id");
     this.pushIfPresent(fields, input, "departmentId", "department_id");
-    this.pushIfPresent(fields, input, "tenderDescription", "tender_description");
+    this.pushIfPresent(
+      fields,
+      input,
+      "tenderDescription",
+      "tender_description",
+    );
     this.pushIfPresent(fields, input, "valueRs", "value_rs");
     this.pushIfPresent(fields, input, "plannedDate", "planned_date");
     this.pushIfPresent(fields, input, "cpcInvolved", "cpc_involved");
@@ -165,7 +179,14 @@ export class PlanningRepository {
     const values: unknown[] = [input.tenantId];
     const where = ["tenant_id = $1", "deleted_at is null"];
     this.applyScope(where, values, input.scope, "entity_id", null);
-    this.applyPlanningFilters(where, values, input.filters, "tender_description", "entity_id", "department_id");
+    this.applyPlanningFilters(
+      where,
+      values,
+      input.filters,
+      "tender_description",
+      "entity_id",
+      "department_id",
+    );
     values.push(input.filters.limit ?? 25);
     const limitPosition = values.length;
 
@@ -186,10 +207,12 @@ export class PlanningRepository {
     return result.rows.map((row) => this.mapRcPoPlan(row));
   }
 
-  async createRcPoPlan(input: RcPoPlanInput & {
-    actorUserId: string;
-    tenantId: string;
-  }): Promise<{ id: string }> {
+  async createRcPoPlan(
+    input: RcPoPlanInput & {
+      actorUserId: string;
+      tenantId: string;
+    },
+  ): Promise<{ id: string }> {
     const result = await this.db.transaction(async (client) => {
       const row = await this.db.one<QueryResultRow & { id: string }>(
         `
@@ -232,12 +255,27 @@ export class PlanningRepository {
       this.pushIfPresent(fields, input, "entityId", "entity_id");
       this.pushIfPresent(fields, input, "departmentId", "department_id");
       this.pushIfPresent(fields, input, "sourceCaseId", "source_case_id");
-      this.pushIfPresent(fields, input, "tenderDescription", "tender_description");
+      this.pushIfPresent(
+        fields,
+        input,
+        "tenderDescription",
+        "tender_description",
+      );
       this.pushIfPresent(fields, input, "awardedVendors", "awarded_vendors");
       this.pushIfPresent(fields, input, "rcPoAmount", "rc_po_amount");
       this.pushIfPresent(fields, input, "rcPoAwardDate", "rc_po_award_date");
-      this.pushIfPresent(fields, input, "rcPoValidityDate", "rc_po_validity_date");
-      this.pushIfPresent(fields, input, "tentativeTenderingDate", "tentative_tendering_date");
+      this.pushIfPresent(
+        fields,
+        input,
+        "rcPoValidityDate",
+        "rc_po_validity_date",
+      );
+      this.pushIfPresent(
+        fields,
+        input,
+        "tentativeTenderingDate",
+        "tentative_tendering_date",
+      );
       this.pushIfPresent(
         fields,
         input,
@@ -246,7 +284,11 @@ export class PlanningRepository {
       );
       if (!fields.length) return;
 
-      const values: unknown[] = [input.planId, input.tenantId, input.actorUserId];
+      const values: unknown[] = [
+        input.planId,
+        input.tenantId,
+        input.actorUserId,
+      ];
       const assignments = fields.map(([column, value]) => {
         values.push(value);
         return `${column} = $${values.length}`;
@@ -266,7 +308,11 @@ export class PlanningRepository {
         client,
       );
       await this.assertRcPoPlanDatesValid(input.tenantId, input.planId, client);
-      await this.refreshContractExpiryFact(input.tenantId, input.planId, client);
+      await this.refreshContractExpiryFact(
+        input.tenantId,
+        input.planId,
+        client,
+      );
     });
   }
 
@@ -276,18 +322,42 @@ export class PlanningRepository {
     tenantId: string;
   }): Promise<RcPoExpiryRow[]> {
     const values: unknown[] = [input.tenantId];
-    const manualWhere = ["p.tenant_id = $1", "p.deleted_at is null", "p.rc_po_validity_date is not null"];
-    const awardWhere = ["a.tenant_id = $1", "a.deleted_at is null", "a.po_validity_date is not null"];
-    this.applyScope(manualWhere, values, input.scope, "p.entity_id", "coalesce(p.owner_user_id, c.owner_user_id)");
-    this.applyScope(awardWhere, values, input.scope, "c.entity_id", "c.owner_user_id");
+    const manualWhere = [
+      "p.tenant_id = $1",
+      "p.deleted_at is null",
+      "p.rc_po_validity_date is not null",
+    ];
+    const awardWhere = [
+      "a.tenant_id = $1",
+      "a.deleted_at is null",
+      "a.po_validity_date is not null",
+    ];
+    this.applyScope(
+      manualWhere,
+      values,
+      input.scope,
+      "p.entity_id",
+      "coalesce(p.owner_user_id, c.owner_user_id)",
+    );
+    this.applyScope(
+      awardWhere,
+      values,
+      input.scope,
+      "c.entity_id",
+      "c.owner_user_id",
+    );
 
     if (!input.filters.includeCompleted) {
       manualWhere.push("p.tender_floated_or_not_required = false");
     }
     if (input.filters.days != null) {
       values.push(input.filters.days);
-      manualWhere.push(`p.rc_po_validity_date <= current_date + ($${values.length}::integer * interval '1 day')`);
-      awardWhere.push(`a.po_validity_date <= current_date + ($${values.length}::integer * interval '1 day')`);
+      manualWhere.push(
+        `p.rc_po_validity_date <= current_date + ($${values.length}::integer * interval '1 day')`,
+      );
+      awardWhere.push(
+        `a.po_validity_date <= current_date + ($${values.length}::integer * interval '1 day')`,
+      );
     }
     if (input.filters.q) {
       values.push(input.filters.q);
@@ -319,22 +389,31 @@ export class PlanningRepository {
     const result = await this.db.query<QueryResultRow & ExpiryRow>(
       `
         select
-          source_type,
-          source_id,
-          source_case_id,
-          entity_id,
-          department_id,
-          owner_user_id,
-          tender_description,
-          awarded_vendors,
-          rc_po_amount,
-          rc_po_award_date,
-          rc_po_validity_date,
-          tentative_tendering_date,
-          tender_floated_or_not_required
+          expiry.source_type,
+          expiry.source_origin,
+          expiry.source_id,
+          expiry.source_case_id,
+          expiry.entity_id,
+          ent.code as entity_code,
+          ent.name as entity_name,
+          expiry.department_id,
+          dep.name as department_name,
+          expiry.owner_user_id,
+          owner.full_name as owner_full_name,
+          expiry.tender_description,
+          expiry.awarded_vendors,
+          expiry.rc_po_amount,
+          expiry.rc_po_award_date,
+          expiry.rc_po_validity_date,
+          expiry.tentative_tendering_date,
+          expiry.tender_floated_or_not_required
         from (
           select
             'manual_plan'::text as source_type,
+            case
+              when p.uploaded_at is not null then 'bulk_upload'
+              else 'manual_entry'
+            end as source_origin,
             p.id as source_id,
             p.source_case_id,
             p.entity_id,
@@ -353,6 +432,7 @@ export class PlanningRepository {
           union all
           select
             'case_award'::text as source_type,
+            'tenderdb'::text as source_origin,
             a.id as source_id,
             c.id as source_case_id,
             c.entity_id,
@@ -369,6 +449,9 @@ export class PlanningRepository {
           join procurement.cases c on c.id = a.case_id and c.tenant_id = a.tenant_id and c.deleted_at is null
           where ${awardWhere.join(" and ")}
         ) expiry
+        left join org.entities ent on ent.id = expiry.entity_id and ent.tenant_id = $1
+        left join org.departments dep on dep.id = expiry.department_id and dep.tenant_id = $1
+        left join iam.users owner on owner.id = expiry.owner_user_id and owner.tenant_id = $1
         order by rc_po_validity_date asc
         limit $${limitPosition}
       `,
@@ -383,13 +466,18 @@ export class PlanningRepository {
         awardedVendors: row.awarded_vendors,
         daysToExpiry,
         departmentId: row.department_id,
+        departmentName: row.department_name,
+        entityCode: row.entity_code,
         entityId: row.entity_id,
+        entityName: row.entity_name,
+        ownerFullName: row.owner_full_name,
         ownerUserId: row.owner_user_id,
         rcPoAmount: this.numberOrNull(row.rc_po_amount),
         rcPoAwardDate: this.dateOnly(row.rc_po_award_date),
         rcPoValidityDate: validityDate ?? "",
         sourceCaseId: row.source_case_id,
         sourceId: row.source_id,
+        sourceOrigin: row.source_origin,
         sourceType: row.source_type,
         tenderDescription: row.tender_description,
         tenderFloatedOrNotRequired: row.tender_floated_or_not_required,
@@ -456,7 +544,10 @@ export class PlanningRepository {
     client: PoolClient,
   ): Promise<void> {
     const row = await this.db.one<
-      QueryResultRow & { rc_po_award_date: Date | null; rc_po_validity_date: Date | null }
+      QueryResultRow & {
+        rc_po_award_date: Date | null;
+        rc_po_validity_date: Date | null;
+      }
     >(
       `
         select rc_po_award_date, rc_po_validity_date
@@ -512,7 +603,9 @@ export class PlanningRepository {
     }
     if (filters.q) {
       values.push(filters.q);
-      where.push(`to_tsvector('english', coalesce(${searchColumn}, '')) @@ plainto_tsquery('english', $${values.length})`);
+      where.push(
+        `to_tsvector('english', coalesce(${searchColumn}, '')) @@ plainto_tsquery('english', $${values.length})`,
+      );
     }
   }
 
@@ -598,13 +691,18 @@ type RcPoPlanRow = {
 type ExpiryRow = {
   awarded_vendors: string | null;
   department_id: string | null;
+  department_name: string | null;
+  entity_code: string | null;
   entity_id: string;
+  entity_name: string | null;
+  owner_full_name: string | null;
   owner_user_id: string | null;
   rc_po_amount: string | null;
   rc_po_award_date: Date | null;
   rc_po_validity_date: Date;
   source_case_id: string | null;
   source_id: string;
+  source_origin: "bulk_upload" | "manual_entry" | "tenderdb";
   source_type: "case_award" | "manual_plan";
   tender_description: string | null;
   tender_floated_or_not_required: boolean;

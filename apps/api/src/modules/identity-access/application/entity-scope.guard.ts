@@ -1,10 +1,14 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from "@nestjs/common";
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Injectable,
+} from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 
-import {
-  REQUIRED_ENTITY_PARAM_KEY,
-} from "../../../common/auth/entity-scope.decorator.js";
+import { REQUIRED_ENTITY_PARAM_KEY } from "../../../common/auth/entity-scope.decorator.js";
 import type { AuthenticatedRequest } from "../../../common/auth/authenticated-request.js";
+import { hasExpandedPermission } from "../../../common/auth/permission-utils.js";
 
 @Injectable()
 export class EntityScopeGuard implements CanActivate {
@@ -30,8 +34,8 @@ export class EntityScopeGuard implements CanActivate {
     }
     if (
       user.isPlatformSuperAdmin ||
-      user.permissions.includes("case.read.all") ||
-      user.permissions.includes("case.update.all") ||
+      hasExpandedPermission(user, "case.read.all") ||
+      hasExpandedPermission(user, "case.update.all") ||
       user.entityIds.includes(entityId)
     ) {
       return true;

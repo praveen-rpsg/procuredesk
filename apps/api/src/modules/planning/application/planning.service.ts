@@ -1,6 +1,13 @@
-import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+} from "@nestjs/common";
 
-import { effectivePlanningScope, hasExpandedPermission } from "../../../common/auth/permission-utils.js";
+import {
+  effectivePlanningScope,
+  hasExpandedPermission,
+} from "../../../common/auth/permission-utils.js";
 import { DatabaseService } from "../../../database/database.service.js";
 import { AuditWriterService } from "../../audit/application/audit-writer.service.js";
 import type { AuthenticatedUser } from "../../identity-access/domain/authenticated-user.js";
@@ -27,6 +34,7 @@ export class PlanningService {
 
   listTenderPlans(actor: AuthenticatedUser, filters: ListPlanningFilters) {
     const tenantId = this.requireTenant(actor);
+    this.assertPlanningAccessLevel(actor);
     return this.repository.listTenderPlans({
       filters: this.limitFilters(filters),
       scope: this.scope(actor),
@@ -37,6 +45,7 @@ export class PlanningService {
   async createTenderPlan(actor: AuthenticatedUser, input: TenderPlanInput) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "planning.manage");
+    this.assertPlanningAccessLevel(actor);
     this.assertEntityWriteAllowed(actor, input.entityId);
     return this.db.transaction(async () => {
       const result = await this.repository.createTenderPlan({
@@ -60,9 +69,13 @@ export class PlanningService {
     });
   }
 
-  async updateTenderPlan(actor: AuthenticatedUser, input: Omit<UpdateTenderPlanInput, "actorUserId" | "tenantId">) {
+  async updateTenderPlan(
+    actor: AuthenticatedUser,
+    input: Omit<UpdateTenderPlanInput, "actorUserId" | "tenantId">,
+  ) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "planning.manage");
+    this.assertPlanningAccessLevel(actor);
     if (input.entityId) this.assertEntityWriteAllowed(actor, input.entityId);
     await this.db.transaction(async () => {
       await this.repository.updateTenderPlan({
@@ -83,6 +96,7 @@ export class PlanningService {
 
   listRcPoPlans(actor: AuthenticatedUser, filters: ListPlanningFilters) {
     const tenantId = this.requireTenant(actor);
+    this.assertPlanningAccessLevel(actor);
     return this.repository.listRcPoPlans({
       filters: this.limitFilters(filters),
       scope: this.scope(actor),
@@ -93,6 +107,7 @@ export class PlanningService {
   async createRcPoPlan(actor: AuthenticatedUser, input: RcPoPlanInput) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "planning.manage");
+    this.assertPlanningAccessLevel(actor);
     this.assertEntityWriteAllowed(actor, input.entityId);
     this.validateRcPoDates(input);
     return this.db.transaction(async () => {
@@ -117,9 +132,13 @@ export class PlanningService {
     });
   }
 
-  async updateRcPoPlan(actor: AuthenticatedUser, input: Omit<UpdateRcPoPlanInput, "actorUserId" | "tenantId">) {
+  async updateRcPoPlan(
+    actor: AuthenticatedUser,
+    input: Omit<UpdateRcPoPlanInput, "actorUserId" | "tenantId">,
+  ) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "planning.manage");
+    this.assertPlanningAccessLevel(actor);
     if (input.entityId) this.assertEntityWriteAllowed(actor, input.entityId);
     this.validateRcPoDates(input);
     try {
@@ -137,12 +156,20 @@ export class PlanningService {
           targetType: "rc_po_plan",
           tenantId,
         });
-        await this.emitPlanningEvent(tenantId, input.planId, "rc_po_plan.updated", {
-          actorUserId: actor.id,
-        });
+        await this.emitPlanningEvent(
+          tenantId,
+          input.planId,
+          "rc_po_plan.updated",
+          {
+            actorUserId: actor.id,
+          },
+        );
       });
     } catch (error) {
-      if (error instanceof Error && error.message === "RC/PO plan date invalid.") {
+      if (
+        error instanceof Error &&
+        error.message === "RC/PO plan date invalid."
+      ) {
         throw new BadRequestException({
           errors: ["RC/PO validity date cannot be before RC/PO award date."],
           message: "Planning validation failed.",
@@ -160,8 +187,15 @@ export class PlanningService {
     ) {
       throw new ForbiddenException("Missing expiry read permission.");
     }
+    if (hasExpandedPermission(actor, "planning.manage")) {
+      this.assertPlanningAccessLevel(actor);
+    }
+    const limitedFilters = this.limitFilters(filters);
     return this.repository.listExpiryRows({
-      filters: { ...this.limitFilters(filters), days: filters.days ?? 120 },
+      filters:
+        filters.days == null
+          ? limitedFilters
+          : { ...limitedFilters, days: filters.days },
       scope: this.scope(actor),
       tenantId,
     });
@@ -181,8 +215,18 @@ export class PlanningService {
   private assertEntityWriteAllowed(actor: AuthenticatedUser, entityId: string) {
     if (actor.isPlatformSuperAdmin) return;
     if (actor.accessLevel === "GROUP") return;
-    if (actor.accessLevel === "ENTITY" && actor.entityIds.includes(entityId)) return;
-    throw new ForbiddenException("Planning changes are restricted to mapped entities.");
+    if (actor.accessLevel === "ENTITY" && actor.entityIds.includes(entityId))
+      return;
+    throw new ForbiddenException(
+      "Planning changes are restricted to mapped entities.",
+    );
+  }
+
+  private assertPlanningAccessLevel(actor: AuthenticatedUser) {
+    if (actor.isPlatformSuperAdmin || actor.accessLevel !== "USER") return;
+    throw new ForbiddenException(
+      "Planning management requires ENTITY or GROUP access.",
+    );
   }
 
   private requirePermission(actor: AuthenticatedUser, permission: string) {
@@ -204,7 +248,10 @@ export class PlanningService {
   }) {
     const errors = new PlanningDatePolicy().validateRcPoDates(input);
     if (errors.length) {
-      throw new BadRequestException({ errors, message: "Planning validation failed." });
+      throw new BadRequestException({
+        errors,
+        message: "Planning validation failed.",
+      });
     }
   }
 

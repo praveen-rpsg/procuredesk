@@ -539,17 +539,7 @@ function CasesWorkspaceList() {
     <section className="workspace-section">
       <PageHeader
         actions={
-          <>
-            <Button onClick={() => setIsFilterOpen((open) => !open)} variant="secondary">
-              <SlidersHorizontal size={16} />
-              Filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
-              {isFilterOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-            </Button>
-            <Button variant="secondary" onClick={() => setIsColumnMenuOpen(true)}>
-              Columns
-            </Button>
-            {canCreate ? <Button onClick={() => setIsCreateOpen(true)}>New Case</Button> : null}
-          </>
+          canCreate ? <Button onClick={() => setIsCreateOpen(true)}>New Case</Button> : null
         }
         eyebrow="Procurement"
         title="Cases"
@@ -579,6 +569,16 @@ function CasesWorkspaceList() {
             placeholder="Search Case ID, tender name…"
             value={q}
           />
+        </div>
+        <div className="case-toolbar-actions">
+          <Button onClick={() => setIsFilterOpen((open) => !open)} variant="secondary">
+            <SlidersHorizontal size={16} />
+            Filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
+            {isFilterOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+          </Button>
+          <Button variant="secondary" onClick={() => setIsColumnMenuOpen(true)}>
+            Columns
+          </Button>
         </div>
       </div>
 

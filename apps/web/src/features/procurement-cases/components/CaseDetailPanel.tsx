@@ -7,13 +7,16 @@ import { deleteCase, getCase, type CaseDetail } from "../api/casesApi";
 import { useAuth } from "../../../shared/auth/AuthProvider";
 import {
   canDeleteCase,
-  canManageAwards,
+  canManageCaseAwards,
   canManageCaseDelay,
   canReadAudit,
   canUpdateCase,
 } from "../../../shared/auth/permissions";
 import { formatCaseStageTransition } from "../../../shared/utils/caseStage";
-import { formatDateOnly, toDateOnlyInputValue } from "../../../shared/utils/dateOnly";
+import {
+  formatDateOnly,
+  toDateOnlyInputValue,
+} from "../../../shared/utils/dateOnly";
 import { ActivityFeed } from "../../../shared/ui/activity-feed/ActivityFeed";
 import { Button } from "../../../shared/ui/button/Button";
 import { ConfirmationDialog } from "../../../shared/ui/confirmation-dialog/ConfirmationDialog";
@@ -45,7 +48,13 @@ const milestoneSteps: Array<{ key: string; label: string; stage: number }> = [
   { key: "rcPoAwardDate", label: "RC/PO Award", stage: 8 },
 ];
 
-export function CaseDetailPanel({ caseId, onAward, onDeleted, onEdit, onOpenFull }: CaseDetailPanelProps) {
+export function CaseDetailPanel({
+  caseId,
+  onAward,
+  onDeleted,
+  onEdit,
+  onOpenFull,
+}: CaseDetailPanelProps) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { notify } = useToast();
@@ -74,13 +83,23 @@ export function CaseDetailPanel({ caseId, onAward, onDeleted, onEdit, onOpenFull
       notify({ message: "Case deleted.", tone: "success" });
       await queryClient.invalidateQueries({ queryKey: ["cases"] });
       await queryClient.invalidateQueries({ queryKey: ["case", caseId] });
-      await queryClient.invalidateQueries({ queryKey: ["case-activity", caseId] });
+      await queryClient.invalidateQueries({
+        queryKey: ["case-activity", caseId],
+      });
       await queryClient.invalidateQueries({ queryKey: ["deleted-cases"] });
       await queryClient.invalidateQueries({ queryKey: ["case-summary"] });
-      await queryClient.invalidateQueries({ queryKey: ["dashboard-recent-cases"] });
-      await queryClient.invalidateQueries({ queryKey: ["dashboard-assigned-cases"] });
-      await queryClient.invalidateQueries({ queryKey: ["dashboard-delayed-cases"] });
-      await queryClient.invalidateQueries({ queryKey: ["dashboard-priority-cases"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["dashboard-recent-cases"],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["dashboard-assigned-cases"],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["dashboard-delayed-cases"],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["dashboard-priority-cases"],
+      });
       setIsDeleteOpen(false);
       setDeleteReason("");
       onDeleted?.();
@@ -88,7 +107,12 @@ export function CaseDetailPanel({ caseId, onAward, onDeleted, onEdit, onOpenFull
   });
 
   if (!caseId) {
-    return <ErrorState message="Select a case from the list." title="No case selected" />;
+    return (
+      <ErrorState
+        message="Select a case from the list."
+        title="No case selected"
+      />
+    );
   }
 
   if (detail.isLoading) {
@@ -107,7 +131,7 @@ export function CaseDetailPanel({ caseId, onAward, onDeleted, onEdit, onOpenFull
 
   const kase = detail.data;
   const canEdit = canUpdateCase(user, kase);
-  const canAward = kase.status === "completed" && canManageAwards(user);
+  const canAward = canManageCaseAwards(user, kase);
   const canViewDelay = canManageCaseDelay(user, kase);
   return (
     <section className="case-preview-panel">
@@ -118,9 +142,17 @@ export function CaseDetailPanel({ caseId, onAward, onDeleted, onEdit, onOpenFull
         </div>
         <div className="case-preview-actions">
           <div className="row-actions">
-            <StatusBadge tone={kase.status === "completed" ? "success" : "warning"}>{kase.status}</StatusBadge>
-            {kase.isDelayed ? <StatusBadge tone="danger">Delayed</StatusBadge> : null}
-            {kase.priorityCase ? <StatusBadge tone="warning">Priority</StatusBadge> : null}
+            <StatusBadge
+              tone={kase.status === "completed" ? "success" : "warning"}
+            >
+              {kase.status}
+            </StatusBadge>
+            {kase.isDelayed ? (
+              <StatusBadge tone="danger">Delayed</StatusBadge>
+            ) : null}
+            {kase.priorityCase ? (
+              <StatusBadge tone="warning">Priority</StatusBadge>
+            ) : null}
           </div>
           {onEdit && canEdit ? (
             <Button onClick={onEdit} variant="secondary">
@@ -132,7 +164,11 @@ export function CaseDetailPanel({ caseId, onAward, onDeleted, onEdit, onOpenFull
             <Button
               disabled={!canAward}
               onClick={onAward}
-              title={canAward ? "Manage awards" : "Awards are enabled after completion"}
+              title={
+                canAward
+                  ? "Manage awards"
+                  : "Awards are enabled after completion"
+              }
               variant={canAward ? "primary" : "secondary"}
             >
               <Trophy size={16} />
@@ -156,12 +192,30 @@ export function CaseDetailPanel({ caseId, onAward, onDeleted, onEdit, onOpenFull
 
       <dl className="detail-grid case-preview-metrics">
         <Metric label="Case ID" value={kase.prId} />
-        <Metric label="Stage" value={formatCaseStageTransition(kase.stageCode, kase.desiredStageCode)} />
+        <Metric
+          label="Stage"
+          value={formatCaseStageTransition(
+            kase.stageCode,
+            kase.desiredStageCode,
+          )}
+        />
         <Metric label="PR Receipt" value={formatDate(kase.prReceiptDate)} />
-        <Metric label="Target" value={formatDate(kase.tentativeCompletionDate)} />
-        <Metric label="PR Value / Approved Budget [All Inclusive]" value={formatMoney(kase.financials.prValue)} />
-        <Metric label="NFA Approved Amount (Rs.) [All Inclusive]" value={formatMoney(kase.financials.approvedAmount)} />
-        <Metric label="Awarded [All Inclusive]" value={formatMoney(kase.financials.totalAwardedAmount)} />
+        <Metric
+          label="Target"
+          value={formatDate(kase.tentativeCompletionDate)}
+        />
+        <Metric
+          label="PR Value / Approved Budget [All Inclusive]"
+          value={formatMoney(kase.financials.prValue)}
+        />
+        <Metric
+          label="NFA Approved Amount (Rs.) [All Inclusive]"
+          value={formatMoney(kase.financials.approvedAmount)}
+        />
+        <Metric
+          label="Awarded [All Inclusive]"
+          value={formatMoney(kase.financials.totalAwardedAmount)}
+        />
         <Metric
           label={`Savings wrt PR Value/Approved Budget (Rs) ${formatSavingsPctBracket(
             kase.financials.savingsWrtPr,
@@ -175,10 +229,18 @@ export function CaseDetailPanel({ caseId, onAward, onDeleted, onEdit, onOpenFull
         <section className="case-preview-section">
           <p className="eyebrow">PR Details</p>
           <dl className="compact-detail-list">
-            <CompactMetric label="Description" value={kase.prDescription ?? "-"} />
+            <CompactMetric
+              label="Description"
+              value={kase.prDescription ?? "-"}
+            />
             <CompactMetric label="Scheme" value={kase.prSchemeNo ?? "-"} />
             <CompactMetric label="Tender No" value={kase.tenderNo ?? "-"} />
-            <CompactMetric label="CPC" value={kase.cpcInvolved == null ? "-" : kase.cpcInvolved ? "Yes" : "No"} />
+            <CompactMetric
+              label="CPC"
+              value={
+                kase.cpcInvolved == null ? "-" : kase.cpcInvolved ? "Yes" : "No"
+              }
+            />
             <CompactMetric label="PR Remarks" value={kase.prRemarks ?? "-"} />
             <CompactMetric
               label="Tender Owner's Remarks"
@@ -191,8 +253,14 @@ export function CaseDetailPanel({ caseId, onAward, onDeleted, onEdit, onOpenFull
           <section className="case-preview-section">
             <p className="eyebrow">Delay</p>
             <dl className="compact-detail-list">
-              <CompactMetric label="External Days" value={String(kase.delay.delayExternalDays ?? 0)} />
-              <CompactMetric label="Reason" value={kase.delay.delayReason ?? "-"} />
+              <CompactMetric
+                label="External Days"
+                value={String(kase.delay.delayExternalDays ?? 0)}
+              />
+              <CompactMetric
+                label="Reason"
+                value={kase.delay.delayReason ?? "-"}
+              />
             </dl>
           </section>
         ) : null}
@@ -213,7 +281,9 @@ export function CaseDetailPanel({ caseId, onAward, onDeleted, onEdit, onOpenFull
       <section className="case-preview-section">
         <p className="eyebrow">Activity</p>
         {!hasAuditAccess ? (
-          <p className="hero-copy">Activity is available to users with audit access.</p>
+          <p className="hero-copy">
+            Activity is available to users with audit access.
+          </p>
         ) : activity.isLoading ? (
           <Skeleton height={18} />
         ) : activity.error ? (
@@ -235,7 +305,8 @@ export function CaseDetailPanel({ caseId, onAward, onDeleted, onEdit, onOpenFull
         confirmLabel="Delete Case"
         description={
           <span>
-            This soft-deletes the selected procurement case. Admin users with restore permission can recover it later.
+            This soft-deletes the selected procurement case. Admin users with
+            restore permission can recover it later.
           </span>
         }
         isOpen={isDeleteOpen}
@@ -250,7 +321,9 @@ export function CaseDetailPanel({ caseId, onAward, onDeleted, onEdit, onOpenFull
           placeholder="Reason for deletion"
           value={deleteReason}
         />
-        {deleteMutation.error ? <p className="inline-error">{deleteMutation.error.message}</p> : null}
+        {deleteMutation.error ? (
+          <p className="inline-error">{deleteMutation.error.message}</p>
+        ) : null}
       </ConfirmationDialog>
     </section>
   );
@@ -287,7 +360,10 @@ function formatDate(value: string | null | undefined) {
   return formatDateOnly(value, "-");
 }
 
-function formatSavingsPctBracket(savings: number | null | undefined, base: number | null | undefined) {
+function formatSavingsPctBracket(
+  savings: number | null | undefined,
+  base: number | null | undefined,
+) {
   if (savings == null || !base) return "";
   const pct = (savings / base) * 100;
   return `[${pct.toFixed(1)}%]`;
@@ -298,7 +374,9 @@ function milestoneDate(kase: CaseDetail, key: string) {
   return typeof value === "string" ? toDateOnlyInputValue(value) || null : null;
 }
 
-function activityTone(action: string): "danger" | "neutral" | "success" | "warning" {
+function activityTone(
+  action: string,
+): "danger" | "neutral" | "success" | "warning" {
   if (action.includes("delete")) return "danger";
   if (action.includes("restore") || action.includes("create")) return "success";
   if (action.includes("delay")) return "warning";
