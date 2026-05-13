@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
 
+import { effectivePlanningScope, hasExpandedPermission } from "../../../common/auth/permission-utils.js";
 import { DatabaseService } from "../../../database/database.service.js";
 import { AuditWriterService } from "../../audit/application/audit-writer.service.js";
 import type { AuthenticatedUser } from "../../identity-access/domain/authenticated-user.js";
@@ -154,9 +155,8 @@ export class PlanningService {
   listExpiryRows(actor: AuthenticatedUser, filters: ExpiryFilters) {
     const tenantId = this.requireTenant(actor);
     if (
-      !actor.isPlatformSuperAdmin &&
-      !actor.permissions.includes("report.read") &&
-      !actor.permissions.includes("planning.manage")
+      !hasExpandedPermission(actor, "report.read") &&
+      !hasExpandedPermission(actor, "planning.manage")
     ) {
       throw new ForbiddenException("Missing expiry read permission.");
     }
@@ -168,18 +168,7 @@ export class PlanningService {
   }
 
   private scope(actor: AuthenticatedUser) {
-    if (actor.isPlatformSuperAdmin || actor.accessLevel === "GROUP") {
-      return { actorUserId: actor.id, assignedOnly: false, entityIds: [], tenantWide: true };
-    }
-    if (actor.accessLevel === "ENTITY") {
-      return {
-        actorUserId: actor.id,
-        assignedOnly: false,
-        entityIds: actor.entityIds,
-        tenantWide: false,
-      };
-    }
-    return { actorUserId: actor.id, assignedOnly: true, entityIds: [], tenantWide: false };
+    return effectivePlanningScope(actor);
   }
 
   private limitFilters(filters: ListPlanningFilters): ListPlanningFilters {
@@ -190,14 +179,14 @@ export class PlanningService {
   }
 
   private assertEntityWriteAllowed(actor: AuthenticatedUser, entityId: string) {
-    if (actor.isPlatformSuperAdmin || actor.permissions.includes("case.update.all")) return;
-    if (!actor.entityIds.includes(entityId)) {
-      throw new ForbiddenException("Planning changes are restricted to mapped entities.");
-    }
+    if (actor.isPlatformSuperAdmin) return;
+    if (actor.accessLevel === "GROUP") return;
+    if (actor.accessLevel === "ENTITY" && actor.entityIds.includes(entityId)) return;
+    throw new ForbiddenException("Planning changes are restricted to mapped entities.");
   }
 
   private requirePermission(actor: AuthenticatedUser, permission: string) {
-    if (!actor.isPlatformSuperAdmin && !actor.permissions.includes(permission)) {
+    if (!hasExpandedPermission(actor, permission)) {
       throw new ForbiddenException("Missing required permission.");
     }
   }

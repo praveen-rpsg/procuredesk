@@ -20,7 +20,7 @@ import {
 import { ApiError } from "../../../shared/api/client";
 import { useAuth } from "../../../shared/auth/AuthProvider";
 import {
-  canAssignCaseOwner,
+  canEditEntityManagedCaseFields,
   canManageCaseDelay,
   canUpdateCase,
 } from "../../../shared/auth/permissions";
@@ -114,11 +114,11 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
   const canEditDelay = Boolean(
     detail.data && canManageCaseDelay(user, detail.data),
   );
-  const canReassignOwner = Boolean(
-    detail.data && canAssignCaseOwner(user, detail.data),
+  const canEditEntityManagedFields = Boolean(
+    detail.data && canEditEntityManagedCaseFields(user, detail.data),
   );
   const assignableOwners = useQuery({
-    enabled: Boolean(detail.data?.entityId) && canReassignOwner,
+    enabled: Boolean(detail.data?.entityId) && canEditEntityManagedFields,
     queryFn: () => listAssignableOwners(detail.data?.entityId as string),
     queryKey: ["case-update-assignable-owners", detail.data?.entityId],
   });
@@ -169,8 +169,9 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
         estimateBenchmark,
         milestones,
         prReceiptDate: detail.data?.prReceiptDate ?? null,
+        showBidTimelineFields: requiresBidTimelineFields(detail.data?.tenderTypeName),
       }),
-    [detail.data?.prReceiptDate, estimateBenchmark, milestones],
+    [detail.data?.prReceiptDate, detail.data?.tenderTypeName, estimateBenchmark, milestones],
   );
   const caseErrors = useMemo(
     () =>
@@ -244,17 +245,18 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
     [delayExternalDays, delayReason, detail.data],
   );
   const ownerChanged = Boolean(
-    canReassignOwner && detail.data && ownerUserId && ownerUserId !== (detail.data.ownerUserId ?? ""),
+    canEditEntityManagedFields && detail.data && ownerUserId && ownerUserId !== (detail.data.ownerUserId ?? ""),
   );
   const tentativeCompletionChanged = Boolean(
-    canReassignOwner &&
+    canEditEntityManagedFields &&
       detail.data &&
       tentativeCompletionDate &&
       tentativeCompletionDate !== milestoneString(detail.data.tentativeCompletionDate),
   );
+  const showBidTimelineFields = requiresBidTimelineFields(detail.data?.tenderTypeName);
   const milestoneChangedFields = useMemo(
-    () => buildMilestoneChangedFields(detail.data, milestones),
-    [detail.data, milestones],
+    () => buildMilestoneChangedFields(detail.data, milestones, showBidTimelineFields),
+    [detail.data, milestones, showBidTimelineFields],
   );
 
   const saveCaseMutation = useMutation({
@@ -276,10 +278,17 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
             : undefined,
           tmRemarks: tmRemarks || null,
         });
-        await updateMilestones(targetCaseId, milestonePayload(milestones));
+        await updateMilestones(
+          targetCaseId,
+          milestonePayload({
+            milestones,
+            prReceiptDate: detail.data?.prReceiptDate ?? null,
+            showBidTimelineFields,
+          }),
+        );
       }
 
-      if (canReassignOwner && ownerUserId && ownerChanged) {
+      if (canEditEntityManagedFields && ownerUserId && ownerChanged) {
         await assignCaseOwner(targetCaseId, ownerUserId);
       }
 
@@ -348,7 +357,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
     );
   }
 
-  if (!canEditCase && !canEditDelay && !canReassignOwner) {
+  if (!canEditCase && !canEditDelay && !canEditEntityManagedFields) {
     return (
       <section className="state-panel case-detail-grid-wide case-edit-panel">
         <div className="detail-header">
@@ -424,21 +433,17 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
           </section>
         ) : null}
 
-        {canReassignOwner ? (
+        {canEditEntityManagedFields ? (
           <section
             className="stack-form case-edit-card"
           >
             <p className="eyebrow">Ownership And Target</p>
             <FormField
-              helperText={
-                canReassignOwner
-                  ? "Editable only by entity-level users. Only users mapped to the case entity are available."
-                  : "Tender owner is locked for your role."
-              }
+              helperText="Editable only by entity-level users. Only users mapped to the case entity are available."
               label="Tender Owner"
             >
               <Select
-                disabled={!canReassignOwner || assignableOwners.isLoading}
+                disabled={!canEditEntityManagedFields || assignableOwners.isLoading}
                 onChange={(event) => setOwnerUserId(event.target.value)}
                 options={ownerOptions}
                 placeholder="No Owner"
@@ -450,7 +455,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
               label="Tentative Completion Date"
             >
               <TextInput
-                disabled={!canReassignOwner}
+                disabled={!canEditEntityManagedFields}
                 onChange={(event) => setTentativeCompletionDate(event.target.value)}
                 type="date"
                 value={tentativeCompletionDate}
@@ -518,80 +523,84 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
                 value={milestoneString(detail.data?.prReceiptDate)}
               />
             </FormField>
-            <DateField
-              error={visibleMilestoneErrors.nitInitiationDate}
-              label="NIT Initiation"
-              name="nitInitiationDate"
-              setValue={setMilestones}
-              value={milestones.nitInitiationDate}
-            />
-            <DateField
-              error={visibleMilestoneErrors.nitApprovalDate}
-              label="NIT Approval"
-              name="nitApprovalDate"
-              setValue={setMilestones}
-              value={milestones.nitApprovalDate}
-            />
-            <DateField
-              error={visibleMilestoneErrors.nitPublishDate}
-              label="NIT Publish"
-              name="nitPublishDate"
-              setValue={setMilestones}
-              value={milestones.nitPublishDate}
-            />
-            <DateField
-              error={visibleMilestoneErrors.bidReceiptDate}
-              label="Bid Receipt"
-              name="bidReceiptDate"
-              setValue={setMilestones}
-              value={milestones.bidReceiptDate}
-            />
-            <FormField
-              error={visibleMilestoneErrors.biddersParticipated ?? ""}
-              label="Bidders Participated"
-            >
-              <TextInput
-                min={0}
-                onChange={(event) =>
-                  setMilestones((value) => ({
-                    ...value,
-                    biddersParticipated: event.target.value,
-                  }))
-                }
-                type="number"
-                value={milestones.biddersParticipated}
-              />
-            </FormField>
-            <DateField
-              error={visibleMilestoneErrors.commercialEvaluationDate}
-              label="Commercial Evaluation"
-              name="commercialEvaluationDate"
-              setValue={setMilestones}
-              value={milestones.commercialEvaluationDate}
-            />
-            <DateField
-              error={visibleMilestoneErrors.technicalEvaluationDate}
-              label="Technical Evaluation"
-              name="technicalEvaluationDate"
-              setValue={setMilestones}
-              value={milestones.technicalEvaluationDate}
-            />
-            <FormField
-              error={visibleMilestoneErrors.qualifiedBidders ?? ""}
-              label="Qualified Bidders"
-            >
-              <TextInput
-                min={0}
-                onChange={(event) =>
-                  setMilestones((value) => ({
-                    ...value,
-                    qualifiedBidders: event.target.value,
-                  }))
-                }
-                type="number"
-                value={milestones.qualifiedBidders}
-              />
-            </FormField>
+            {showBidTimelineFields ? (
+              <>
+                <DateField
+                  error={visibleMilestoneErrors.nitInitiationDate}
+                  label="NIT Initiation"
+                  name="nitInitiationDate"
+                  setValue={setMilestones}
+                  value={milestones.nitInitiationDate}
+                />
+                <DateField
+                  error={visibleMilestoneErrors.nitApprovalDate}
+                  label="NIT Approval"
+                  name="nitApprovalDate"
+                  setValue={setMilestones}
+                  value={milestones.nitApprovalDate}
+                />
+                <DateField
+                  error={visibleMilestoneErrors.nitPublishDate}
+                  label="NIT Publish"
+                  name="nitPublishDate"
+                  setValue={setMilestones}
+                  value={milestones.nitPublishDate}
+                />
+                <DateField
+                  error={visibleMilestoneErrors.bidReceiptDate}
+                  label="Bid Receipt"
+                  name="bidReceiptDate"
+                  setValue={setMilestones}
+                  value={milestones.bidReceiptDate}
+                />
+                <FormField
+                  error={visibleMilestoneErrors.biddersParticipated ?? ""}
+                  label="Bidder Participated Count"
+                >
+                  <TextInput
+                    min={0}
+                    onChange={(event) =>
+                      setMilestones((value) => ({
+                        ...value,
+                        biddersParticipated: event.target.value,
+                      }))
+                    }
+                    type="number"
+                    value={milestones.biddersParticipated}
+                  />
+                </FormField>
+                <DateField
+                  error={visibleMilestoneErrors.commercialEvaluationDate}
+                  label="Commercial Evaluation"
+                  name="commercialEvaluationDate"
+                  setValue={setMilestones}
+                  value={milestones.commercialEvaluationDate}
+                />
+                <DateField
+                  error={visibleMilestoneErrors.technicalEvaluationDate}
+                  label="Technical Evaluation"
+                  name="technicalEvaluationDate"
+                  setValue={setMilestones}
+                  value={milestones.technicalEvaluationDate}
+                />
+                <FormField
+                  error={visibleMilestoneErrors.qualifiedBidders ?? ""}
+                  label="Qualified Bidders Count"
+                >
+                  <TextInput
+                    min={0}
+                    onChange={(event) =>
+                      setMilestones((value) => ({
+                        ...value,
+                        qualifiedBidders: event.target.value,
+                      }))
+                    }
+                    type="number"
+                    value={milestones.qualifiedBidders}
+                  />
+                </FormField>
+              </>
+            ) : null}
             <FormField
               error={visibleFinancialErrors.estimateBenchmark ?? ""}
               label="Estimate / Benchmark (Rs.) [All Inclusive]"
@@ -809,24 +818,28 @@ function buildDelayChangedFields(
 function buildMilestoneChangedFields(
   kase: CaseDetail | undefined,
   value: MilestoneFormState,
+  showBidTimelineFields: boolean,
 ) {
   if (!kase) return [];
   const fields: string[] = [];
   for (const key of dateMilestoneKeys) {
+    if (!showBidTimelineFields && bidTimelineDateKeys.includes(key)) continue;
     if (value[key] !== milestoneString(kase.milestones[key])) {
       fields.push(milestoneLabels[key]);
     }
   }
-  if (
-    value.biddersParticipated !==
-    numberString(kase.milestones.biddersParticipated)
-  ) {
-    fields.push("Bidders Participated");
-  }
-  if (
-    value.qualifiedBidders !== numberString(kase.milestones.qualifiedBidders)
-  ) {
-    fields.push("Qualified Bidders");
+  if (showBidTimelineFields) {
+    if (
+      value.biddersParticipated !==
+      numberString(kase.milestones.biddersParticipated)
+    ) {
+      fields.push("Bidder Participated Count");
+    }
+    if (
+      value.qualifiedBidders !== numberString(kase.milestones.qualifiedBidders)
+    ) {
+      fields.push("Qualified Bidders Count");
+    }
   }
   if (value.loiIssued !== Boolean(kase.milestones.loiIssued)) {
     fields.push("LOI Issued");
@@ -932,88 +945,94 @@ function validateMilestones(input: {
   estimateBenchmark: string;
   milestones: MilestoneFormState;
   prReceiptDate?: string | null;
+  showBidTimelineFields: boolean;
 }): MilestoneErrors {
   const errors: MilestoneErrors = {};
   const value = input.milestones;
   for (const key of dateMilestoneKeys) {
+    if (!input.showBidTimelineFields && bidTimelineDateKeys.includes(key)) continue;
     if (value[key] && !isDateOnlyString(value[key])) {
       errors[key] = "Use a valid date.";
     }
   }
 
-  if (
-    input.prReceiptDate &&
-    isDateOnlyString(input.prReceiptDate) &&
-    isDateOnlyString(value.nitInitiationDate) &&
-    value.nitInitiationDate < input.prReceiptDate
-  ) {
-    errors.nitInitiationDate =
-      "NIT Initiation cannot be before PR Receipt Date.";
+  if (input.showBidTimelineFields) {
+    if (
+      input.prReceiptDate &&
+      isDateOnlyString(input.prReceiptDate) &&
+      isDateOnlyString(value.nitInitiationDate) &&
+      value.nitInitiationDate < input.prReceiptDate
+    ) {
+      errors.nitInitiationDate =
+        "NIT Initiation cannot be before PR Receipt Date.";
+    }
+    requireDateOrder(
+      errors,
+      value,
+      "nitInitiationDate",
+      "nitApprovalDate",
+      "NIT Approval cannot be before NIT Initiation.",
+    );
+    requireDateOrder(
+      errors,
+      value,
+      "nitApprovalDate",
+      "nitPublishDate",
+      "NIT Publish cannot be before NIT Approval.",
+    );
+    requireDateOrder(
+      errors,
+      value,
+      "nitPublishDate",
+      "bidReceiptDate",
+      "Bid Receipt cannot be before NIT Publish.",
+    );
+    requireDateOrder(
+      errors,
+      value,
+      "bidReceiptDate",
+      "technicalEvaluationDate",
+      "Technical Evaluation cannot be before Bid Receipt.",
+    );
+    requireDateOrder(
+      errors,
+      value,
+      "bidReceiptDate",
+      "commercialEvaluationDate",
+      "Commercial Evaluation cannot be before Bid Receipt.",
+    );
+    requireDateOrder(
+      errors,
+      value,
+      "technicalEvaluationDate",
+      "nfaSubmissionDate",
+      "NFA Submission cannot be before Technical Evaluation.",
+    );
+    requireDateOrder(
+      errors,
+      value,
+      "commercialEvaluationDate",
+      "nfaSubmissionDate",
+      "NFA Submission cannot be before Commercial Evaluation.",
+    );
   }
-  requireDateOrder(
-    errors,
-    value,
-    "nitInitiationDate",
-    "nitApprovalDate",
-    "NIT Approval cannot be before NIT Initiation.",
-  );
-  requireDateOrder(
-    errors,
-    value,
-    "nitApprovalDate",
-    "nitPublishDate",
-    "NIT Publish cannot be before NIT Approval.",
-  );
-  requireDateOrder(
-    errors,
-    value,
-    "nitPublishDate",
-    "bidReceiptDate",
-    "Bid Receipt cannot be before NIT Publish.",
-  );
-  requireDateOrder(
-    errors,
-    value,
-    "bidReceiptDate",
-    "technicalEvaluationDate",
-    "Technical Evaluation cannot be before Bid Receipt.",
-  );
-  requireDateOrder(
-    errors,
-    value,
-    "bidReceiptDate",
-    "commercialEvaluationDate",
-    "Commercial Evaluation cannot be before Bid Receipt.",
-  );
-  requireDateOrder(
-    errors,
-    value,
-    "technicalEvaluationDate",
-    "nfaSubmissionDate",
-    "NFA Submission cannot be before Technical Evaluation.",
-  );
-  requireDateOrder(
-    errors,
-    value,
-    "commercialEvaluationDate",
-    "nfaSubmissionDate",
-    "NFA Submission cannot be before Commercial Evaluation.",
-  );
   requireMilestonePrerequisites(
     errors,
     value,
     Boolean(value.nfaSubmissionDate),
     "nfaSubmissionDate",
-    [
-      ["nitInitiationDate", "NIT Initiation"],
-      ["nitApprovalDate", "NIT Approval"],
-      ["nitPublishDate", "NIT Publish"],
-      ["bidReceiptDate", "Bid Receipt"],
-      ["biddersParticipated", "Bidders Participated"],
-      ["commercialEvaluationDate", "Commercial Evaluation"],
-      ["technicalEvaluationDate", "Technical Evaluation"],
-      ["qualifiedBidders", "Qualified Bidders"],
-    ],
+    input.showBidTimelineFields
+      ? [
+          ["nitInitiationDate", "NIT Initiation"],
+          ["nitApprovalDate", "NIT Approval"],
+          ["nitPublishDate", "NIT Publish"],
+          ["bidReceiptDate", "Bid Receipt"],
+          ["biddersParticipated", "Bidder Participated Count"],
+          ["commercialEvaluationDate", "Commercial Evaluation"],
+          ["technicalEvaluationDate", "Technical Evaluation"],
+          ["qualifiedBidders", "Qualified Bidders Count"],
+        ]
+      : [],
     [[input.estimateBenchmark, "Estimate / Benchmark (Rs.) [All Inclusive]"]],
     "NFA Submission can be saved only after all prior milestone fields are filled.",
   );
@@ -1058,25 +1077,27 @@ function validateMilestones(input: {
       "LOI issued date is required when LOI is marked issued.";
   }
 
-  validateNonNegativeInteger(
-    errors,
-    value.biddersParticipated,
-    "biddersParticipated",
-    "Bidders participated",
-  );
-  validateNonNegativeInteger(
-    errors,
-    value.qualifiedBidders,
-    "qualifiedBidders",
-    "Qualified bidders",
-  );
-  if (
-    isNonNegativeInteger(value.biddersParticipated) &&
-    isNonNegativeInteger(value.qualifiedBidders) &&
-    Number(value.qualifiedBidders) > Number(value.biddersParticipated)
-  ) {
-    errors.qualifiedBidders =
-      "Qualified bidders cannot exceed bidders participated.";
+  if (input.showBidTimelineFields) {
+    validateNonNegativeInteger(
+      errors,
+      value.biddersParticipated,
+      "biddersParticipated",
+      "Bidders participated",
+    );
+    validateNonNegativeInteger(
+      errors,
+      value.qualifiedBidders,
+      "qualifiedBidders",
+      "Qualified bidders",
+    );
+    if (
+      isNonNegativeInteger(value.biddersParticipated) &&
+      isNonNegativeInteger(value.qualifiedBidders) &&
+      Number(value.qualifiedBidders) > Number(value.biddersParticipated)
+    ) {
+      errors.qualifiedBidders =
+        "Qualified bidders cannot exceed bidders participated.";
+    }
   }
 
   return errors;
@@ -1150,6 +1171,15 @@ const dateMilestoneKeys: DateMilestoneKey[] = [
   "technicalEvaluationDate",
 ];
 
+const bidTimelineDateKeys: DateMilestoneKey[] = [
+  "bidReceiptDate",
+  "commercialEvaluationDate",
+  "nitApprovalDate",
+  "nitInitiationDate",
+  "nitPublishDate",
+  "technicalEvaluationDate",
+];
+
 function requireDateOrder(
   errors: MilestoneErrors,
   value: MilestoneFormState,
@@ -1216,7 +1246,24 @@ function parseMoneyInput(value: string) {
   return Number(value.replace(/,/g, "").trim());
 }
 
-function milestonePayload(value: MilestoneFormState) {
+function milestonePayload(input: {
+  milestones: MilestoneFormState;
+  prReceiptDate: string | null;
+  showBidTimelineFields: boolean;
+}) {
+  const value = input.showBidTimelineFields
+    ? input.milestones
+    : {
+        ...input.milestones,
+        bidReceiptDate: input.prReceiptDate ?? "",
+        biddersParticipated: "0",
+        commercialEvaluationDate: input.prReceiptDate ?? "",
+        nitApprovalDate: input.prReceiptDate ?? "",
+        nitInitiationDate: input.prReceiptDate ?? "",
+        nitPublishDate: input.prReceiptDate ?? "",
+        qualifiedBidders: "0",
+        technicalEvaluationDate: input.prReceiptDate ?? "",
+      };
   return {
     bidReceiptDate: value.bidReceiptDate || null,
     biddersParticipated: value.biddersParticipated
@@ -1237,6 +1284,11 @@ function milestonePayload(value: MilestoneFormState) {
     rcPoValidity: value.rcPoValidity || null,
     technicalEvaluationDate: value.technicalEvaluationDate || null,
   };
+}
+
+function requiresBidTimelineFields(tenderTypeName: string | null | undefined): boolean {
+  const normalized = tenderTypeName?.trim().toLowerCase();
+  return normalized === "open" || normalized === "limited" || normalized === "single party";
 }
 
 function milestoneString(value: unknown) {

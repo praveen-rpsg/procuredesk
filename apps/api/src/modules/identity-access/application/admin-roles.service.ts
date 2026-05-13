@@ -57,6 +57,9 @@ export class AdminRolesService {
     const tenantId = this.requireTenant(actor);
     const role = await this.roles.findRoleForTenant(input.roleId, tenantId);
     if (!role) throw new NotFoundException("Role not found.");
+    if (role.isSystemRole) {
+      throw new ForbiddenException("System roles cannot be edited. Clone the role to customize permissions.");
+    }
     const permissionCodes = this.normalizePermissionCodes(input.permissionCodes);
     await this.assertPermissionsExist(permissionCodes);
     const beforePermissionCodes = role.permissionCodes;

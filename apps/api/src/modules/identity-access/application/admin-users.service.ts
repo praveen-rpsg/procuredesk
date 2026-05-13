@@ -65,7 +65,7 @@ export class AdminUsersService {
     const requestedStatus = input.status ?? "pending_password_setup";
     const password = input.password?.trim() ?? "";
     this.assertAccessLevelAllowed(input.accessLevel, input.entityIds ?? []);
-    await this.assertRoleAssignmentAllowed(tenantId, input.roleIds ?? [], input.entityIds ?? []);
+    await this.assertRoleAssignmentAllowed(tenantId, input.roleIds ?? [], input.entityIds ?? [], input.accessLevel);
 
     if (requestedStatus === "active" && !password) {
       throw new BadRequestException("Password is required when creating an active user.");
@@ -199,6 +199,12 @@ export class AdminUsersService {
     const tenantId = this.requireTenant(actor);
     const before = await this.users.findTenantUserAccess({ tenantId, userId: input.userId });
     this.assertAccessLevelAllowed(input.accessLevel, before?.entityIds ?? []);
+    await this.assertRoleAssignmentAllowed(
+      tenantId,
+      before?.roleIds ?? [],
+      before?.entityIds ?? [],
+      input.accessLevel,
+    );
     await this.users.updateUserAccessLevel({
       tenantId,
       userId: input.userId,
@@ -225,7 +231,12 @@ export class AdminUsersService {
   ): Promise<void> {
     const tenantId = this.requireTenant(actor);
     const before = await this.users.findTenantUserAccess({ tenantId, userId: input.userId });
-    await this.assertRoleAssignmentAllowed(tenantId, input.roleIds, before?.entityIds ?? []);
+    await this.assertRoleAssignmentAllowed(
+      tenantId,
+      input.roleIds,
+      before?.entityIds ?? [],
+      before?.accessLevel ?? "USER",
+    );
     await this.assertNotRemovingLastTenantAdminByRoles(tenantId, input.userId, input.roleIds);
     await this.roles.replaceUserRoles({
       tenantId,
@@ -256,6 +267,12 @@ export class AdminUsersService {
     const tenantId = this.requireTenant(actor);
     const before = await this.users.findTenantUserAccess({ tenantId, userId: input.userId });
     this.assertAccessLevelAllowed(before?.accessLevel ?? "USER", input.entityIds);
+    await this.assertRoleAssignmentAllowed(
+      tenantId,
+      before?.roleIds ?? [],
+      input.entityIds,
+      before?.accessLevel ?? "USER",
+    );
     await this.db.transaction(async (client) => {
       await this.users.replaceEntityScopes(
         {
@@ -291,7 +308,12 @@ export class AdminUsersService {
     return actor.tenantId;
   }
 
-  private async assertRoleAssignmentAllowed(tenantId: string, roleIds: string[], entityIds: string[]) {
+  private async assertRoleAssignmentAllowed(
+    tenantId: string,
+    roleIds: string[],
+    entityIds: string[],
+    accessLevel: "ENTITY" | "GROUP" | "USER",
+  ) {
     const uniqueRoleIds = Array.from(new Set(roleIds));
     if (uniqueRoleIds.length === 0) {
       throw new BadRequestException("At least one role is required.");
@@ -303,6 +325,16 @@ export class AdminUsersService {
     const selectedRoles = await this.roles.listRolesByIds({ roleIds: uniqueRoleIds, tenantId });
     if (selectedRoles.some(roleNeedsEntityScope) && entityIds.length === 0) {
       throw new BadRequestException("Select at least one entity for entity-scoped roles.");
+    }
+    const requiredAccessLevels = Array.from(
+      new Set(selectedRoles.map(requiredAccessLevelForRole).filter(Boolean)),
+    );
+    if (requiredAccessLevels.length > 1) {
+      throw new BadRequestException("Selected roles require different access levels.");
+    }
+    const requiredAccessLevel = requiredAccessLevels[0];
+    if (requiredAccessLevel && requiredAccessLevel !== accessLevel) {
+      throw new BadRequestException(`${requiredAccessLevel} access is required for the selected roles.`);
     }
   }
 
@@ -359,4 +391,41 @@ function roleNeedsEntityScope(role: { permissionCodes: string[] }) {
       "planning.manage",
     ].includes(permission),
   );
+}
+
+function requiredAccessLevelForRole(role: {
+  code: string;
+  permissionCodes: string[];
+}): "ENTITY" | "GROUP" | "USER" | null {
+  if (["group_viewer", "report_viewer", "tenant_admin"].includes(role.code)) {
+    return "GROUP";
+  }
+  if (role.code === "entity_manager") {
+    return "ENTITY";
+  }
+  if (role.code === "tender_owner") {
+    return "USER";
+  }
+  if (
+    role.permissionCodes.some((permission) =>
+      ["case.read.all", "case.update.all", "role.manage", "tenant.manage", "user.manage"].includes(permission),
+    )
+  ) {
+    return "GROUP";
+  }
+  if (
+    role.permissionCodes.some((permission) =>
+      ["case.delay.manage.entity", "case.read.entity", "case.update.entity", "planning.manage"].includes(permission),
+    )
+  ) {
+    return "ENTITY";
+  }
+  if (
+    role.permissionCodes.some((permission) =>
+      ["case.create", "case.read.assigned", "case.update.assigned"].includes(permission),
+    )
+  ) {
+    return "USER";
+  }
+  return null;
 }

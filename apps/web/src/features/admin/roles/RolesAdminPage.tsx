@@ -168,8 +168,9 @@ export function RolesAdminPage() {
                       </IconButton>
                       <IconButton
                         aria-label={`Edit ${role.name}`}
+                        disabled={role.isSystemRole}
                         onClick={() => openEdit(role)}
-                        tooltip="Edit role"
+                        tooltip={role.isSystemRole ? "Clone system roles to customize permissions" : "Edit role"}
                       >
                         <Pencil size={16} />
                       </IconButton>

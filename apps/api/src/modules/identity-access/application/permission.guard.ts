@@ -5,16 +5,7 @@ import {
   REQUIRED_PERMISSIONS_KEY,
 } from "../../../common/auth/permissions.decorator.js";
 import type { AuthenticatedRequest } from "../../../common/auth/authenticated-request.js";
-
-const PERMISSION_IMPLICATIONS: Record<string, string[]> = {
-  "case.read.all": ["case.read.entity", "case.read.assigned"],
-  "case.read.entity": ["case.read.assigned"],
-  "case.update.all": ["case.read.all", "case.update.entity", "case.update.assigned"],
-  "case.update.entity": ["case.read.entity", "case.update.assigned"],
-  "catalog.manage": ["catalog.read"],
-  "entity.manage": ["entity.read"],
-  "user.manage": ["user.read"],
-};
+import { expandPermissions } from "../../../common/auth/permission-utils.js";
 
 @Injectable()
 export class PermissionGuard implements CanActivate {
@@ -41,30 +32,12 @@ export class PermissionGuard implements CanActivate {
       return true;
     }
 
-    const granted = this.expandPermissions(user.permissions);
+    const granted = expandPermissions(user.permissions);
     const hasAllRequired = requiredPermissions.every((permission) => granted.has(permission));
     if (!hasAllRequired) {
       throw new ForbiddenException("Missing required permission.");
     }
 
     return true;
-  }
-
-  private expandPermissions(permissions: string[]): Set<string> {
-    const granted = new Set(permissions);
-    const queue = [...permissions];
-
-    while (queue.length) {
-      const permission = queue.shift();
-      if (!permission) continue;
-      for (const implied of PERMISSION_IMPLICATIONS[permission] ?? []) {
-        if (!granted.has(implied)) {
-          granted.add(implied);
-          queue.push(implied);
-        }
-      }
-    }
-
-    return granted;
   }
 }

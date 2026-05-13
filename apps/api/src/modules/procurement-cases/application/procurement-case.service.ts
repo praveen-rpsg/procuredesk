@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 
+import { hasExpandedPermission } from "../../../common/auth/permission-utils.js";
 import { addDaysToDateOnly } from "../../../common/utils/date-only.js";
 import { DatabaseService } from "../../../database/database.service.js";
 import { AuditWriterService } from "../../audit/application/audit-writer.service.js";
@@ -256,9 +257,10 @@ export class ProcurementCaseService {
     const tenantId = this.requireTenant(actor);
     await this.assertCanUpdate(actor, caseId);
     const kase = await this.getCase(actor, caseId);
+    const normalizedMilestones = this.normalizeMilestonesForTenderType(kase, milestones);
     const chronologyErrors = new CaseChronologyPolicy().validate({
       estimateBenchmark: kase.financials.estimateBenchmark ?? null,
-      milestones,
+      milestones: normalizedMilestones,
       prReceiptDate: kase.prReceiptDate,
     });
     if (chronologyErrors.length) {
@@ -266,8 +268,8 @@ export class ProcurementCaseService {
     }
 
     const stagePolicy = new CaseStagePolicy();
-    const status = stagePolicy.deriveStatus(milestones);
-    const stageCode = stagePolicy.deriveActualStageCode(milestones);
+    const status = stagePolicy.deriveStatus(normalizedMilestones);
+    const stageCode = stagePolicy.deriveActualStageCode(normalizedMilestones);
     const desiredStageCode = stagePolicy.deriveDesiredStageCode({
       prReceiptDate: kase.prReceiptDate,
       status,
@@ -297,7 +299,7 @@ export class ProcurementCaseService {
         caseId,
         desiredStageCode,
         isDelayed: stagePolicy.isDelayed(stageCode, desiredStageCode),
-        milestones,
+        milestones: normalizedMilestones,
         stageCode,
         status,
         tenantId,
@@ -330,8 +332,8 @@ export class ProcurementCaseService {
     const kase = await this.getCase(actor, caseId);
     if (
       actor.isPlatformSuperAdmin ||
-      actor.permissions.includes("case.update.all") ||
-      (actor.permissions.includes("case.delay.manage.entity") &&
+      hasExpandedPermission(actor, "case.update.all") ||
+      (hasExpandedPermission(actor, "case.delay.manage.entity") &&
         actor.entityIds.includes(kase.entityId))
     ) {
       // allowed
@@ -428,11 +430,11 @@ export class ProcurementCaseService {
 
   private async assertCanUpdate(actor: AuthenticatedUser, caseId: string) {
     const kase = await this.getCase(actor, caseId);
-    if (actor.isPlatformSuperAdmin || actor.permissions.includes("case.update.all")) return;
-    if (actor.permissions.includes("case.update.entity") && actor.entityIds.includes(kase.entityId)) {
+    if (actor.isPlatformSuperAdmin || hasExpandedPermission(actor, "case.update.all")) return;
+    if (hasExpandedPermission(actor, "case.update.entity") && actor.entityIds.includes(kase.entityId)) {
       return;
     }
-    if (actor.permissions.includes("case.update.assigned") && kase.ownerUserId === actor.id) {
+    if (hasExpandedPermission(actor, "case.update.assigned") && kase.ownerUserId === actor.id) {
       return;
     }
     throw new ForbiddenException("Case update denied.");
@@ -458,8 +460,11 @@ export class ProcurementCaseService {
   }
 
   private assertCanUpdateEntityManagedFields(actor: AuthenticatedUser, entityId: string) {
-    if (actor.isPlatformSuperAdmin || actor.permissions.includes("case.update.all")) return;
-    if (actor.permissions.includes("case.update.entity") && actor.entityIds.includes(entityId)) {
+    if (
+      actor.accessLevel === "ENTITY" &&
+      hasExpandedPermission(actor, "case.update.entity") &&
+      actor.entityIds.includes(entityId)
+    ) {
       return;
     }
     throw new ForbiddenException(
@@ -494,7 +499,7 @@ export class ProcurementCaseService {
   }
 
   private requirePermission(actor: AuthenticatedUser, permission: string) {
-    if (!actor.isPlatformSuperAdmin && !actor.permissions.includes(permission)) {
+    if (!hasExpandedPermission(actor, permission)) {
       throw new ForbiddenException("Missing required permission.");
     }
   }
@@ -502,8 +507,8 @@ export class ProcurementCaseService {
   private canManageDelay(actor: AuthenticatedUser, kase: { entityId: string }) {
     return (
       actor.isPlatformSuperAdmin ||
-      actor.permissions.includes("case.update.all") ||
-      (actor.permissions.includes("case.delay.manage.entity") &&
+      hasExpandedPermission(actor, "case.update.all") ||
+      (hasExpandedPermission(actor, "case.delay.manage.entity") &&
         actor.entityIds.includes(kase.entityId))
     );
   }
@@ -527,6 +532,24 @@ export class ProcurementCaseService {
       throw new BadRequestException("Tenant context is required.");
     }
     return actor.tenantId;
+  }
+
+  private normalizeMilestonesForTenderType(kase: ProcurementCaseAggregate, milestones: CaseMilestones): CaseMilestones {
+    if (requiresBidTimelineFields(kase.tenderTypeName)) return milestones;
+    if (!kase.prReceiptDate) {
+      throw new BadRequestException("PR Receipt Date is required for this tender type timeline normalization.");
+    }
+    return {
+      ...milestones,
+      bidReceiptDate: kase.prReceiptDate,
+      biddersParticipated: 0,
+      commercialEvaluationDate: kase.prReceiptDate,
+      nitApprovalDate: kase.prReceiptDate,
+      nitInitiationDate: kase.prReceiptDate,
+      nitPublishDate: kase.prReceiptDate,
+      qualifiedBidders: 0,
+      technicalEvaluationDate: kase.prReceiptDate,
+    };
   }
 
   private async deriveTentativeCompletionDate(input: {
@@ -580,4 +603,9 @@ export class ProcurementCaseService {
 
 function addDaysToDateString(dateString: string, days: number): string {
   return addDaysToDateOnly(dateString, days);
+}
+
+function requiresBidTimelineFields(tenderTypeName: string | null | undefined): boolean {
+  const normalized = tenderTypeName?.trim().toLowerCase();
+  return normalized === "open" || normalized === "limited" || normalized === "single party";
 }

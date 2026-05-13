@@ -1,4 +1,5 @@
 import type { AuthenticatedUser } from "../../identity-access/domain/authenticated-user.js";
+import { effectiveCaseReadScope, hasExpandedPermission } from "../../../common/auth/permission-utils.js";
 
 export class CaseVisibilityPolicy {
   listScope(user: AuthenticatedUser): {
@@ -6,22 +7,28 @@ export class CaseVisibilityPolicy {
     entityIds: string[];
     tenantWide: boolean;
   } {
-    if (user.isPlatformSuperAdmin || user.accessLevel === "GROUP") {
-      return { assignedOnly: false, entityIds: [], tenantWide: true };
-    }
-    if (user.accessLevel === "ENTITY") {
-      return { assignedOnly: false, entityIds: user.entityIds, tenantWide: false };
-    }
-    return { assignedOnly: true, entityIds: [], tenantWide: false };
+    const scope = effectiveCaseReadScope(user);
+    return {
+      assignedOnly: scope.assignedOnly,
+      entityIds: scope.entityIds,
+      tenantWide: scope.tenantWide,
+    };
   }
 
   canReadCase(user: AuthenticatedUser, kase: { entityId: string; ownerUserId: string | null }) {
-    if (user.isPlatformSuperAdmin || user.accessLevel === "GROUP") {
+    if (user.isPlatformSuperAdmin) {
       return true;
     }
-    if (user.accessLevel === "ENTITY" && user.entityIds.includes(kase.entityId)) {
+    if (user.accessLevel === "GROUP" && hasExpandedPermission(user, "case.read.all")) {
       return true;
     }
-    return kase.ownerUserId === user.id;
+    if (
+      user.accessLevel !== "USER" &&
+      hasExpandedPermission(user, "case.read.entity") &&
+      user.entityIds.includes(kase.entityId)
+    ) {
+      return true;
+    }
+    return hasExpandedPermission(user, "case.read.assigned") && kase.ownerUserId === user.id;
   }
 }

@@ -63,10 +63,10 @@ export class CaseChronologyPolicy {
         ["NIT Approval", m.nitApprovalDate],
         ["NIT Publish", m.nitPublishDate],
         ["Bid Receipt", m.bidReceiptDate],
-        ["Bidders Participated", m.biddersParticipated],
+        ["Bidder Participated Count", m.biddersParticipated],
         ["Commercial Evaluation", m.commercialEvaluationDate],
         ["Technical Evaluation", m.technicalEvaluationDate],
-        ["Qualified Bidders", m.qualifiedBidders],
+        ["Qualified Bidders Count", m.qualifiedBidders],
         ["Estimate / Benchmark", input.estimateBenchmark],
       ]
         .filter(([, value]) => this.isBlank(value))

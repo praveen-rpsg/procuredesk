@@ -314,10 +314,7 @@ export class UserRepository {
           and u.deleted_at is null
           and e.tenant_id = $1
           and e.deleted_at is null
-          and (
-            u.access_level = 'GROUP'
-            or ues.entity_id is not null
-          )
+          and ues.entity_id is not null
           ${userScopePredicate}
         order by u.full_name asc
       `,

@@ -28,8 +28,8 @@ import { deleteCase, getCase, type CaseDetail } from "../api/casesApi";
 import { useAuth } from "../../../shared/auth/AuthProvider";
 import { useAppLocation } from "../../../shared/routing/appLocation";
 import {
-  canAssignCaseOwner,
   canDeleteCase,
+  canEditEntityManagedCaseFields,
   canManageCaseDelay,
   canReadAudit,
   canUpdateCase,
@@ -110,7 +110,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
     detail.data &&
       (canUpdateCase(user, detail.data) ||
         canManageCaseDelay(user, detail.data) ||
-        canAssignCaseOwner(user, detail.data)),
+        canEditEntityManagedCaseFields(user, detail.data)),
   );
   const canViewDelay = Boolean(detail.data && canManageCaseDelay(user, detail.data));
   const isCompletedCase = detail.data?.status === "completed";
@@ -286,12 +286,14 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
               value={age}
               tone="neutral"
             />
-            <KpiCard
-              icon={Timer}
-              label="Time Elapsed"
-              value={elapsed}
-              tone={elapsedTone(elapsed)}
-            />
+            {kase.status === "running" ? (
+              <KpiCard
+                icon={Timer}
+                label="Time Elapsed"
+                value={elapsed}
+                tone={elapsedTone(elapsed)}
+              />
+            ) : null}
             <KpiCard
               icon={kase.status === "completed" ? CalendarCheck2 : CalendarClock}
               label={kase.status === "completed" ? "Completed" : "Target Date"}

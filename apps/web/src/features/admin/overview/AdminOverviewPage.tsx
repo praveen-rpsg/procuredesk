@@ -23,7 +23,7 @@ type AdminOverviewPageProps = {
   onOpen: (key: string) => void;
 };
 
-export function AdminOverviewPage({ items }: AdminOverviewPageProps) {
+export function AdminOverviewPage({ items, onOpen }: AdminOverviewPageProps) {
   const canViewUsers = items.some((item) => item.key === "users");
   const canViewEntities = items.some((item) => item.key === "entities");
   const canViewCatalog = items.some((item) => item.key === "catalog" || item.key === "tender-rules");
@@ -63,6 +63,7 @@ export function AdminOverviewPage({ items }: AdminOverviewPageProps) {
             icon={UsersRound}
             isLoading={users.isLoading}
             label="Users"
+            onOpen={() => onOpen("users")}
             value={users.data?.length ?? 0}
           />
         ) : null}
@@ -72,6 +73,7 @@ export function AdminOverviewPage({ items }: AdminOverviewPageProps) {
             icon={Building2}
             isLoading={entities.isLoading}
             label="Entities"
+            onOpen={() => onOpen("entities")}
             value={entities.data?.length ?? 0}
           />
         ) : null}
@@ -81,6 +83,7 @@ export function AdminOverviewPage({ items }: AdminOverviewPageProps) {
             icon={Tags}
             isLoading={catalog.isLoading}
             label="Choice Values"
+            onOpen={() => onOpen("catalog")}
             value={catalog.data?.referenceValues.length ?? 0}
           />
         ) : null}
@@ -90,6 +93,7 @@ export function AdminOverviewPage({ items }: AdminOverviewPageProps) {
             icon={ShieldCheck}
             isLoading={catalog.isLoading}
             label="Tender Rules"
+            onOpen={() => onOpen("tender-rules")}
             value={configuredTenderRules}
           />
         ) : null}
@@ -103,12 +107,13 @@ type MetricCardProps = {
   icon: LucideIcon;
   isLoading: boolean;
   label: string;
+  onOpen: () => void;
   value: number;
 };
 
-function MetricCard({ detail, icon: Icon, isLoading, label, value }: MetricCardProps) {
+function MetricCard({ detail, icon: Icon, isLoading, label, onOpen, value }: MetricCardProps) {
   return (
-    <article className="admin-overview-metric">
+    <button className="admin-overview-metric" onClick={onOpen} type="button">
       <span className="admin-overview-card-icon">
         <Icon size={18} />
       </span>
@@ -117,6 +122,6 @@ function MetricCard({ detail, icon: Icon, isLoading, label, value }: MetricCardP
         {isLoading ? <Skeleton height={26} /> : <strong>{value}</strong>}
         <span>{detail}</span>
       </div>
-    </article>
+    </button>
   );
 }

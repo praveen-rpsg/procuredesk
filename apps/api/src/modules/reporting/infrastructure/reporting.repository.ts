@@ -11,6 +11,8 @@ import type {
   VendorAwardReportRow,
 } from "../domain/report-read-models.js";
 
+const VALUE_SLAB_OPTIONS = ["lt_2l", "2l_5l", "5l_10l", "10l_25l", "25l_50l", "50l_100l", "100l_200l", "gte_200l"];
+
 export type ReportScope = {
   actorUserId: string;
   assignedOnly: boolean;
@@ -102,18 +104,26 @@ export class ReportingRepository {
             else (extract(year from m.rc_po_award_date)::int - 1) || '-' || extract(year from m.rc_po_award_date)::int
           end,
           case
-            when f.pr_value is null then null
-            when f.pr_value < 1000000 then '<10L'
-            when f.pr_value < 10000000 then '10L-1Cr'
-            when f.pr_value < 100000000 then '1Cr-10Cr'
-            else '10Cr+'
+            when (case when c.status = 'completed' then f.approved_amount else f.pr_value end) is null then null
+            when (case when c.status = 'completed' then f.approved_amount else f.pr_value end) < 200000 then 'lt_2l'
+            when (case when c.status = 'completed' then f.approved_amount else f.pr_value end) < 500000 then '2l_5l'
+            when (case when c.status = 'completed' then f.approved_amount else f.pr_value end) < 1000000 then '5l_10l'
+            when (case when c.status = 'completed' then f.approved_amount else f.pr_value end) < 2500000 then '10l_25l'
+            when (case when c.status = 'completed' then f.approved_amount else f.pr_value end) < 5000000 then '25l_50l'
+            when (case when c.status = 'completed' then f.approved_amount else f.pr_value end) < 10000000 then '50l_100l'
+            when (case when c.status = 'completed' then f.approved_amount else f.pr_value end) < 20000000 then '100l_200l'
+            else 'gte_200l'
           end,
           case
             when f.total_awarded_amount is null then null
-            when f.total_awarded_amount < 1000000 then '<10L'
-            when f.total_awarded_amount < 10000000 then '10L-1Cr'
-            when f.total_awarded_amount < 100000000 then '1Cr-10Cr'
-            else '10Cr+'
+            when f.total_awarded_amount < 200000 then 'lt_2l'
+            when f.total_awarded_amount < 500000 then '2l_5l'
+            when f.total_awarded_amount < 1000000 then '5l_10l'
+            when f.total_awarded_amount < 2500000 then '10l_25l'
+            when f.total_awarded_amount < 5000000 then '25l_50l'
+            when f.total_awarded_amount < 10000000 then '50l_100l'
+            when f.total_awarded_amount < 20000000 then '100l_200l'
+            else 'gte_200l'
           end,
           case
             when c.status = 'running' and c.pr_receipt_date is not null
@@ -263,6 +273,7 @@ export class ReportingRepository {
           count(*) filter (where f.status = 'completed')::text as completed_cases,
           count(*) filter (where f.is_delayed)::text as delayed_cases,
           coalesce(sum(f.pr_value), 0)::text as total_pr_value,
+          coalesce(sum(f.estimate_benchmark), 0)::text as total_estimate_benchmark,
           coalesce(sum(f.approved_amount), 0)::text as total_approved_amount,
           coalesce(sum(f.total_awarded_amount), 0)::text as total_awarded_amount,
           coalesce(sum(f.savings_wrt_pr), 0)::text as savings_wrt_pr,
@@ -393,6 +404,7 @@ export class ReportingRepository {
           f.savings_wrt_pr,
           f.savings_wrt_estimate,
           case
+            when f.status <> 'running' then null
             when c.tentative_completion_date is null or f.pr_receipt_date is null then null
             when coalesce(f.completed_age_days, f.running_age_days) is null then null
             when greatest((c.tentative_completion_date - f.pr_receipt_date), 1) = 0 then null
@@ -1033,7 +1045,7 @@ export class ReportingRepository {
       stages: [...new Set(result.rows.map((row) => row.stage_code))],
       statuses: [...new Set(result.rows.map((row) => row.status))],
       tenderTypes: [...tenderTypes.values()].sort((left, right) => left.name.localeCompare(right.name)),
-      valueSlabs: [...new Set(result.rows.map((row) => row.value_slab).filter(Boolean))].sort(),
+      valueSlabs: VALUE_SLAB_OPTIONS,
     };
   }
 
@@ -1226,10 +1238,11 @@ export class ReportingRepository {
       values.push(filters.stageCodes);
       where.push(`f.stage_code = any($${values.length}::int[])`);
     }
-    if (filters.valueSlabs?.length) {
-      values.push(filters.valueSlabs);
-      where.push(`f.value_slab = any($${values.length}::text[])`);
-    }
+    this.applyValueSlabFilter(
+      where,
+      filters.valueSlabs,
+      "case when f.status = 'completed' then f.approved_amount else f.pr_value end",
+    );
     if (filters.delayStatus) {
       where.push(filters.delayStatus === "delayed" ? "f.is_delayed" : "not f.is_delayed");
     }
@@ -1317,6 +1330,20 @@ export class ReportingRepository {
     }
   }
 
+  private applyValueSlabFilter(where: string[], slabs: string[] | undefined, column: string) {
+    if (!slabs?.length) return;
+    const predicates: string[] = [];
+    if (slabs.includes("lt_2l")) predicates.push(`${column} < 200000`);
+    if (slabs.includes("2l_5l")) predicates.push(`(${column} >= 200000 and ${column} < 500000)`);
+    if (slabs.includes("5l_10l")) predicates.push(`(${column} >= 500000 and ${column} < 1000000)`);
+    if (slabs.includes("10l_25l")) predicates.push(`(${column} >= 1000000 and ${column} < 2500000)`);
+    if (slabs.includes("25l_50l")) predicates.push(`(${column} >= 2500000 and ${column} < 5000000)`);
+    if (slabs.includes("50l_100l")) predicates.push(`(${column} >= 5000000 and ${column} < 10000000)`);
+    if (slabs.includes("100l_200l")) predicates.push(`(${column} >= 10000000 and ${column} < 20000000)`);
+    if (slabs.includes("gte_200l")) predicates.push(`${column} >= 20000000`);
+    if (predicates.length) where.push(`${column} is not null and (${predicates.join(" or ")})`);
+  }
+
   private applyScope(
     where: string[],
     values: unknown[],
@@ -1396,6 +1423,7 @@ export class ReportingRepository {
       totalApprovedAmount: Number(rowValue(row, "total_approved_amount", "0")),
       totalAwardedAmount: Number(rowValue(row, "total_awarded_amount", "0")),
       totalCases: Number(rowValue(row, "total_cases", "0")),
+      totalEstimateBenchmark: Number(rowValue(row, "total_estimate_benchmark", "0")),
       totalPrValue: Number(rowValue(row, "total_pr_value", "0")),
     };
   }
@@ -1455,6 +1483,7 @@ type AnalyticsRow = {
   total_approved_amount: string;
   total_awarded_amount: string;
   total_cases: string;
+  total_estimate_benchmark: string;
   total_pr_value: string;
 };
 

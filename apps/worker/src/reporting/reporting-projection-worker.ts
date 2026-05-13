@@ -61,17 +61,25 @@ async function upsertCaseFact(tenantId: string, caseId: string, pool: Pool): Pro
         end,
         case
           when f.pr_value is null then null
-          when f.pr_value < 1000000 then '<10L'
-          when f.pr_value < 10000000 then '10L-1Cr'
-          when f.pr_value < 100000000 then '1Cr-10Cr'
-          else '10Cr+'
+          when f.pr_value < 200000 then 'lt_2l'
+          when f.pr_value < 500000 then '2l_5l'
+          when f.pr_value < 1000000 then '5l_10l'
+          when f.pr_value < 2500000 then '10l_25l'
+          when f.pr_value < 5000000 then '25l_50l'
+          when f.pr_value < 10000000 then '50l_100l'
+          when f.pr_value < 20000000 then '100l_200l'
+          else 'gte_200l'
         end,
         case
           when f.total_awarded_amount is null then null
-          when f.total_awarded_amount < 1000000 then '<10L'
-          when f.total_awarded_amount < 10000000 then '10L-1Cr'
-          when f.total_awarded_amount < 100000000 then '1Cr-10Cr'
-          else '10Cr+'
+          when f.total_awarded_amount < 200000 then 'lt_2l'
+          when f.total_awarded_amount < 500000 then '2l_5l'
+          when f.total_awarded_amount < 1000000 then '5l_10l'
+          when f.total_awarded_amount < 2500000 then '10l_25l'
+          when f.total_awarded_amount < 5000000 then '25l_50l'
+          when f.total_awarded_amount < 10000000 then '50l_100l'
+          when f.total_awarded_amount < 20000000 then '100l_200l'
+          else 'gte_200l'
         end,
         case
           when c.status = 'running' and c.pr_receipt_date is not null

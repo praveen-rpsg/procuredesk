@@ -27,9 +27,11 @@ export type CaseListFilters = {
   q?: string;
   status?: "running" | "completed";
   tenderTypeIds?: string[];
-  valueSlab?: "10l_1cr" | "1cr_10cr" | "gte_10cr" | "lt_10l";
-  valueSlabs?: Array<"10l_1cr" | "1cr_10cr" | "gte_10cr" | "lt_10l">;
+  valueSlab?: ValueSlabKey;
+  valueSlabs?: ValueSlabKey[];
 };
+
+type ValueSlabKey = "lt_2l" | "2l_5l" | "5l_10l" | "10l_25l" | "25l_50l" | "50l_100l" | "100l_200l" | "gte_200l";
 
 export type CaseListScope = {
   actorUserId: string;
@@ -433,6 +435,7 @@ export class ProcurementCaseRepository {
           m.loi_issued,
           owner.full_name as owner_full_name,
           case
+            when c.status <> 'running' then null
             when c.pr_receipt_date is null or c.tentative_completion_date is null then null
             when c.tentative_completion_date <= c.pr_receipt_date then null
             else round(((current_date - c.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - c.pr_receipt_date), 0)) * 100)
@@ -960,21 +963,17 @@ export class ProcurementCaseRepository {
   ) {
     const slabs = valueSlabs?.length ? valueSlabs : valueSlab ? [valueSlab] : [];
     if (!slabs.length) return;
-    const column = "f.pr_value";
+    const column = "case when c.status = 'completed' then f.approved_amount else f.pr_value end";
     where.push(`${column} is not null`);
     const predicates: string[] = [];
-    if (slabs.includes("lt_10l")) {
-      predicates.push(`${column} < 1000000`);
-    }
-    if (slabs.includes("10l_1cr")) {
-      predicates.push(`(${column} >= 1000000 and ${column} < 10000000)`);
-    }
-    if (slabs.includes("1cr_10cr")) {
-      predicates.push(`(${column} >= 10000000 and ${column} < 100000000)`);
-    }
-    if (slabs.includes("gte_10cr")) {
-      predicates.push(`${column} >= 100000000`);
-    }
+    if (slabs.includes("lt_2l")) predicates.push(`${column} < 200000`);
+    if (slabs.includes("2l_5l")) predicates.push(`(${column} >= 200000 and ${column} < 500000)`);
+    if (slabs.includes("5l_10l")) predicates.push(`(${column} >= 500000 and ${column} < 1000000)`);
+    if (slabs.includes("10l_25l")) predicates.push(`(${column} >= 1000000 and ${column} < 2500000)`);
+    if (slabs.includes("25l_50l")) predicates.push(`(${column} >= 2500000 and ${column} < 5000000)`);
+    if (slabs.includes("50l_100l")) predicates.push(`(${column} >= 5000000 and ${column} < 10000000)`);
+    if (slabs.includes("100l_200l")) predicates.push(`(${column} >= 10000000 and ${column} < 20000000)`);
+    if (slabs.includes("gte_200l")) predicates.push(`${column} >= 20000000`);
     if (predicates.length) where.push(`(${predicates.join(" or ")})`);
   }
 

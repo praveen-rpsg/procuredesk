@@ -240,6 +240,7 @@ export function AdminUsersPage() {
   };
 
   const openEdit = (user: AdminUser) => {
+    const isAdmin = user.roleCodes.includes("tenant_admin");
     setUserToEdit(user);
     setEditUser({
       customRoleIds: user.roleIds.filter((roleId) => {
@@ -247,12 +248,12 @@ export function AdminUsersPage() {
         return role ? isAdditionalAssignableRole(role) : false;
       }),
       email: user.email,
-      entityIds: user.entityIds,
+      entityIds: isAdmin ? [] : user.entityIds,
       fullName: user.fullName,
-      isAdmin: user.roleCodes.includes("tenant_admin"),
+      isAdmin,
       isActive: user.status === "active",
       password: "",
-      accessLevel: user.accessLevel,
+      accessLevel: isAdmin ? "GROUP" : user.accessLevel,
       username: user.username,
     });
   };
@@ -487,12 +488,13 @@ function buildRoleIds(roles: AdminRole[], value: EditUserForm) {
     GROUP: "group_viewer",
     USER: "tender_owner",
   };
-  const accessRole = roleByCode.get(accessRoleCodeByLevel[value.accessLevel]);
-  if (accessRole) nextRoleIds.push(accessRole.id);
   if (value.isAdmin) {
     const adminRole = roleByCode.get("tenant_admin");
     if (adminRole) nextRoleIds.push(adminRole.id);
+    return Array.from(new Set(nextRoleIds));
   }
+  const accessRole = roleByCode.get(accessRoleCodeByLevel[value.accessLevel]);
+  if (accessRole) nextRoleIds.push(accessRole.id);
   for (const roleId of value.customRoleIds) {
     const role = roleById.get(roleId);
     if (role && isAdditionalAssignableRole(role)) nextRoleIds.push(roleId);
@@ -572,7 +574,13 @@ function UserAccessForm({ entityOptions, isNewUser = false, onChange, roleOption
           <label className="checkbox-row">
             <input
               checked={value.isAdmin}
-              onChange={(event) => onChange((currentValue) => ({ ...currentValue, isAdmin: event.target.checked }))}
+              onChange={(event) =>
+                onChange((currentValue) =>
+                  event.target.checked
+                    ? { ...currentValue, accessLevel: "GROUP", customRoleIds: [], entityIds: [], isAdmin: true }
+                    : { ...currentValue, isAdmin: false },
+                )
+              }
               type="checkbox"
             />
             Administrator
@@ -599,11 +607,13 @@ function UserAccessForm({ entityOptions, isNewUser = false, onChange, roleOption
           {accessLevelOptions.map((option) => (
             <button
               className={`user-role-card ${value.accessLevel === option.code ? "user-role-card-selected" : ""}`.trim()}
+              disabled={value.isAdmin && option.code !== "GROUP"}
               key={option.code}
               onClick={() =>
                 onChange((currentValue) => ({
                   ...currentValue,
                   accessLevel: option.code,
+                  entityIds: option.code === "GROUP" ? [] : currentValue.entityIds,
                 }))
               }
               type="button"
@@ -627,7 +637,12 @@ function UserAccessForm({ entityOptions, isNewUser = false, onChange, roleOption
           <div className="mapped-entity-grid">
             {roleOptions.map((role) => (
               <label className="mapped-entity-option" key={role.value}>
-                <input checked={value.customRoleIds.includes(role.value)} onChange={() => toggleRole(role.value)} type="checkbox" />
+                <input
+                  checked={value.customRoleIds.includes(role.value)}
+                  disabled={value.isAdmin}
+                  onChange={() => toggleRole(role.value)}
+                  type="checkbox"
+                />
                 <span>
                   {role.label}
                   {role.description ? <small>{role.description}</small> : null}

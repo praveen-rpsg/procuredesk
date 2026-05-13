@@ -8,6 +8,7 @@ import {
 } from "../../admin/api/adminApi";
 import { listEntities } from "../../planning/api/planningApi";
 import { createCase } from "../api/casesApi";
+import { useAuth } from "../../../shared/auth/AuthProvider";
 import { addDaysToDateOnly, isDateOnlyString } from "../../../shared/utils/dateOnly";
 import { Button } from "../../../shared/ui/button/Button";
 import { ComboboxSelect } from "../../../shared/ui/form/ComboboxSelect";
@@ -57,6 +58,7 @@ const createCaseFormSchema = {
 export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { user } = useAuth();
   const [entityId, setEntityId] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const [ownerUserId, setOwnerUserId] = useState("");
@@ -112,10 +114,39 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
     () => (entities.data ?? []).find((entity) => entity.id === entityId) ?? null,
     [entities.data, entityId],
   );
+  const singleMappedEntityId = user?.entityIds.length === 1 ? user.entityIds[0] : "";
+  const isSingleEntityMapped = Boolean(singleMappedEntityId);
+  const entityOptions = useMemo(() => {
+    const activeEntities = (entities.data ?? []).filter((entity) => entity.isActive);
+    if (!user || user.isPlatformSuperAdmin || user.accessLevel === "GROUP") {
+      return activeEntities;
+    }
+    const mappedEntityIds = new Set(user.entityIds);
+    return activeEntities.filter((entity) => mappedEntityIds.has(entity.id));
+  }, [entities.data, user]);
 
   useEffect(() => {
     setPrId(selectedEntity?.code ? buildGeneratedCaseId(selectedEntity.code) : "");
   }, [selectedEntity?.code]);
+
+  useEffect(() => {
+    if (!singleMappedEntityId || entityId === singleMappedEntityId) return;
+    setEntityId(singleMappedEntityId);
+    setDepartmentId("");
+    setOwnerUserId("");
+  }, [entityId, singleMappedEntityId]);
+
+  useEffect(() => {
+    if (!entityId || owners.isLoading || !owners.data) return;
+    const ownerIds = new Set(owners.data.map((owner) => owner.id));
+    if (ownerUserId && !ownerIds.has(ownerUserId)) {
+      setOwnerUserId("");
+      return;
+    }
+    if (!ownerUserId && user?.id && ownerIds.has(user.id)) {
+      setOwnerUserId(user.id);
+    }
+  }, [entityId, ownerUserId, owners.data, owners.isLoading, user?.id]);
 
   useEffect(() => {
     if (
@@ -205,6 +236,7 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
           <FormField error={formErrors.entityId ?? ""} label="Entity">
             <select
               className="text-input"
+              disabled={isSingleEntityMapped}
               onChange={(event) => {
                 setEntityId(event.target.value);
                 setDepartmentId("");
@@ -214,13 +246,11 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
               value={entityId}
             >
               <option value="">Select Entity</option>
-              {(entities.data ?? [])
-                .filter((entity) => entity.isActive)
-                .map((entity) => (
-                  <option key={entity.id} value={entity.id}>
-                    {entity.code} - {entity.name}
-                  </option>
-                ))}
+              {entityOptions.map((entity) => (
+                <option key={entity.id} value={entity.id}>
+                  {entity.code} - {entity.name}
+                </option>
+              ))}
             </select>
           </FormField>
           <FormField error={formErrors.departmentId ?? ""} label="Department">

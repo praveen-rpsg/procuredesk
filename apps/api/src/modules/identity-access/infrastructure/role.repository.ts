@@ -151,7 +151,8 @@ export class RoleRepository {
               description = $4,
               updated_at = now()
           where id = $1
-            and (tenant_id = $2 or tenant_id is null)
+            and tenant_id = $2
+            and is_system_role = false
             and deleted_at is null
         `,
         [input.roleId, input.tenantId, input.name, input.description],

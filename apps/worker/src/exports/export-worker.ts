@@ -665,8 +665,16 @@ function applyCaseFactFilters(
   applyUuidArrayFilter(where, values, filters.budgetTypeIds, "c.budget_type_id");
   applyUuidArrayFilter(where, values, filters.natureOfWorkIds, "c.nature_of_work_id");
   if (filters.valueSlabs.length) {
-    values.push(filters.valueSlabs);
-    where.push(`f.value_slab = any($${values.length}::text[])`);
+    const predicates: string[] = [];
+    if (filters.valueSlabs.includes("lt_2l")) predicates.push("f.pr_value < 200000");
+    if (filters.valueSlabs.includes("2l_5l")) predicates.push("(f.pr_value >= 200000 and f.pr_value < 500000)");
+    if (filters.valueSlabs.includes("5l_10l")) predicates.push("(f.pr_value >= 500000 and f.pr_value < 1000000)");
+    if (filters.valueSlabs.includes("10l_25l")) predicates.push("(f.pr_value >= 1000000 and f.pr_value < 2500000)");
+    if (filters.valueSlabs.includes("25l_50l")) predicates.push("(f.pr_value >= 2500000 and f.pr_value < 5000000)");
+    if (filters.valueSlabs.includes("50l_100l")) predicates.push("(f.pr_value >= 5000000 and f.pr_value < 10000000)");
+    if (filters.valueSlabs.includes("100l_200l")) predicates.push("(f.pr_value >= 10000000 and f.pr_value < 20000000)");
+    if (filters.valueSlabs.includes("gte_200l")) predicates.push("f.pr_value >= 20000000");
+    if (predicates.length) where.push(`f.pr_value is not null and (${predicates.join(" or ")})`);
   }
   if (filters.stageCodes.length) {
     values.push(filters.stageCodes);

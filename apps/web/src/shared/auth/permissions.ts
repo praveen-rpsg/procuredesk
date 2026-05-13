@@ -32,6 +32,7 @@ export type WorkspaceKey = "admin" | "cases" | "dashboard" | "imports" | "operat
 type CaseScope = {
   entityId?: string | null | undefined;
   ownerUserId?: string | null | undefined;
+  status?: string | null | undefined;
 };
 
 const permissionImplications: Partial<Record<Permission, Permission[]>> = {
@@ -123,9 +124,10 @@ export function canReadCases(user: CurrentUser | null | undefined): boolean {
 
 export function canReadCase(user: CurrentUser | null | undefined, kase: CaseScope): boolean {
   if (!user) return false;
-  if (user.isPlatformSuperAdmin || user.accessLevel === "GROUP") return true;
-  if (user.accessLevel === "ENTITY" && isInUserEntityScope(user, kase.entityId)) return true;
-  return kase.ownerUserId === user.id;
+  if (user.isPlatformSuperAdmin) return true;
+  if (user.accessLevel === "GROUP" && hasPermission(user, "case.read.all")) return true;
+  if (user.accessLevel !== "USER" && hasPermission(user, "case.read.entity") && isInUserEntityScope(user, kase.entityId)) return true;
+  return hasPermission(user, "case.read.assigned") && kase.ownerUserId === user.id;
 }
 
 export function canCreateCase(user: CurrentUser | null | undefined): boolean {
@@ -134,22 +136,28 @@ export function canCreateCase(user: CurrentUser | null | undefined): boolean {
 
 export function canUpdateCase(user: CurrentUser | null | undefined, kase: CaseScope): boolean {
   if (!user) return false;
-  if (user.isPlatformSuperAdmin || hasPermission(user, "case.update.all")) return true;
-  if (hasPermission(user, "case.update.entity") && isInUserEntityScope(user, kase.entityId)) return true;
+  if (user.isPlatformSuperAdmin) return true;
+  if (user.accessLevel === "GROUP" && hasPermission(user, "case.update.all")) return true;
+  if (user.accessLevel === "ENTITY" && hasPermission(user, "case.update.entity") && isInUserEntityScope(user, kase.entityId)) return true;
   return hasPermission(user, "case.update.assigned") && kase.ownerUserId === user.id;
 }
 
 export function canPotentiallyUpdateCaseFromList(user: CurrentUser | null | undefined, kase: CaseScope): boolean {
   if (!user) return false;
-  if (user.isPlatformSuperAdmin || hasPermission(user, "case.update.all")) return true;
-  if (hasPermission(user, "case.update.entity") && isInUserEntityScope(user, kase.entityId)) return true;
+  if (user.isPlatformSuperAdmin) return true;
+  if (user.accessLevel === "GROUP" && hasPermission(user, "case.update.all")) return true;
+  if (user.accessLevel === "ENTITY" && hasPermission(user, "case.update.entity") && isInUserEntityScope(user, kase.entityId)) return true;
   return Boolean(kase.ownerUserId && hasPermission(user, "case.update.assigned") && kase.ownerUserId === user.id);
 }
 
 export function canAssignCaseOwner(user: CurrentUser | null | undefined, kase: CaseScope): boolean {
+  return canEditEntityManagedCaseFields(user, kase);
+}
+
+export function canEditEntityManagedCaseFields(user: CurrentUser | null | undefined, kase: CaseScope): boolean {
   if (!user) return false;
-  if (user.isPlatformSuperAdmin || hasPermission(user, "case.update.all")) return true;
   return (
+    user.accessLevel === "ENTITY" &&
     isInUserEntityScope(user, kase.entityId) &&
     hasPermission(user, "case.update.entity")
   );
@@ -157,8 +165,9 @@ export function canAssignCaseOwner(user: CurrentUser | null | undefined, kase: C
 
 export function canManageCaseDelay(user: CurrentUser | null | undefined, kase: CaseScope): boolean {
   if (!user) return false;
-  if (user.isPlatformSuperAdmin || hasPermission(user, "case.update.all")) return true;
-  return hasPermission(user, "case.delay.manage.entity") && isInUserEntityScope(user, kase.entityId);
+  if (user.isPlatformSuperAdmin) return true;
+  if (user.accessLevel === "GROUP" && hasPermission(user, "case.update.all")) return true;
+  return user.accessLevel === "ENTITY" && hasPermission(user, "case.delay.manage.entity") && isInUserEntityScope(user, kase.entityId);
 }
 
 export function canDeleteCase(user: CurrentUser | null | undefined): boolean {
@@ -171,6 +180,14 @@ export function canRestoreCase(user: CurrentUser | null | undefined): boolean {
 
 export function canManageAwards(user: CurrentUser | null | undefined): boolean {
   return hasPermission(user, "award.manage");
+}
+
+export function canManageCaseAwards(user: CurrentUser | null | undefined, kase: CaseScope): boolean {
+  if (!user || kase.status !== "completed" || !hasPermission(user, "award.manage")) return false;
+  if (user.isPlatformSuperAdmin) return true;
+  if (user.accessLevel === "GROUP" && hasPermission(user, "case.update.all")) return true;
+  if (user.accessLevel === "ENTITY" && hasPermission(user, "case.update.entity") && isInUserEntityScope(user, kase.entityId)) return true;
+  return hasPermission(user, "case.update.assigned") && kase.ownerUserId === user.id;
 }
 
 export function canReadAudit(user: CurrentUser | null | undefined): boolean {

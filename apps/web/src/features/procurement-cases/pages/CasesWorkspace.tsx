@@ -71,7 +71,7 @@ type CaseColumnKey =
   | "status"
   | "tenderType"
   | "updated";
-type ValueSlabFilter = "" | "10l_1cr" | "1cr_10cr" | "gte_10cr" | "lt_10l";
+type ValueSlabFilter = "" | "100l_200l" | "10l_25l" | "25l_50l" | "2l_5l" | "50l_100l" | "5l_10l" | "gte_200l" | "lt_2l";
 type StatusFilter = "completed" | "running";
 type ValueSlabOption = Exclude<ValueSlabFilter, "">;
 type CasesSectionKey = "active" | "recovery";
@@ -120,10 +120,14 @@ type SavedCaseView = {
 
 const valueSlabOptions = [
   { label: "All", value: "" },
-  { label: "1. Below Rs. 10 Lakhs", value: "lt_10l" },
-  { label: "2. Rs. 10 Lakhs - <1 Cr", value: "10l_1cr" },
-  { label: "3. Rs. 1 Cr - <10 Cr", value: "1cr_10cr" },
-  { label: "4. Rs. 10 Cr and above", value: "gte_10cr" },
+  { label: "Below Rs. 2 Lakhs", value: "lt_2l" },
+  { label: "Rs. 2 Lakhs - < Rs. 5 Lakhs", value: "2l_5l" },
+  { label: "Rs. 5 Lakhs - < Rs. 10 Lakhs", value: "5l_10l" },
+  { label: "Rs. 10 Lakhs - < Rs. 25 Lakhs", value: "10l_25l" },
+  { label: "Rs. 25 Lakhs - < Rs. 50 Lakhs", value: "25l_50l" },
+  { label: "Rs. 50 Lakhs - < Rs. 100 Lakhs", value: "50l_100l" },
+  { label: "Rs. 100 Lakhs - < Rs. 200 Lakhs", value: "100l_200l" },
+  { label: ">= Rs. 200 Lakhs", value: "gte_200l" },
 ];
 
 const defaultVisibleColumnKeys: CaseColumnKey[] = [
@@ -463,7 +467,7 @@ function CasesWorkspaceList() {
       { key: "savingsWrtEstimate", header: "Savings vs Estimate / Benchmark", render: (row) => formatMoney(row.savingsWrtEstimate) },
       { key: "stage", filterOptions: stageFilterOptions, filterValue: (row) => formatCaseStage(row.stageCode), header: "Tender Stage", render: (row) => formatCaseStage(row.stageCode) },
       { key: "normativeStage", filterOptions: normativeStageFilterOptions, filterValue: (row) => row.desiredStageCode == null ? "-" : formatCaseStage(row.desiredStageCode), header: "Normative Stage", render: (row) => row.desiredStageCode == null ? "-" : formatCaseStage(row.desiredStageCode) },
-      { key: "percentTimeElapsed", header: "% Time Elapsed", render: (row) => formatPercent(row.percentTimeElapsed) },
+      { key: "percentTimeElapsed", header: "% Time Elapsed", render: (row) => row.status === "completed" ? "-" : formatPercent(row.percentTimeElapsed) },
       { key: "runAge", header: "Run Age", render: (row) => formatDays(row.runningAgeDays) },
       { key: "cycleTime", header: "Cycle Time", render: (row) => formatDays(row.cycleTimeDays) },
       {

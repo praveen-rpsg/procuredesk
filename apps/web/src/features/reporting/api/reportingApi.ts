@@ -62,6 +62,7 @@ export type ReportingAnalytics = {
   totalApprovedAmount: number;
   totalAwardedAmount: number;
   totalCases: number;
+  totalEstimateBenchmark: number;
   totalPrValue: number;
 };
 

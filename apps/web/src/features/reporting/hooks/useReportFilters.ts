@@ -60,7 +60,7 @@ export type ReportFiltersState = {
 };
 
 export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
-  const [amountUnit, setAmountUnit] = useState<AmountUnit>("crore");
+  const [amountUnit, setAmountUnit] = useState<AmountUnit>("lakh");
   const [cpcInvolved, setCpcInvolved] = useState<"any" | "false" | "true">("any");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");

@@ -10,8 +10,7 @@ export class CaseAssignmentPolicy {
     ownerUserId: string;
     targetEntityId: string;
   }): boolean {
-    const ownerCanReceiveTargetEntity =
-      input.ownerAccessLevel === "GROUP" || input.ownerEntityIds.includes(input.targetEntityId);
+    const ownerCanReceiveTargetEntity = input.ownerEntityIds.includes(input.targetEntityId);
     if (!ownerCanReceiveTargetEntity) {
       return false;
     }

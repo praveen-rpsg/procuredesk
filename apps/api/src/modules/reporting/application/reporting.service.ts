@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 
 import { RedisCacheService } from "../../../common/cache/redis-cache.service.js";
+import { effectiveCaseReadScope, hasExpandedPermission } from "../../../common/auth/permission-utils.js";
 import { PrivateFileStorageService } from "../../../common/storage/private-file-storage.service.js";
 import { DatabaseService } from "../../../database/database.service.js";
 import { AuditWriterService } from "../../audit/application/audit-writer.service.js";
@@ -264,18 +265,7 @@ export class ReportingService {
   }
 
   private scope(actor: AuthenticatedUser) {
-    if (actor.isPlatformSuperAdmin || actor.accessLevel === "GROUP") {
-      return { actorUserId: actor.id, assignedOnly: false, entityIds: [], tenantWide: true };
-    }
-    if (actor.accessLevel === "ENTITY") {
-      return {
-        actorUserId: actor.id,
-        assignedOnly: false,
-        entityIds: actor.entityIds,
-        tenantWide: false,
-      };
-    }
-    return { actorUserId: actor.id, assignedOnly: true, entityIds: [], tenantWide: false };
+    return effectiveCaseReadScope(actor);
   }
 
   private filterMetadataCacheKey(tenantId: string, scope: ReportScope): string {
@@ -292,14 +282,15 @@ export class ReportingService {
   }
 
   private requirePermission(actor: AuthenticatedUser, permission: string) {
-    if (!actor.isPlatformSuperAdmin && !actor.permissions.includes(permission)) {
+    if (!hasExpandedPermission(actor, permission)) {
       throw new ForbiddenException("Missing required permission.");
     }
   }
 
   private assertRcPoEditAllowed(actor: AuthenticatedUser, entityId: string) {
-    if (actor.isPlatformSuperAdmin || actor.permissions.includes("case.update.all")) return;
-    if (actor.entityIds.includes(entityId)) return;
+    if (actor.isPlatformSuperAdmin) return;
+    if (actor.accessLevel === "GROUP" && hasExpandedPermission(actor, "case.update.all")) return;
+    if (actor.accessLevel === "ENTITY" && actor.entityIds.includes(entityId)) return;
     throw new ForbiddenException("RC/PO expiry updates are restricted to mapped entities.");
   }
 

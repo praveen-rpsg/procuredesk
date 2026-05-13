@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 
+import { hasExpandedPermission } from "../../../common/auth/permission-utils.js";
 import { DatabaseService } from "../../../database/database.service.js";
 import { AuditWriterService } from "../../audit/application/audit-writer.service.js";
 import type { AuthenticatedUser } from "../../identity-access/domain/authenticated-user.js";
@@ -143,17 +144,22 @@ export class CaseAwardService {
   }
 
   private assertCanManageAwards(actor: AuthenticatedUser, kase: ProcurementCaseAggregate) {
-    if (!actor.isPlatformSuperAdmin && !actor.permissions.includes("award.manage")) {
+    if (!hasExpandedPermission(actor, "award.manage")) {
       throw new ForbiddenException("Award management permission is required.");
     }
     if (kase.status !== "completed") {
       throw new BadRequestException("Awards can be managed only for completed cases.");
     }
-    if (actor.isPlatformSuperAdmin || actor.permissions.includes("case.update.all")) return;
-    if (actor.permissions.includes("case.update.entity") && actor.entityIds.includes(kase.entityId)) {
+    if (actor.isPlatformSuperAdmin) return;
+    if (actor.accessLevel === "GROUP" && hasExpandedPermission(actor, "case.update.all")) return;
+    if (
+      actor.accessLevel === "ENTITY" &&
+      hasExpandedPermission(actor, "case.update.entity") &&
+      actor.entityIds.includes(kase.entityId)
+    ) {
       return;
     }
-    if (actor.permissions.includes("case.update.assigned") && kase.ownerUserId === actor.id) {
+    if (hasExpandedPermission(actor, "case.update.assigned") && kase.ownerUserId === actor.id) {
       return;
     }
     throw new ForbiddenException("Award management is not allowed for this case.");

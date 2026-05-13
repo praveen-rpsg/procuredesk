@@ -19,11 +19,12 @@ const csvTextList = z
   .optional()
   .transform((value) => (value ? value.split(",").filter(Boolean) : undefined))
   .pipe(z.array(z.string().trim().min(1)).optional());
+const valueSlabValues = ["lt_2l", "2l_5l", "5l_10l", "10l_25l", "25l_50l", "50l_100l", "100l_200l", "gte_200l"] as const;
 const csvValueSlabList = z
   .string()
   .optional()
   .transform((value) => (value ? value.split(",").filter(Boolean) : undefined))
-  .pipe(z.array(z.enum(["lt_10l", "10l_1cr", "1cr_10cr", "gte_10cr"])).optional());
+  .pipe(z.array(z.enum(valueSlabValues)).optional());
 const queryBoolean = z
   .enum(["true", "false"])
   .transform((value) => value === "true")
@@ -127,7 +128,7 @@ export const ListCasesQuerySchema = z.object({
   q: z.string().trim().min(1).optional(),
   status: z.enum(["running", "completed"]).optional(),
   tenderTypeIds: csvUuidList,
-  valueSlab: z.enum(["lt_10l", "10l_1cr", "1cr_10cr", "gte_10cr"]).optional(),
+  valueSlab: z.enum(valueSlabValues).optional(),
   valueSlabs: csvValueSlabList,
 });
 

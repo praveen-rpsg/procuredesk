@@ -4,19 +4,14 @@ import {
   CalendarClock,
   CheckCircle2,
   ChevronDown,
-  CircleDollarSign,
   Download,
   FileSpreadsheet,
   Filter,
-  Gauge,
-  Landmark,
   RefreshCw,
   Save,
   Search,
   SlidersHorizontal,
   Star,
-  TrendingUp,
-  UsersRound,
   X,
 } from "lucide-react";
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
@@ -202,7 +197,7 @@ export function ReportsWorkspace() {
     [data.filterMetadata.data?.completionMonths],
   );
   const valueSlabOptions = useMemo(
-    () => (data.filterMetadata.data?.valueSlabs ?? []).map((slab) => ({ label: slab, value: slab })),
+    () => (data.filterMetadata.data?.valueSlabs ?? []).map((slab) => ({ label: formatValueSlabLabel(slab), value: slab })),
     [data.filterMetadata.data?.valueSlabs],
   );
   const includeCompletionFilters = reportCode !== "running";
@@ -290,7 +285,7 @@ export function ReportsWorkspace() {
         header: "Normative Tender Stage",
         render: (row) => row.desiredStageCode == null ? "-" : formatCaseStage(row.desiredStageCode),
       },
-      { key: "elapsed", header: "% Time Elapsed", render: (row) => row.percentTimeElapsed == null ? "-" : `${row.percentTimeElapsed}%` },
+      { key: "elapsed", header: "% Time Elapsed", render: (row) => row.status === "completed" || row.percentTimeElapsed == null ? "-" : `${row.percentTimeElapsed}%` },
       { key: "age", header: "Running Tender Age (Days)", render: (row) => row.runningAgeDays ?? "-" },
       { key: "nit", header: "NIT Publish Date", render: (row) => formatDateCell(row.nitPublishDate) },
       { key: "bidders", header: "Bidder Participated Count", render: (row) => row.biddersParticipated ?? "-" },
@@ -1132,8 +1127,14 @@ function TenderDetailsKpis({
         <strong>{formatAmount(metrics?.totalApprovedAmount ?? 0, amountUnit)}</strong>
       </article>
       <article className="report-tender-kpi-positive">
-        <span>Savings vs PR Value / Approved Budget ({amountUnitLabel(amountUnit)}) [All Inclusive]</span>
+        <span>Savings wrt PR Value/Approved Budget ({amountUnitLabel(amountUnit)}) [All Inclusive]</span>
         <strong>{formatAmount(metrics?.savingsWrtPr ?? 0, amountUnit)}</strong>
+        <small>{formatSavingsPercent(metrics?.savingsWrtPr, metrics?.totalPrValue)}</small>
+      </article>
+      <article className="report-tender-kpi-positive">
+        <span>Savings wrt Estimate/Benchmark ({amountUnitLabel(amountUnit)}) [All Inclusive]</span>
+        <strong>{formatAmount(metrics?.savingsWrtEstimate ?? 0, amountUnit)}</strong>
+        <small>{formatSavingsPercent(metrics?.savingsWrtEstimate, metrics?.totalEstimateBenchmark)}</small>
       </article>
     </section>
   );
@@ -1175,63 +1176,54 @@ function ReportAnalyticsDashboard({
   const completedRatio = metrics?.totalCases ? Math.round(((metrics.completedCases ?? 0) / metrics.totalCases) * 100) : 0;
   const delayedRatio = metrics?.totalCases ? Math.round(((metrics.delayedCases ?? 0) / metrics.totalCases) * 100) : 0;
   const runningRatio = metrics?.totalCases ? Math.round(((metrics.runningCases ?? 0) / metrics.totalCases) * 100) : 0;
-  const bidderCoverage = metrics?.totalCases ? Math.round(((metrics.bidderCaseCount ?? 0) / metrics.totalCases) * 100) : 0;
   const kpiTiles = [
     {
-      icon: BarChart3,
       label: "Tenders Count",
-      meta: `${metrics?.runningCases ?? 0} running`,
+      meta: "",
       tone: "neutral",
       value: formatInteger(metrics?.totalCases ?? 0),
     },
     {
-      icon: CircleDollarSign,
-      label: `Tender Value (${amountUnitLabel(amountUnit)})`,
-      meta: "PR value / budget",
+      label: `Tender Value (${amountUnitLabel(amountUnit)}) [All Inclusive]`,
+      meta: "",
       tone: "brand",
       value: formatAmount(metrics?.totalPrValue ?? 0, amountUnit),
     },
     {
-      icon: Landmark,
-      label: `NFA Approved (${amountUnitLabel(amountUnit)})`,
-      meta: "All inclusive",
+      label: `NFA Approved (${amountUnitLabel(amountUnit)}) [All Inclusive]`,
+      meta: "",
       tone: "success",
       value: formatAmount(metrics?.totalApprovedAmount ?? 0, amountUnit),
     },
     {
-      icon: TrendingUp,
-      label: `Savings vs PR (${amountUnitLabel(amountUnit)})`,
-      meta: "Approved budget delta",
+      label: `Savings wrt PR Value/Approved Budget (${amountUnitLabel(amountUnit)}) [All Inclusive]`,
+      meta: formatSavingsPercent(metrics?.savingsWrtPr, metrics?.totalPrValue),
       tone: "success",
       value: formatAmount(metrics?.savingsWrtPr ?? 0, amountUnit),
     },
     {
-      icon: TrendingUp,
-      label: `Savings vs Estimate (${amountUnitLabel(amountUnit)})`,
-      meta: "Benchmark delta",
+      label: `Savings wrt Estimate/Benchmark (${amountUnitLabel(amountUnit)}) [All Inclusive]`,
+      meta: formatSavingsPercent(metrics?.savingsWrtEstimate, metrics?.totalEstimateBenchmark),
       tone: "success",
       value: formatAmount(metrics?.savingsWrtEstimate ?? 0, amountUnit),
     },
     {
-      icon: UsersRound,
-      label: "Avg Bidder Participation",
-      meta: `${bidderCoverage}% coverage`,
+      label: "Avg Bidder Participation (Open + Limited, Completed)",
+      meta: "",
       tone: "warning",
       value: formatNullableDecimal(metrics?.averageBiddersParticipated),
     },
     {
-      icon: CheckCircle2,
-      label: "Avg Qualified Bidders",
-      meta: `${metrics?.bidderCaseCount ?? 0} case(s)`,
+      label: "Avg Qualified Bidders Count (Open + Limited, Completed)",
+      meta: "",
       tone: "brand",
       value: formatNullableDecimal(metrics?.averageQualifiedBidders),
     },
     {
-      icon: Gauge,
-      label: "Avg Cycle Time",
-      meta: "Days",
+      label: "Avg Cycle Time (Days)",
+      meta: `Incl. uncontrollable delays${metrics?.completedCases != null ? ` · ${metrics.completedCases} completed case(s)` : ""}`,
       tone: delayedRatio > 0 ? "danger" : "success",
-      value: formatNullableDays(metrics?.averageCycleTimeDays),
+      value: formatNullableDecimal(metrics?.averageCycleTimeDays),
     },
   ];
   const filterLabel = activeFilterCount ? `${activeFilterCount} filters applied` : "Default view";
@@ -1250,13 +1242,10 @@ function ReportAnalyticsDashboard({
           <div className="report-analytics-kpi-strip">
             {kpiTiles.map((tile) => (
               <article className={`report-analytics-kpi report-analytics-kpi-${tile.tone}`} key={tile.label}>
-                <div className="report-analytics-kpi-icon">
-                  <tile.icon size={18} />
-                </div>
                 <div>
                   <span>{tile.label}</span>
                   <strong>{tile.value}</strong>
-                  <small>{tile.meta}</small>
+                  {tile.meta ? <small>{tile.meta}</small> : null}
                 </div>
               </article>
             ))}
@@ -1382,6 +1371,23 @@ function buildStageBreakdownRows(rows: StageTimeRow[]) {
 
 function formatInteger(value: number) {
   return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
+function formatValueSlabLabel(value: string) {
+  if (value === "lt_2l") return "Below Rs. 2 Lakhs";
+  if (value === "2l_5l") return "Rs. 2 - <5 Lakhs";
+  if (value === "5l_10l") return "Rs. 5 - <10 Lakhs";
+  if (value === "10l_25l") return "Rs. 10 - <25 Lakhs";
+  if (value === "25l_50l") return "Rs. 25 - <50 Lakhs";
+  if (value === "50l_100l") return "Rs. 50 - <100 Lakhs";
+  if (value === "100l_200l") return "Rs. 100 - <200 Lakhs";
+  if (value === "gte_200l") return ">= Rs. 200 Lakhs";
+  return value;
+}
+
+function formatSavingsPercent(savings: number | null | undefined, base: number | null | undefined) {
+  if (savings == null || !base) return "[-]";
+  return `[${((savings / base) * 100).toFixed(1)}%]`;
 }
 
 function formatNullableDecimal(value: number | null | undefined) {
@@ -2012,18 +2018,6 @@ function ReportFilterPanel({
           </label>
         </section>
         <div className="report-actions-row report-drawer-actions">
-          <div aria-label="Amount display unit" className="segmented-control" role="group">
-            {(["absolute", "lakh", "crore"] as AmountUnit[]).map((unit) => (
-              <button
-                className={filters.amountUnit === unit ? "segmented-control-active" : ""}
-                key={unit}
-                onClick={() => filters.setAmountUnit(unit)}
-                type="button"
-              >
-                {amountUnitLabel(unit)}
-              </button>
-            ))}
-          </div>
           <div aria-label="Export format" className="segmented-control" role="group">
             {(["xlsx", "csv"] as const).map((format) => (
               <button

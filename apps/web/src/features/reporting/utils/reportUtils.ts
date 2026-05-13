@@ -3,7 +3,7 @@ import type { LucideIcon } from "lucide-react";
 
 import type { ReportCode, ReportQueryParams, SavedReportView } from "../api/reportingApi";
 
-export type AmountUnit = "absolute" | "crore" | "lakh";
+export type AmountUnit = "lakh";
 export type ReportViewKey = ReportCode | "analytics" | "export_jobs" | "saved_views";
 export type ReportStatusFilter = "all" | "completed" | "running";
 
@@ -143,26 +143,18 @@ function assignAmountUnitParam(target: Record<string, unknown>, amountUnit: Amou
   if (amountUnit) target.amountUnit = amountUnit;
 }
 
-export function formatAmount(value: number | null, unit: AmountUnit) {
+export function formatAmount(value: number | null, _unit: AmountUnit) {
   if (value == null) return "-";
   const normalizedValue = Math.abs(value) < 0.005 ? 0 : value;
-  if (unit === "absolute") {
-    return `INR ${normalizedValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-  }
-  if (unit === "lakh") {
-    return `${(normalizedValue / 100000).toLocaleString(undefined, { maximumFractionDigits: 2 })} L`;
-  }
-  return `${(normalizedValue / 10000000).toLocaleString(undefined, { maximumFractionDigits: 2 })} Cr`;
+  return `${(normalizedValue / 100000).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 }
 
 export function formatDecimal(value: number | null | undefined) {
   return value == null ? "-" : value.toLocaleString(undefined, { maximumFractionDigits: 1 });
 }
 
-export function amountUnitLabel(unit: AmountUnit) {
-  if (unit === "absolute") return "INR";
-  if (unit === "lakh") return "Lakh";
-  return "Crore";
+export function amountUnitLabel(_unit: AmountUnit) {
+  return "Lakhs";
 }
 
 export const REPORT_OPTIONS: Array<{ code: ReportViewKey; description: string; icon: LucideIcon; label: string; path: string }> = [
@@ -202,7 +194,7 @@ export function toStatusFilter(value: string): ReportStatusFilter {
 }
 
 export function isAmountUnit(value: unknown): value is AmountUnit {
-  return value === "absolute" || value === "lakh" || value === "crore";
+  return value === "lakh";
 }
 
 export function stringArray(value: unknown) {
