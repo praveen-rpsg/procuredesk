@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, FileUp, ListChecks, UploadCloud } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import {
   commitImport,
@@ -9,6 +9,7 @@ import {
   listImportRows,
   oldContractsTemplateDownloadUrl,
   portalUserMappingTemplateDownloadUrl,
+  rcPoPlanTemplateDownloadUrl,
   type ImportJob,
   type ImportJobRow,
   tenderCasesTemplateDownloadUrl,
@@ -62,6 +63,11 @@ const columns = (
       <div className="progress-cell">
         <progress max={100} value={row.progressPercent} />
         <span>{row.progressPercent}%</span>
+        {row.progressMessage ? (
+          <small className={row.status === "failed" ? "inline-error" : undefined}>
+            {jobProgressMessage(row)}
+          </small>
+        ) : null}
       </div>
     ),
   },
@@ -162,6 +168,10 @@ export function ImportExportWorkspace() {
     createJobMutation.mutate();
   };
   const selectedTemplateUrl = templateDownloadUrl(importType);
+  const activeJob = useMemo(
+    () => (jobs.data ?? []).find((job) => job.id === activeJobId) ?? null,
+    [activeJobId, jobs.data],
+  );
 
   return (
     <section className="workspace-section">
@@ -274,6 +284,9 @@ export function ImportExportWorkspace() {
                   <h2>Import impact</h2>
                 </div>
               </div>
+              {activeJob?.status === "failed" ? (
+                <p className="inline-error">{failedJobMessage(activeJob)}</p>
+              ) : null}
               {previewRows.isLoading ? (
                 <Skeleton height={18} />
               ) : previewRows.error ? (
@@ -281,7 +294,11 @@ export function ImportExportWorkspace() {
               ) : (
                 <DataTable
                   columns={rowColumns}
-                  emptyMessage="No staged rows found for this job."
+                  emptyMessage={
+                    activeJob?.status === "failed"
+                      ? "No row preview is available because the import failed before rows could be staged."
+                      : "No staged rows found for this job."
+                  }
                   getRowKey={(row) => row.id}
                   rows={previewRows.data ?? []}
                 />
@@ -314,7 +331,27 @@ function templateDownloadUrl(importType: ImportType): string | null {
   if (importType === "portal_user_mapping") return portalUserMappingTemplateDownloadUrl();
   if (importType === "user_department_mapping") return userDepartmentMappingTemplateDownloadUrl();
   if (importType === "old_contracts") return oldContractsTemplateDownloadUrl();
+  if (importType === "rc_po_plan") return rcPoPlanTemplateDownloadUrl();
   return null;
+}
+
+function jobProgressMessage(row: ImportJob): string {
+  if (row.status === "failed") return failedJobMessage(row);
+  return row.progressMessage ?? "";
+}
+
+function failedJobMessage(row: ImportJob): string {
+  const message = row.progressMessage?.trim();
+  if (!message) {
+    return "Import failed before row validation finished. Download the template, check the file format, and upload again.";
+  }
+  if (message.includes("maximum of 10,000 rows")) {
+    return message;
+  }
+  if (message.includes("Unknown entity")) {
+    return "One or more rows use an entity code that does not exist or is outside your access.";
+  }
+  return message;
 }
 
 function previewRecordLabel(payload: Record<string, unknown> | null): string {

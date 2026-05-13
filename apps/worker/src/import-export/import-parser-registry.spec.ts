@@ -213,75 +213,6 @@ describe("XlsxImportParser (tender_cases)", () => {
   });
 });
 
-// ─── JSON parser ─────────────────────────────────────────────────────────────
-
-describe("DataverseJsonParser", () => {
-  it("parses a valid JSON array", async () => {
-    const json = JSON.stringify([
-      { pr_id: "PR001", pr_description: "Fix roof" },
-      { pr_id: "PR002", pr_description: "Buy chairs" },
-    ]);
-
-    const rows = await registry.dataverse_json.parse({
-      contentType: "application/json",
-      data: Buffer.from(json),
-      importType: "tender_cases",
-      storageKey: "file.json",
-    });
-
-    expect(rows).toHaveLength(2);
-    expect(rows[0]!.normalizedPayload!["prId"]).toBe("PR001");
-  });
-
-  it("wraps a single object in an array", async () => {
-    const json = JSON.stringify({ pr_id: "PR001" });
-    const rows = await registry.dataverse_json.parse({
-      contentType: "application/json",
-      data: Buffer.from(json),
-      importType: "tender_cases",
-      storageKey: "file.json",
-    });
-    expect(rows).toHaveLength(1);
-  });
-
-  it("throws a clean error for malformed JSON", async () => {
-    await expect(
-      registry.dataverse_json.parse({
-        contentType: "application/json",
-        data: Buffer.from("{not valid json"),
-        importType: "tender_cases",
-        storageKey: "file.json",
-      }),
-    ).rejects.toThrow("Import file contains invalid JSON");
-  });
-
-  it("strips __proto__ keys to prevent prototype pollution", async () => {
-    const malicious = `[{"__proto__":{"isAdmin":true},"pr_id":"PR001"}]`;
-    const rows = await registry.dataverse_json.parse({
-      contentType: "application/json",
-      data: Buffer.from(malicious),
-      importType: "tender_cases",
-      storageKey: "file.json",
-    });
-    // __proto__ must be stripped — must NOT be an own property
-    expect(Object.hasOwn(rows[0]!.sourcePayload, "__proto__")).toBe(false);
-    // Prototype must not be polluted
-    expect(Object.prototype.hasOwnProperty.call({}, "isAdmin")).toBe(false);
-  });
-
-  it("throws when row count exceeds 10 000", async () => {
-    const rows = Array.from({ length: 10_001 }, (_, i) => ({ pr_id: `PR${i}` }));
-    await expect(
-      registry.dataverse_json.parse({
-        contentType: "application/json",
-        data: Buffer.from(JSON.stringify(rows)),
-        importType: "tender_cases",
-        storageKey: "file.json",
-      }),
-    ).rejects.toThrow("10,000 rows");
-  });
-});
-
 // ─── rc_po_plan CSV ──────────────────────────────────────────────────────────
 
 describe("CsvImportParser (rc_po_plan)", () => {
@@ -300,6 +231,72 @@ describe("CsvImportParser (rc_po_plan)", () => {
 
     expect(rows[0]!.normalizedPayload!["entityCode"]).toBe("HQ");
     expect(rows[0]!.normalizedPayload!["rcPoAmount"]).toBe("500000");
+  });
+
+  it("maps the business-facing RC/PO Plan template labels", async () => {
+    const csv = [
+      "Entity Code (required),User Department,Tender Description,Awarded Vendors (comma separated),RC/PO Amount (Rs.),RC/PO Award Date (YYYY-MM-DD),RC/PO Validity Date (YYYY-MM-DD)",
+      "CESC,Mechanical,Sample tender,\"Vendor A, Vendor B\",100000,2026-01-31,2027-01-30",
+    ].join("\n");
+
+    const rows = await registry.rc_po_plan.parse({
+      contentType: "text/csv",
+      data: Buffer.from(csv),
+      importType: "rc_po_plan",
+      storageKey: "file.csv",
+    });
+
+    expect(rows[0]!.normalizedPayload).toMatchObject({
+      awardedVendors: "Vendor A, Vendor B",
+      departmentName: "Mechanical",
+      entityCode: "CESC",
+      rcPoAmount: "100000",
+      rcPoAwardDate: "2026-01-31",
+      rcPoValidityDate: "2027-01-30",
+      tenderDescription: "Sample tender",
+    });
+  });
+
+  it("detects the RC/PO Plan xlsx header row at the top of the sheet", async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("RC PO Plan");
+    sheet.getRow(1).values = [
+      ,
+      "Entity Code (required)",
+      "User Department",
+      "Tender Description",
+      "Awarded Vendors (comma separated)",
+      "RC/PO Amount (Rs.)",
+      "RC/PO Award Date (YYYY-MM-DD)",
+      "RC/PO Validity Date (YYYY-MM-DD)",
+    ];
+    sheet.getRow(2).values = [
+      ,
+      "CESC",
+      "Mechanical",
+      "Sample tender",
+      "Vendor A, Vendor B",
+      100000,
+      "2026-01-31",
+      "2027-01-30",
+    ];
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const rows = await registry.rc_po_plan.parse({
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      data: Buffer.from(buffer),
+      importType: "rc_po_plan",
+      storageKey: "tenant/imports/rc-po-plan.xlsx",
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.normalizedPayload).toMatchObject({
+      departmentName: "Mechanical",
+      entityCode: "CESC",
+      rcPoAmount: 100000,
+      rcPoAwardDate: "2026-01-31",
+      rcPoValidityDate: "2027-01-30",
+    });
   });
 });
 

@@ -183,7 +183,8 @@ export class ImportExportRepository {
 
       const accepted = input.rows.filter((row) => row.status === "accepted").length;
       const rejected = input.rows.filter((row) => row.status === "rejected").length;
-      const staged = input.rows.filter((row) => row.status === "staged").length;
+      const stagedUnknownEntities = input.rows.filter((row) => row.status === "staged").length;
+      const stagedUnknownUsers = 0;
       await this.db.query(
         `
           update ops.import_jobs
@@ -192,11 +193,12 @@ export class ImportExportRepository {
               accepted_rows = $4,
               rejected_rows = $5,
               staged_unknown_entities = $6,
+              staged_unknown_users = $7,
               completed_at = now()
           where tenant_id = $1
             and id = $2
         `,
-        [input.tenantId, input.importJobId, input.rows.length, accepted, rejected, staged],
+        [input.tenantId, input.importJobId, input.rows.length, accepted, rejected, stagedUnknownEntities, stagedUnknownUsers],
         client,
       );
     });
@@ -261,31 +263,59 @@ export class ImportExportRepository {
   ): Promise<void> {
     await this.db.query(
       `
-        insert into procurement.rc_po_plans (
-          tenant_id, entity_id, tender_description, awarded_vendors, rc_po_amount,
+        with inserted as (
+          insert into procurement.rc_po_plans (
+          tenant_id, entity_id, department_id, tender_description, awarded_vendors, rc_po_amount,
           rc_po_award_date, rc_po_validity_date, tentative_tendering_date,
           uploaded_by, uploaded_at, created_by, updated_by
+          )
+          select
+            $1,
+            e.id,
+            d.id,
+            r.normalized_payload->>'tenderDescription',
+            r.normalized_payload->>'awardedVendors',
+            nullif(r.normalized_payload->>'rcPoAmount', '')::numeric,
+            nullif(r.normalized_payload->>'rcPoAwardDate', '')::date,
+            nullif(r.normalized_payload->>'rcPoValidityDate', '')::date,
+            coalesce(
+              nullif(r.normalized_payload->>'tentativeTenderingDate', '')::date,
+              nullif(r.normalized_payload->>'rcPoAwardDate', '')::date + 150
+            ),
+            $3,
+            now(),
+            $3,
+            $3
+          from ops.import_job_rows r
+          join org.entities e
+            on e.tenant_id = $1
+           and lower(e.code::text) = lower(r.normalized_payload->>'entityCode')
+           and e.deleted_at is null
+          left join org.departments d
+            on d.tenant_id = $1
+           and d.entity_id = e.id
+           and lower(d.name) = lower(r.normalized_payload->>'departmentName')
+           and d.deleted_at is null
+          where r.import_job_id = $2
+            and r.status = 'accepted'
+          returning
+            tenant_id, id, source_case_id, entity_id, department_id, owner_user_id,
+            tender_description, awarded_vendors, rc_po_amount, rc_po_award_date,
+            rc_po_validity_date, tentative_tendering_date, tender_floated_or_not_required
+        )
+        insert into reporting.contract_expiry_facts (
+          tenant_id, rc_po_plan_id, case_id, entity_id, department_id,
+          owner_user_id, tender_description, awarded_vendors, rc_po_amount,
+          rc_po_award_date, rc_po_validity_date, tentative_tendering_date,
+          tender_floated_or_not_required, source_type, updated_at
         )
         select
-          $1,
-          e.id,
-          r.normalized_payload->>'tenderDescription',
-          r.normalized_payload->>'awardedVendors',
-          nullif(r.normalized_payload->>'rcPoAmount', '')::numeric,
-          nullif(r.normalized_payload->>'rcPoAwardDate', '')::date,
-          nullif(r.normalized_payload->>'rcPoValidityDate', '')::date,
-          nullif(r.normalized_payload->>'tentativeTenderingDate', '')::date,
-          $3,
-          now(),
-          $3,
-          $3
-        from ops.import_job_rows r
-        join org.entities e
-          on e.tenant_id = $1
-         and lower(e.code::text) = lower(r.normalized_payload->>'entityCode')
-         and e.deleted_at is null
-        where r.import_job_id = $2
-          and r.status = 'accepted'
+          tenant_id, id, source_case_id, entity_id, department_id,
+          owner_user_id, tender_description, awarded_vendors, rc_po_amount,
+          rc_po_award_date, rc_po_validity_date, tentative_tendering_date,
+          tender_floated_or_not_required, 'manual_plan', now()
+        from inserted
+        where rc_po_validity_date is not null
       `,
       [input.tenantId, input.importJobId, input.committedBy],
       client,
@@ -298,42 +328,63 @@ export class ImportExportRepository {
   ): Promise<void> {
     await this.db.query(
       `
-        insert into procurement.rc_po_plans (
+        with inserted as (
+          insert into procurement.rc_po_plans (
           tenant_id, entity_id, department_id, owner_user_id, tender_description,
           awarded_vendors, rc_po_amount, rc_po_award_date, rc_po_validity_date,
+          tentative_tendering_date,
           uploaded_by, uploaded_at, created_by, updated_by
+          )
+          select
+            $1,
+            e.id,
+            d.id,
+            u.id,
+            r.normalized_payload->>'tenderDescription',
+            r.normalized_payload->>'awardedVendors',
+            nullif(r.normalized_payload->>'rcPoAmount', '')::numeric,
+            nullif(r.normalized_payload->>'rcPoAwardDate', '')::date,
+            nullif(r.normalized_payload->>'rcPoValidityDate', '')::date,
+            nullif(r.normalized_payload->>'rcPoAwardDate', '')::date + 150,
+            $3,
+            now(),
+            $3,
+            $3
+          from ops.import_job_rows r
+          join org.entities e
+            on e.tenant_id = $1
+           and lower(e.code::text) = lower(r.normalized_payload->>'entityCode')
+           and e.deleted_at is null
+          left join org.departments d
+            on d.tenant_id = $1
+           and d.entity_id = e.id
+           and lower(d.name) = lower(r.normalized_payload->>'departmentName')
+           and d.deleted_at is null
+          left join iam.users u
+            on u.tenant_id = $1
+           and (lower(u.username) = lower(r.normalized_payload->>'ownerUsername') or lower(u.email) = lower(r.normalized_payload->>'ownerUsername'))
+           and u.deleted_at is null
+          where r.import_job_id = $2
+            and r.status = 'accepted'
+            and coalesce(r.normalized_payload->>'importAction', '') <> 'existing'
+          returning
+            tenant_id, id, source_case_id, entity_id, department_id, owner_user_id,
+            tender_description, awarded_vendors, rc_po_amount, rc_po_award_date,
+            rc_po_validity_date, tentative_tendering_date, tender_floated_or_not_required
+        )
+        insert into reporting.contract_expiry_facts (
+          tenant_id, rc_po_plan_id, case_id, entity_id, department_id,
+          owner_user_id, tender_description, awarded_vendors, rc_po_amount,
+          rc_po_award_date, rc_po_validity_date, tentative_tendering_date,
+          tender_floated_or_not_required, source_type, updated_at
         )
         select
-          $1,
-          e.id,
-          d.id,
-          u.id,
-          r.normalized_payload->>'tenderDescription',
-          r.normalized_payload->>'awardedVendors',
-          nullif(r.normalized_payload->>'rcPoAmount', '')::numeric,
-          nullif(r.normalized_payload->>'rcPoAwardDate', '')::date,
-          nullif(r.normalized_payload->>'rcPoValidityDate', '')::date,
-          $3,
-          now(),
-          $3,
-          $3
-        from ops.import_job_rows r
-        join org.entities e
-          on e.tenant_id = $1
-         and lower(e.code::text) = lower(r.normalized_payload->>'entityCode')
-         and e.deleted_at is null
-        left join org.departments d
-          on d.tenant_id = $1
-         and d.entity_id = e.id
-         and lower(d.name) = lower(r.normalized_payload->>'departmentName')
-         and d.deleted_at is null
-        left join iam.users u
-          on u.tenant_id = $1
-         and (lower(u.username) = lower(r.normalized_payload->>'ownerUsername') or lower(u.email) = lower(r.normalized_payload->>'ownerUsername'))
-         and u.deleted_at is null
-        where r.import_job_id = $2
-          and r.status = 'accepted'
-          and coalesce(r.normalized_payload->>'importAction', '') <> 'existing'
+          tenant_id, id, source_case_id, entity_id, department_id,
+          owner_user_id, tender_description, awarded_vendors, rc_po_amount,
+          rc_po_award_date, rc_po_validity_date, tentative_tendering_date,
+          tender_floated_or_not_required, 'manual_plan', now()
+        from inserted
+        where rc_po_validity_date is not null
       `,
       [input.tenantId, input.importJobId, input.committedBy],
       client,

@@ -16,11 +16,9 @@ export async function processReportingProjection(
     await upsertCaseFact(tenantId, aggregateId, deps.pool);
     await refreshContractExpiryForCase(tenantId, aggregateId, deps.pool);
   } else if (eventType.startsWith("case_award.")) {
-    const caseId = await getCaseIdForAward(aggregateId, deps.pool);
-    if (caseId) {
-      await upsertCaseFact(tenantId, caseId, deps.pool);
-      await refreshContractExpiryForCase(tenantId, caseId, deps.pool);
-    }
+    const caseId = (await getCaseIdForAward(aggregateId, deps.pool)) ?? aggregateId;
+    await upsertCaseFact(tenantId, caseId, deps.pool);
+    await refreshContractExpiryForCase(tenantId, caseId, deps.pool);
   } else if (eventType.startsWith("rc_po_plan.")) {
     await refreshContractExpiryForPlan(tenantId, aggregateId, deps.pool);
   }
@@ -174,7 +172,7 @@ async function refreshContractExpiryForCase(tenantId: string, caseId: string, po
           a.po_value,
           a.po_award_date,
           a.po_validity_date,
-          a.tentative_tendering_date,
+          coalesce(a.tentative_tendering_date, a.po_award_date + 150),
           a.tender_floated_or_not_required,
           'case_award',
           now()
@@ -218,13 +216,13 @@ async function refreshContractExpiryForPlan(tenantId: string, planId: string, po
           p.source_case_id,
           p.entity_id,
           p.department_id,
-          c.owner_user_id,
+          coalesce(p.owner_user_id, c.owner_user_id),
           p.tender_description,
           p.awarded_vendors,
           p.rc_po_amount,
           p.rc_po_award_date,
           p.rc_po_validity_date,
-          p.tentative_tendering_date,
+          coalesce(p.tentative_tendering_date, p.rc_po_award_date + 150),
           p.tender_floated_or_not_required,
           'manual_plan',
           now()

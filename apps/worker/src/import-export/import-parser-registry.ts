@@ -55,53 +55,22 @@ const OLD_CONTRACT_TEMPLATE_COLUMNS = [
   "RC/PO Award Date",
   "RC/PO Validity Date",
 ] as const;
+const RC_PO_PLAN_TEMPLATE_COLUMNS = [
+  "Entity Code (required)",
+  "User Department",
+  "Tender Description",
+  "Awarded Vendors (comma separated)",
+  "RC/PO Amount (Rs.)",
+  "RC/PO Award Date (YYYY-MM-DD)",
+  "RC/PO Validity Date (YYYY-MM-DD)",
+] as const;
 const TEMPLATE_COLUMN_SETS = [
   TENDER_TEMPLATE_COLUMNS,
   PORTAL_USER_TEMPLATE_COLUMNS,
   USER_DEPARTMENT_TEMPLATE_COLUMNS,
   OLD_CONTRACT_TEMPLATE_COLUMNS,
+  RC_PO_PLAN_TEMPLATE_COLUMNS,
 ];
-
-class DataverseJsonParser implements ImportParser {
-  async parse(input: ImportParserInput): Promise<ParsedImportRow[]> {
-    let parsed: unknown;
-    try {
-      // Reviver blocks prototype-pollution keys before they can be assigned
-      parsed = JSON.parse(input.data.toString("utf8"), safeJsonReviver) as unknown;
-    } catch {
-      throw new Error("Import file contains invalid JSON and cannot be parsed.");
-    }
-
-    const rows = Array.isArray(parsed) ? parsed : [parsed];
-
-    if (rows.length > MAX_IMPORT_ROWS) {
-      throw new Error(
-        `Import file exceeds the maximum of 10,000 rows. Found ${rows.length.toLocaleString()} rows.`,
-      );
-    }
-
-    return rows.map((row) => {
-      const sourcePayload = this.record(row);
-      return {
-        errors: [],
-        normalizedPayload: normalizeImportPayload("tender_cases", sourcePayload),
-        sourcePayload,
-        status: "staged",
-      };
-    });
-  }
-
-  private record(value: unknown): Record<string, unknown> {
-    return value && typeof value === "object" && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : { value };
-  }
-}
-
-function safeJsonReviver(key: string, value: unknown): unknown {
-  if (key === "__proto__" || key === "constructor" || key === "prototype") return undefined;
-  return value;
-}
 
 class CsvImportParser implements ImportParser {
   async parse(input: ImportParserInput): Promise<ParsedImportRow[]> {
@@ -125,7 +94,6 @@ class CsvImportParser implements ImportParser {
 export function createImportParserRegistry(): Record<ImportParserInput["importType"], ImportParser> {
   const csv = new CsvImportParser();
   return {
-    dataverse_json: new DataverseJsonParser(),
     old_contracts: csv,
     portal_user_mapping: csv,
     rc_po_plan: csv,
@@ -162,19 +130,25 @@ async function parseXlsx(data: Buffer): Promise<Record<string, unknown>[]> {
 function findHeaderRow(sheet: ExcelJS.Worksheet): number {
   let bestRow = 1;
   let bestScore = 0;
+  let bestRequiredScore = 7;
   sheet.eachRow((row, rowNumber) => {
     const values = rowValues(row).map((value) => String(value ?? "").trim().toLowerCase());
-    const score = Math.max(
-      ...TEMPLATE_COLUMN_SETS.map((columns) =>
-        columns.filter((column) => values.includes(column.toLowerCase())).length,
-      ),
-    );
+    let score = 0;
+    let requiredScore = 7;
+    for (const columns of TEMPLATE_COLUMN_SETS) {
+      const columnScore = columns.filter((column) => values.includes(column.toLowerCase())).length;
+      if (columnScore > score) {
+        score = columnScore;
+        requiredScore = Math.min(7, columns.length);
+      }
+    }
     if (score > bestScore) {
       bestRow = rowNumber;
       bestScore = score;
+      bestRequiredScore = requiredScore;
     }
   });
-  return bestScore >= 8 ? bestRow : 1;
+  return bestScore >= bestRequiredScore ? bestRow : 1;
 }
 
 function rowValues(row: ExcelJS.Row): unknown[] {
@@ -230,11 +204,12 @@ function normalizeImportPayload(
 ): Record<string, unknown> {
   if (importType === "rc_po_plan") {
     return {
-      awardedVendors: first(row, ["awarded_vendors", "Awarded Vendors", "vendor", "Vendor"]),
-      entityCode: first(row, ["entity_code", "Entity Code", "entity", "Entity"]),
-      rcPoAmount: first(row, ["rc_po_amount", "RC/PO Amount", "amount", "Amount"]),
-      rcPoAwardDate: first(row, ["rc_po_award_date", "Award Date", "award_date"]),
-      rcPoValidityDate: first(row, ["rc_po_validity_date", "Validity Date", "validity_date"]),
+      awardedVendors: first(row, ["Awarded Vendors (comma separated)", "awarded_vendors", "Awarded Vendors", "vendor", "Vendor"]),
+      departmentName: first(row, ["User Department", "department", "Department"]),
+      entityCode: first(row, ["Entity Code (required)", "entity_code", "Entity Code", "entity", "Entity"]),
+      rcPoAmount: first(row, ["RC/PO Amount (Rs.)", "RC/PO Amount (Rs.) [All Inclusive]", "rc_po_amount", "RC/PO Amount", "amount", "Amount"]),
+      rcPoAwardDate: first(row, ["RC/PO Award Date (YYYY-MM-DD)", "rc_po_award_date", "RC/PO Award Date", "Award Date", "award_date"]),
+      rcPoValidityDate: first(row, ["RC/PO Validity Date (YYYY-MM-DD)", "rc_po_validity_date", "RC/PO Validity Date", "Validity Date", "validity_date"]),
       tenderDescription: first(row, ["tender_description", "Tender Description", "description"]),
       tentativeTenderingDate: first(row, ["tentative_tendering_date", "Tentative Tendering Date"]),
     };
@@ -246,7 +221,7 @@ function normalizeImportPayload(
       departmentName: first(row, ["User Department", "department", "Department"]),
       entityCode: first(row, ["Entity", "entity_code", "Entity Code", "entity"]),
       ownerUsername: first(row, ["Tender Owner", "owner_username", "Owner Username", "owner", "Owner"]),
-      rcPoAmount: first(row, ["RC/PO Amount (Rs.)", "rc_po_amount", "RC/PO Amount", "amount", "Amount"]),
+      rcPoAmount: first(row, ["RC/PO Amount (Rs.)", "RC/PO Amount (Rs.) [All Inclusive]", "rc_po_amount", "RC/PO Amount", "amount", "Amount"]),
       rcPoAwardDate: first(row, ["RC/PO Award Date", "rc_po_award_date", "Award Date", "award_date"]),
       rcPoValidityDate: first(row, ["RC/PO Validity Date", "rc_po_validity_date", "Validity Date", "validity_date"]),
       tenderDescription: first(row, ["Tender Description", "tender_description", "description"]),

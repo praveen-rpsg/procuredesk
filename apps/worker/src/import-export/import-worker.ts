@@ -137,6 +137,7 @@ async function validateRows(
   pool: Pool,
   actorUserId?: string,
 ): Promise<ParsedImportRow[]> {
+  const shouldLoadExistingUsers = importType === "portal_user_mapping";
   const [entityScope, catalog, users, departments, existingCases, roles, existingUsers, existingOldContracts] = await Promise.all([
     loadEntityScope(tenantId, pool, actorUserId),
     loadCatalogLookups(tenantId, pool),
@@ -144,7 +145,7 @@ async function validateRows(
     loadDepartmentLookups(tenantId, pool),
     loadExistingCaseLookups(tenantId, pool),
     loadRoleLookups(tenantId, pool),
-    loadExistingUserLookups(tenantId, pool),
+    shouldLoadExistingUsers ? loadExistingUserLookups(tenantId, pool) : Promise.resolve({ emails: new Set<string>(), phones: new Set<string>() }),
     loadExistingOldContractLookups(tenantId, pool),
   ]);
 
@@ -276,7 +277,11 @@ function validateSpecializedImportRow(input: {
     validateUserDepartmentMapping(input.errors, payload, input.entityId, input.departments, input.seenDepartments);
     return buildValidatedRow(input.row, payload, input.errors, departmentImportAction(payload, input.entityId, input.departments));
   }
-  if (input.importType === "old_contracts" || input.importType === "rc_po_plan") {
+  if (input.importType === "rc_po_plan") {
+    validateRcPoPlan(input.errors, payload, input.entityId, input.departments, input.existingOldContracts, input.seenContracts);
+    return buildValidatedRow(input.row, payload, input.errors, oldContractImportAction(payload, input.entityId, input.existingOldContracts));
+  }
+  if (input.importType === "old_contracts") {
     validateOldContract(input.errors, payload, input.entityId, input.users, input.departments, input.existingOldContracts, input.seenContracts);
     return buildValidatedRow(input.row, payload, input.errors, oldContractImportAction(payload, input.entityId, input.existingOldContracts));
   }
@@ -541,7 +546,7 @@ async function loadExistingOldContractLookups(
     `
       select lower(
         e.id::text || '|' ||
-        coalesce(d.id::text, '') || '|' ||
+        coalesce(d.name, '') || '|' ||
         coalesce(p.tender_description, '') || '|' ||
         coalesce(p.awarded_vendors, '')
       ) as key
@@ -749,6 +754,32 @@ function validateOldContract(
   }
 }
 
+function validateRcPoPlan(
+  errors: string[],
+  payload: Record<string, unknown>,
+  entityId: string | undefined,
+  departments: Map<string, Set<string>>,
+  existingOldContracts: Set<string>,
+  seenContracts: Set<string>,
+): void {
+  validateDepartment(errors, payload.departmentName, entityId, departments);
+  validateRequiredText(errors, payload.tenderDescription, "Tender Description is required.");
+  validateRequiredText(errors, payload.awardedVendors, "Awarded Vendors (comma separated) is required.");
+  validatePositiveMoney(errors, payload.rcPoAmount, "RC/PO Amount must be a positive number.");
+  validateRcPoPlanDates(errors, payload);
+  const vendorList = splitVendors(payload.awardedVendors);
+  if (!vendorList.length) errors.push("Awarded Vendors must include at least one vendor.");
+  if (vendorList.length !== new Set(vendorList.map((vendor) => vendor.toLowerCase())).size) {
+    errors.push("Awarded Vendors contains duplicate vendor names.");
+  }
+  const key = oldContractKey(payload, entityId);
+  if (key) {
+    if (seenContracts.has(key)) errors.push("Duplicate RC/PO plan exists within this import file.");
+    seenContracts.add(key);
+    if (existingOldContracts.has(key)) payload.importAction = "existing";
+  }
+}
+
 function validateDepartment(
   errors: string[],
   value: unknown,
@@ -880,6 +911,22 @@ function validateOldContractDates(errors: string[], payload: Record<string, unkn
   ] as const) {
     if (hasValue(value) && !parseImportDate(value)) {
       errors.push(`${label} must be a valid date in DD-MM-YYYY format.`);
+    }
+  }
+  const awardDate = parseImportDate(payload.rcPoAwardDate);
+  const validityDate = parseImportDate(payload.rcPoValidityDate);
+  if (awardDate && validityDate && validityDate < awardDate) {
+    errors.push("RC/PO Validity Date must be on or after RC/PO Award Date.");
+  }
+}
+
+function validateRcPoPlanDates(errors: string[], payload: Record<string, unknown>): void {
+  for (const [label, value] of [
+    ["RC/PO Award Date", payload.rcPoAwardDate],
+    ["RC/PO Validity Date", payload.rcPoValidityDate],
+  ] as const) {
+    if (hasValue(value) && !parseImportDate(value)) {
+      errors.push(`${label} must be a valid date in YYYY-MM-DD or DD-MM-YYYY format.`);
     }
   }
   const awardDate = parseImportDate(payload.rcPoAwardDate);

@@ -31,12 +31,11 @@ const ALLOWED_MIME_TYPES = new Set([
   "text/csv",
   "text/plain",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/json",
   "application/octet-stream", // some HTTP clients send this generic type for CSV/XLSX
 ]);
 
 // Allowlist of file extensions accepted for import uploads.
-const ALLOWED_EXTENSIONS = new Set([".csv", ".xlsx", ".json", ".txt"]);
+const ALLOWED_EXTENSIONS = new Set([".csv", ".xlsx", ".txt"]);
 
 @Controller("imports")
 @UseGuards(AuthGuard, PermissionGuard)
@@ -59,7 +58,7 @@ export class ImportExportController {
     const contentType = (file.mimetype ?? "").split(";")[0]?.trim() ?? "";
     if (!ALLOWED_MIME_TYPES.has(contentType)) {
       throw new BadRequestException(
-        `File type '${contentType}' is not allowed. Accepted types: CSV, XLSX, JSON.`,
+        `File type '${contentType}' is not allowed. Accepted types: CSV or XLSX.`,
       );
     }
 
@@ -67,7 +66,7 @@ export class ImportExportController {
     const ext = path.extname(file.filename ?? "").toLowerCase();
     if (ext && !ALLOWED_EXTENSIONS.has(ext)) {
       throw new BadRequestException(
-        `File extension '${ext}' is not allowed. Accepted extensions: .csv, .xlsx, .json.`,
+        `File extension '${ext}' is not allowed. Accepted extensions: .csv or .xlsx.`,
       );
     }
 
@@ -125,6 +124,12 @@ export class ImportExportController {
   @RequirePermissions("import.manage")
   downloadOldContractsTemplate(@CurrentUser() user: AuthenticatedUser) {
     return this.importExport.downloadOldContractsTemplate(user);
+  }
+
+  @Get("templates/rc-po-plan.xlsx")
+  @RequirePermissions("import.manage")
+  downloadRcPoPlanTemplate(@CurrentUser() user: AuthenticatedUser) {
+    return this.importExport.downloadRcPoPlanTemplate(user);
   }
 
   @Get("jobs/:importJobId/rows")

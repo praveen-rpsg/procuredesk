@@ -105,3 +105,7 @@ export function userDepartmentMappingTemplateDownloadUrl() {
 export function oldContractsTemplateDownloadUrl() {
   return `${apiBaseUrl}/imports/templates/old-contracts.xlsx`;
 }
+
+export function rcPoPlanTemplateDownloadUrl() {
+  return `${apiBaseUrl}/imports/templates/rc-po-plan.xlsx`;
+}

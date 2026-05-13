@@ -27,6 +27,7 @@ create table iam.users (
   email citext not null,
   username citext not null,
   full_name text not null,
+  contact_no text,
   password_hash text,
   status text not null default 'pending_password_setup',
   access_level text not null default 'USER',
@@ -473,6 +474,7 @@ create table procurement.rc_po_plans (
   tenant_id uuid not null references iam.tenants(id) on delete cascade,
   entity_id uuid not null references org.entities(id) on delete restrict,
   department_id uuid references org.departments(id) on delete restrict,
+  owner_user_id uuid references iam.users(id) on delete restrict,
   source_case_id uuid references procurement.cases(id) on delete set null,
   tender_description text,
   awarded_vendors text,
@@ -498,6 +500,10 @@ create table procurement.rc_po_plans (
 
 create index rc_po_plans_expiry_idx
   on procurement.rc_po_plans (tenant_id, rc_po_validity_date)
+  where deleted_at is null;
+
+create index rc_po_plans_owner_idx
+  on procurement.rc_po_plans (tenant_id, owner_user_id)
   where deleted_at is null;
 
 create table procurement.tender_plan_cases (

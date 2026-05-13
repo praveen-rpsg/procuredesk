@@ -213,6 +213,15 @@ export class ImportExportService {
     );
   }
 
+  async downloadRcPoPlanTemplate(actor: AuthenticatedUser) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "import.manage");
+    return await this.templateFile(
+      await this.buildRcPoPlanTemplate(tenantId),
+      "procuredesk-rc-po-plan-template.xlsx",
+    );
+  }
+
   async downloadProblemRows(actor: AuthenticatedUser, importJobId: string) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "import.manage");
@@ -460,6 +469,50 @@ export class ImportExportService {
     return workbook;
   }
 
+  private async buildRcPoPlanTemplate(tenantId: string): Promise<ExcelJS.Workbook> {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "ProcureDesk";
+    workbook.created = new Date();
+    const template = workbook.addWorksheet("RC PO Plan", {
+      views: [{ state: "frozen", xSplit: 0, ySplit: 1 }],
+    });
+    const lookups = workbook.addWorksheet("Master Lookups");
+    const metadata = workbook.addWorksheet("_metadata");
+    metadata.state = "veryHidden";
+
+    const columns = rcPoPlanTemplateColumns();
+    template.getRow(1).values = columns.map((column) => column.label);
+    template.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    template.getRow(1).fill = { fgColor: { argb: "FF0070C0" }, pattern: "solid", type: "pattern" };
+    template.getRow(1).alignment = { vertical: "middle", wrapText: true };
+    template.autoFilter = { from: "A1", to: `${template.getColumn(columns.length).letter}1` };
+    template.getRow(2).values = [
+      "CESC",
+      "Mechanical",
+      "Sample tender",
+      "Vendor A, Vendor B",
+      100000,
+      "2026-01-31",
+      "2027-01-30",
+    ];
+
+    columns.forEach((column, index) => {
+      const worksheetColumn = template.getColumn(index + 1);
+      worksheetColumn.width = column.width;
+      if (column.type === "YYYY-MM-DD") worksheetColumn.numFmt = "yyyy-mm-dd";
+    });
+
+    const lookupData = await this.loadTemplateLookups(tenantId);
+    const rcPoLookupData = {
+      ...lookupData,
+      "Entity Code (required)": lookupData.Entity ?? [],
+    };
+    this.populateLookupSheet(lookups, rcPoLookupData);
+    this.populateMetadataSheet(metadata, columns, "ProcureDesk RC/PO Plan", 1);
+    this.applyTemplateValidations(template, columns, rcPoLookupData, 2);
+    return workbook;
+  }
+
   private async loadTemplateLookups(tenantId: string): Promise<Record<string, string[]>> {
     const [entities, departments, users, roles, references, tenderTypes] = await Promise.all([
       this.db.query<{ code: string }>(
@@ -573,7 +626,7 @@ export class ImportExportService {
 
 type TenderTemplateColumn = {
   label: string;
-  type: "Alphanumeric" | "Auto-fetched / Readonly" | "DD-MM-YYYY" | "Dropdown" | "Email" | "Number" | "Text";
+  type: "Alphanumeric" | "Auto-fetched / Readonly" | "DD-MM-YYYY" | "Dropdown" | "Email" | "Number" | "Text" | "YYYY-MM-DD";
   width: number;
 };
 
@@ -605,6 +658,18 @@ function oldContractTemplateColumns(): TenderTemplateColumn[] {
     { label: "RC/PO Amount (Rs.) [All Inclusive]", type: "Number", width: 26 },
     { label: "RC/PO Award Date", type: "DD-MM-YYYY", width: 18 },
     { label: "RC/PO Validity Date", type: "DD-MM-YYYY", width: 20 },
+  ];
+}
+
+function rcPoPlanTemplateColumns(): TenderTemplateColumn[] {
+  return [
+    { label: "Entity Code (required)", type: "Dropdown", width: 26 },
+    { label: "User Department", type: "Dropdown", width: 24 },
+    { label: "Tender Description", type: "Text", width: 32 },
+    { label: "Awarded Vendors (comma separated)", type: "Text", width: 36 },
+    { label: "RC/PO Amount (Rs.)", type: "Number", width: 22 },
+    { label: "RC/PO Award Date (YYYY-MM-DD)", type: "YYYY-MM-DD", width: 28 },
+    { label: "RC/PO Validity Date (YYYY-MM-DD)", type: "YYYY-MM-DD", width: 30 },
   ];
 }
 

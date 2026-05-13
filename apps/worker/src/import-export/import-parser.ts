@@ -2,7 +2,6 @@ export type ImportParserInput = {
   data: Buffer;
   contentType?: string | null;
   importType:
-    | "dataverse_json"
     | "old_contracts"
     | "portal_user_mapping"
     | "rc_po_plan"

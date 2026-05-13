@@ -210,7 +210,7 @@ export class ReportingRepository {
             a.po_value,
             a.po_award_date,
             a.po_validity_date,
-            a.tentative_tendering_date,
+            coalesce(a.tentative_tendering_date, a.po_award_date + 150),
             a.tender_floated_or_not_required,
             'case_award',
             now()
@@ -237,13 +237,13 @@ export class ReportingRepository {
             p.source_case_id,
             p.entity_id,
             p.department_id,
-            c.owner_user_id,
+            coalesce(p.owner_user_id, c.owner_user_id),
             p.tender_description,
             p.awarded_vendors,
             p.rc_po_amount,
             p.rc_po_award_date,
             p.rc_po_validity_date,
-            p.tentative_tendering_date,
+            coalesce(p.tentative_tendering_date, p.rc_po_award_date + 150),
             p.tender_floated_or_not_required,
             'manual_plan',
             now()
@@ -804,7 +804,7 @@ export class ReportingRepository {
     }
     return this.db.one(
       `
-        select p.entity_id, c.owner_user_id
+        select p.entity_id, coalesce(p.owner_user_id, c.owner_user_id) as owner_user_id
         from procurement.rc_po_plans p
         left join procurement.cases c on c.id = p.source_case_id and c.tenant_id = p.tenant_id
         where p.tenant_id = $1
@@ -845,7 +845,7 @@ export class ReportingRepository {
           a.po_value,
           a.po_award_date,
           a.po_validity_date,
-          a.tentative_tendering_date,
+          coalesce(a.tentative_tendering_date, a.po_award_date + 150),
           a.tender_floated_or_not_required,
           'case_award',
           now()
@@ -885,13 +885,13 @@ export class ReportingRepository {
           p.source_case_id,
           p.entity_id,
           p.department_id,
-          c.owner_user_id,
+          coalesce(p.owner_user_id, c.owner_user_id),
           p.tender_description,
           p.awarded_vendors,
           p.rc_po_amount,
           p.rc_po_award_date,
           p.rc_po_validity_date,
-          p.tentative_tendering_date,
+          coalesce(p.tentative_tendering_date, p.rc_po_award_date + 150),
           p.tender_floated_or_not_required,
           'manual_plan',
           now()

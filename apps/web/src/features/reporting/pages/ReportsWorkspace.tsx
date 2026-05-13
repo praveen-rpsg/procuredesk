@@ -1286,7 +1286,7 @@ function ReportAnalyticsDashboard({
           subtitle={`${tenderTypeRows.length} tender types`}
           title="Tender type split"
         />
-        <ReportPremiumBarChart rows={tenderTypeRows} amountUnit={amountUnit} />
+        <ReportTenderTypeStackedChart rows={tenderTypeRows} amountUnit={amountUnit} />
       </section>
 
       <section className="state-panel report-analytics-card report-analytics-wide">
@@ -1474,6 +1474,84 @@ function ReportPremiumBarChart({
           </div>
         </article>
       ))}
+    </div>
+  );
+}
+
+function ReportTenderTypeStackedChart({
+  amountUnit,
+  rows,
+}: {
+  amountUnit: AmountUnit;
+  rows: Array<{ amount: number; label: string; secondaryValue: number; value: number }>;
+}) {
+  const sortedRows = [...rows].sort((left, right) => right.value - left.value || left.label.localeCompare(right.label));
+  const max = Math.max(1, ...sortedRows.map((row) => row.value));
+  const total = sortedRows.reduce((sum, row) => sum + row.value, 0);
+  const tickCount = Math.min(4, max);
+  const ticks = Array.from({ length: tickCount + 1 }, (_, index) =>
+    Math.round((max / tickCount) * (tickCount - index)),
+  );
+
+  if (sortedRows.length === 0) {
+    return <p className="hero-copy">No tender type data for the current filters.</p>;
+  }
+
+  return (
+    <div className="report-tender-type-stacked-chart">
+      <div className="report-tender-type-legend">
+        <span><i className="report-legend-on-track" /> On track</span>
+        <span><i className="report-legend-delayed" /> Delayed</span>
+      </div>
+      <div className="report-tender-type-plot">
+        <div className="report-tender-type-y-title">Case count</div>
+        <div className="report-tender-type-y-axis">
+          {ticks.map((tick) => (
+            <span key={tick}>{tick}</span>
+          ))}
+        </div>
+        <div className="report-tender-type-bars" style={{ "--bar-count": sortedRows.length } as CSSProperties}>
+          {ticks.map((tick) => (
+            <span
+              className="report-tender-type-gridline"
+              key={`grid-${tick}`}
+              style={{ bottom: `${(tick / max) * 100}%` }}
+            />
+          ))}
+          {sortedRows.map((row) => {
+            const delayed = Math.min(row.secondaryValue, row.value);
+            const onTrack = Math.max(row.value - delayed, 0);
+            const share = total > 0 ? Math.round((row.value / total) * 100) : 0;
+            const totalHeight = Math.max(4, (row.value / max) * 100);
+            const onTrackShare = row.value > 0 ? (onTrack / row.value) * 100 : 0;
+            const delayedShare = row.value > 0 ? (delayed / row.value) * 100 : 0;
+            return (
+              <div className="report-tender-type-bar-item" key={row.label}>
+                <div className="report-tender-type-bar-value">{row.value}</div>
+                <div
+                  aria-label={`${row.label}: ${row.value} cases, ${delayed} delayed, ${onTrack} on track`}
+                  className="report-tender-type-bar"
+                  role="img"
+                  style={{
+                    "--delayed-share": `${delayedShare}%`,
+                    "--on-track-share": `${onTrackShare}%`,
+                    "--total-height": `${totalHeight}%`,
+                  } as CSSProperties}
+                  title={`${row.label}: ${row.value} cases, ${delayed} delayed, ${onTrack} on track, ${formatAmount(row.amount, amountUnit)} awarded`}
+                >
+                  {onTrack > 0 ? <span className="report-tender-type-bar-on-track" /> : null}
+                  {delayed > 0 ? <span className="report-tender-type-bar-delayed" /> : null}
+                </div>
+                <div className="report-tender-type-x-label" title={row.label}>
+                  <strong>{row.label}</strong>
+                  <span>{share}% share</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="report-tender-type-x-title">Tender type</div>
     </div>
   );
 }

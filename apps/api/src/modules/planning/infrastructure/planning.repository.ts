@@ -278,7 +278,7 @@ export class PlanningRepository {
     const values: unknown[] = [input.tenantId];
     const manualWhere = ["p.tenant_id = $1", "p.deleted_at is null", "p.rc_po_validity_date is not null"];
     const awardWhere = ["a.tenant_id = $1", "a.deleted_at is null", "a.po_validity_date is not null"];
-    this.applyScope(manualWhere, values, input.scope, "p.entity_id", "c.owner_user_id");
+    this.applyScope(manualWhere, values, input.scope, "p.entity_id", "coalesce(p.owner_user_id, c.owner_user_id)");
     this.applyScope(awardWhere, values, input.scope, "c.entity_id", "c.owner_user_id");
 
     if (!input.filters.includeCompleted) {
@@ -339,13 +339,13 @@ export class PlanningRepository {
             p.source_case_id,
             p.entity_id,
             p.department_id,
-            c.owner_user_id,
+            coalesce(p.owner_user_id, c.owner_user_id),
             p.tender_description,
             p.awarded_vendors,
             p.rc_po_amount,
             p.rc_po_award_date,
             p.rc_po_validity_date,
-            p.tentative_tendering_date,
+            coalesce(p.tentative_tendering_date, p.rc_po_award_date + 150),
             p.tender_floated_or_not_required
           from procurement.rc_po_plans p
           left join procurement.cases c on c.id = p.source_case_id
@@ -363,7 +363,7 @@ export class PlanningRepository {
             a.po_value as rc_po_amount,
             a.po_award_date as rc_po_award_date,
             a.po_validity_date as rc_po_validity_date,
-            a.tentative_tendering_date,
+            coalesce(a.tentative_tendering_date, a.po_award_date + 150),
             a.tender_floated_or_not_required
           from procurement.case_awards a
           join procurement.cases c on c.id = a.case_id and c.deleted_at is null
@@ -428,13 +428,13 @@ export class PlanningRepository {
           p.source_case_id,
           p.entity_id,
           p.department_id,
-          c.owner_user_id,
+          coalesce(p.owner_user_id, c.owner_user_id),
           p.tender_description,
           p.awarded_vendors,
           p.rc_po_amount,
           p.rc_po_award_date,
           p.rc_po_validity_date,
-          p.tentative_tendering_date,
+          coalesce(p.tentative_tendering_date, p.rc_po_award_date + 150),
           p.tender_floated_or_not_required,
           'manual_plan',
           now()
