@@ -266,7 +266,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
         <div className="case-page-topbar-spacer" />
 
         {canDelete && (
-          <Button className="button-danger" onClick={() => setIsDeleteOpen(true)}>
+          <Button onClick={() => setIsDeleteOpen(true)} variant="danger">
             <Trash2 size={15} />
             Delete
           </Button>

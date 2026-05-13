@@ -65,10 +65,10 @@ const columns = (
           <Pencil size={16} />
         </Button>
         <Button
-          className="button-danger"
           disabled={isDeleting}
           onClick={() => onDelete(row)}
           title="Delete award"
+          variant="danger"
         >
           <Trash2 size={16} />
         </Button>
@@ -240,7 +240,7 @@ export function AwardsPanel({ caseId, isCaseCompleted = false }: AwardsPanelProp
             {editingAward ? "Save Award" : "Add Award"}
           </Button>
           {editingAward ? (
-            <Button variant="secondary" onClick={() => setEditingAward(null)}>
+            <Button variant="ghost" onClick={() => setEditingAward(null)}>
               Cancel
             </Button>
           ) : null}
@@ -280,15 +280,15 @@ export function AwardsPanel({ caseId, isCaseCompleted = false }: AwardsPanelProp
         <div className="stack-form">
           <p className="hero-copy">{deleteCandidate?.vendorName ?? "Selected award"}</p>
           <div className="row-actions">
-            <Button variant="secondary" onClick={() => setDeleteCandidate(null)}>
+            <Button variant="ghost" onClick={() => setDeleteCandidate(null)}>
               Cancel
             </Button>
             <Button
-              className="button-danger"
               disabled={deleteMutation.isPending}
               onClick={() => {
                 if (deleteCandidate) deleteMutation.mutate(deleteCandidate.id);
               }}
+              variant="danger"
             >
               Delete
             </Button>

@@ -31,13 +31,13 @@ export function ConfirmationDialog({
         <p>{description}</p>
         {children}
         <div className="row-actions">
-          <Button className="button-secondary" disabled={isPending} onClick={onCancel}>
+          <Button disabled={isPending} onClick={onCancel} variant="ghost">
             Cancel
           </Button>
           <Button
-            className={tone === "danger" ? "button-danger" : ""}
             disabled={isPending}
             onClick={onConfirm}
+            variant={tone === "danger" ? "danger" : "primary"}
           >
             {confirmLabel}
           </Button>

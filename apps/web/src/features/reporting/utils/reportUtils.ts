@@ -165,15 +165,15 @@ export function amountUnitLabel(unit: AmountUnit) {
   return "Crore";
 }
 
-export const REPORT_OPTIONS: Array<{ code: ReportViewKey; icon: LucideIcon; label: string; path: string }> = [
-  { code: "analytics", icon: BarChart3, label: "Analytics", path: "/reports/analytics" },
-  { code: "tender_details", icon: Table2, label: "Tender Details", path: "/reports/tender-details" },
-  { code: "running", icon: Gauge, label: "Running Tender", path: "/reports/running" },
-  { code: "completed", icon: CheckCircle2, label: "Completed Tender", path: "/reports/completed" },
-  { code: "vendor_awards", icon: UsersRound, label: "Vendor Awards", path: "/reports/vendor-awards" },
-  { code: "stage_time", icon: CalendarClock, label: "Stage-Time Lapsed", path: "/reports/stage-time" },
-  { code: "rc_po_expiry", icon: CalendarClock, label: "RC/PO Expiry", path: "/reports/rc-po-expiry" },
-  { code: "export_jobs", icon: FileSpreadsheet, label: "Export Jobs", path: "/reports/export-jobs" },
+export const REPORT_OPTIONS: Array<{ code: ReportViewKey; description: string; icon: LucideIcon; label: string; path: string }> = [
+  { code: "analytics", description: "KPIs, trends, and exceptions.", icon: BarChart3, label: "Analytics", path: "/reports/analytics" },
+  { code: "tender_details", description: "All tender case attributes.", icon: Table2, label: "Tender Details", path: "/reports/tender-details" },
+  { code: "running", description: "Open cases and stage progress.", icon: Gauge, label: "Running Tender", path: "/reports/running" },
+  { code: "completed", description: "Closed cases and cycle outcomes.", icon: CheckCircle2, label: "Completed Tender", path: "/reports/completed" },
+  { code: "vendor_awards", description: "Vendor award values and savings.", icon: UsersRound, label: "Vendor Awards", path: "/reports/vendor-awards" },
+  { code: "stage_time", description: "Stage ageing and lapsed days.", icon: CalendarClock, label: "Stage-Time Lapsed", path: "/reports/stage-time" },
+  { code: "rc_po_expiry", description: "Contracts nearing validity end.", icon: CalendarClock, label: "RC/PO Expiry", path: "/reports/rc-po-expiry" },
+  { code: "export_jobs", description: "Generated CSV and XLSX files.", icon: FileSpreadsheet, label: "Export Jobs", path: "/reports/export-jobs" },
 ];
 
 export function getReportLabel(code: ReportViewKey) {

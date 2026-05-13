@@ -431,7 +431,7 @@ export function AdminUsersPage() {
             value={newUser}
           />
           <div className="modal-actions">
-            <Button variant="secondary" onClick={() => setIsCreateOpen(false)}>
+            <Button variant="ghost" onClick={() => setIsCreateOpen(false)}>
               Cancel
             </Button>
             <Button disabled={createUserMutation.isPending} type="submit">
@@ -452,7 +452,7 @@ export function AdminUsersPage() {
             value={editUser}
           />
           <div className="modal-actions">
-            <Button variant="secondary" onClick={() => setUserToEdit(null)} type="button">
+            <Button variant="ghost" onClick={() => setUserToEdit(null)} type="button">
               Cancel
             </Button>
             <Button disabled={saveUserMutation.isPending} type="submit">

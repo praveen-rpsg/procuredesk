@@ -218,7 +218,7 @@ export function RolesAdminPage() {
             value={draft}
           />
           <div className="modal-actions">
-            <Button variant="secondary" onClick={() => setIsCreateOpen(false)} type="button">
+            <Button variant="ghost" onClick={() => setIsCreateOpen(false)} type="button">
               Cancel
             </Button>
             <Button disabled={createMutation.isPending} type="submit">
@@ -239,7 +239,7 @@ export function RolesAdminPage() {
             value={draft}
           />
           <div className="modal-actions">
-            <Button variant="secondary" onClick={() => setEditingRole(null)} type="button">
+            <Button variant="ghost" onClick={() => setEditingRole(null)} type="button">
               Cancel
             </Button>
             <Button disabled={updateMutation.isPending} type="submit">
@@ -370,7 +370,7 @@ function RoleForm({
             }
             size="sm"
             type="button"
-            variant="secondary"
+            variant={value.permissionCodes.length > 0 ? "ghost" : "secondary"}
           >
             {value.permissionCodes.length > 0 ? "Clear" : "Select All"}
           </Button>

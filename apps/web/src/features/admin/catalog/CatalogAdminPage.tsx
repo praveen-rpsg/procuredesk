@@ -590,7 +590,7 @@ export function CatalogAdminPage() {
             </FormField>
             <div className="modal-actions">
               <Button
-                variant="secondary"
+                variant="ghost"
                 onClick={() => setIsCategoryOpen(false)}
                 type="button"
               >
@@ -648,7 +648,7 @@ export function CatalogAdminPage() {
             </label>
             <div className="modal-actions">
               <Button
-                variant="secondary"
+                variant="ghost"
                 onClick={() => setCategoryToEdit(null)}
                 type="button"
               >
@@ -709,7 +709,7 @@ export function CatalogAdminPage() {
             </label>
             <div className="modal-actions">
               <Button
-                variant="secondary"
+                variant="ghost"
                 onClick={() => setIsEditValueOpen(false)}
                 type="button"
               >

@@ -408,7 +408,7 @@ function TenderTypeForm({
         </label>
       ) : null}
       <div className="modal-actions">
-        <Button variant="secondary" onClick={onCancel} type="button">
+        <Button variant="ghost" onClick={onCancel} type="button">
           Cancel
         </Button>
         <Button disabled={isDisabled || isPending} type="submit">

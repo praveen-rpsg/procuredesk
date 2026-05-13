@@ -537,7 +537,7 @@ export function PlanningWorkspace() {
               ) : null}
               <Button
                 size="sm"
-                variant="secondary"
+                variant="ghost"
                 onClick={() => {
                   setFilterEntityId("");
                   setFilterDepartmentId("");

@@ -728,7 +728,7 @@ export function ReportsWorkspace() {
               <RefreshCw size={18} />
               Refresh
             </Button>
-            <Button disabled title="Scheduled report delivery is coming soon." variant="secondary">
+            <Button disabled title="Scheduled report delivery is coming soon." variant="ghost">
               <CalendarClock size={18} />
               Schedule
             </Button>
@@ -757,6 +757,7 @@ export function ReportsWorkspace() {
             activeKey={activeReport}
             ariaLabel="Report type"
             items={REPORT_OPTIONS.filter((option) => canExport || option.code !== "export_jobs").map((option) => ({
+              description: option.description,
               icon: option.icon,
               key: option.code,
               label: option.label,
@@ -2035,7 +2036,7 @@ function ReportFilterPanel({
               </button>
             ))}
           </div>
-          <Button variant="secondary" onClick={filters.clearFilters}>
+          <Button variant="ghost" onClick={filters.clearFilters}>
             <X size={18} />
             Clear
           </Button>

@@ -129,7 +129,12 @@ export function CaseDetailPanel({ caseId, onAward, onDeleted, onEdit, onOpenFull
             </Button>
           ) : null}
           {onAward ? (
-            <Button disabled={!canAward} onClick={onAward} title={canAward ? "Manage awards" : "Awards are enabled after completion"} variant="secondary">
+            <Button
+              disabled={!canAward}
+              onClick={onAward}
+              title={canAward ? "Manage awards" : "Awards are enabled after completion"}
+              variant={canAward ? "primary" : "secondary"}
+            >
               <Trophy size={16} />
               Award
             </Button>
@@ -141,7 +146,7 @@ export function CaseDetailPanel({ caseId, onAward, onDeleted, onEdit, onOpenFull
             </Button>
           ) : null}
           {canDelete ? (
-            <Button className="button-danger" onClick={() => setIsDeleteOpen(true)}>
+            <Button onClick={() => setIsDeleteOpen(true)} variant="danger">
               <Trash2 size={18} />
               Delete
             </Button>

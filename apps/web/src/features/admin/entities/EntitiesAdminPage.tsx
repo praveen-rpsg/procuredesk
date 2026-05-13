@@ -535,7 +535,7 @@ export function EntitiesAdminPage({ focusEntityId = "" }: EntitiesAdminPageProps
               )}
             </div>
             <div className="modal-actions">
-              <Button variant="secondary" onClick={() => setIsCreateOpen(false)} type="button">
+              <Button variant="ghost" onClick={() => setIsCreateOpen(false)} type="button">
                 Cancel
               </Button>
               <Button disabled={createMutation.isPending} type="submit">
@@ -599,7 +599,7 @@ export function EntitiesAdminPage({ focusEntityId = "" }: EntitiesAdminPageProps
               </Button>
             </div>
             <div className="modal-actions">
-              <Button variant="secondary" onClick={() => setIsEditOpen(false)} type="button">
+              <Button variant="ghost" onClick={() => setIsEditOpen(false)} type="button">
                 Cancel
               </Button>
               <Button disabled={!selectedEntity || updateMutation.isPending} type="submit">
@@ -626,7 +626,7 @@ export function EntitiesAdminPage({ focusEntityId = "" }: EntitiesAdminPageProps
               />
             </FormField>
             <div className="modal-actions">
-              <Button variant="secondary" onClick={() => setDepartmentCreateEntity(null)} type="button">
+              <Button variant="ghost" onClick={() => setDepartmentCreateEntity(null)} type="button">
                 Cancel
               </Button>
               <Button disabled={!departmentCreateEntity || createDepartmentMutation.isPending} type="submit">
@@ -662,7 +662,7 @@ export function EntitiesAdminPage({ focusEntityId = "" }: EntitiesAdminPageProps
               Active
             </label>
             <div className="modal-actions">
-              <Button variant="secondary" onClick={() => setDepartmentToEdit(null)} type="button">
+              <Button variant="ghost" onClick={() => setDepartmentToEdit(null)} type="button">
                 Cancel
               </Button>
               <Button disabled={!departmentToEdit || updateDepartmentMutation.isPending} type="submit">

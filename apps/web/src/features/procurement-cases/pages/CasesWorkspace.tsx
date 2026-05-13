@@ -536,7 +536,7 @@ function CasesWorkspaceList() {
       <PageHeader
         actions={
           <>
-            <Button onClick={() => setIsFilterOpen((open) => !open)}>
+            <Button onClick={() => setIsFilterOpen((open) => !open)} variant="secondary">
               <SlidersHorizontal size={16} />
               Filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
               {isFilterOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
@@ -607,7 +607,7 @@ function CasesWorkspaceList() {
               <h2>Cases</h2>
             </div>
             <div className="case-filter-panel-actions">
-              <Button variant="secondary" onClick={clearFilters}>Clear</Button>
+              <Button variant="ghost" onClick={clearFilters}>Clear</Button>
               <Button onClick={() => setIsFilterOpen(false)}>Apply</Button>
             </div>
           </div>
@@ -783,6 +783,7 @@ function CasesWorkspaceList() {
             emptyMessage="No cases match the current filters."
             getRowKey={(row) => row.id}
             onRowClick={(row) => navigateToAppPath(`/cases/${row.id}`)}
+            pagination={false}
             rows={cases.data ?? []}
           />
           <div className="pagination-bar">

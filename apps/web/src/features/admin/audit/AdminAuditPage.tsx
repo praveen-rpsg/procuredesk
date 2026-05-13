@@ -144,7 +144,7 @@ export function AdminAuditPage() {
                 <Search size={16} />
                 Filter
               </Button>
-              <Button variant="secondary" onClick={clearFilters} type="button">
+              <Button variant="ghost" onClick={clearFilters} type="button">
                 <RotateCcw size={16} />
                 Clear
               </Button>
@@ -172,6 +172,7 @@ export function AdminAuditPage() {
                 columns={columns}
                 emptyMessage="No audit events match the selected filters."
                 getRowKey={(row) => row.id}
+                pagination={false}
                 rows={rows}
               />
               <div className="audit-pagination">
