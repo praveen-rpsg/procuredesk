@@ -1,13 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, FileSpreadsheet, FileUp, ListChecks, UploadCloud, X } from "lucide-react";
+import {
+  Building2,
+  Download,
+  FileSpreadsheet,
+  FileUp,
+  FolderKanban,
+  ListChecks,
+  UploadCloud,
+  UsersRound,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import {
   commitImport,
+  importCredentialExportDownloadUrl,
   importProblemRowsDownloadUrl,
   listImportJobs,
   listImportRows,
-  oldContractsTemplateDownloadUrl,
   portalUserMappingTemplateDownloadUrl,
   rcPoPlanTemplateDownloadUrl,
   type ImportJob,
@@ -18,6 +29,7 @@ import {
 } from "../api/importExportApi";
 import { Button } from "../../../shared/ui/button/Button";
 import { FormField } from "../../../shared/ui/form/FormField";
+import { Modal } from "../../../shared/ui/modal/Modal";
 import { PageHeader } from "../../../shared/ui/page-header/PageHeader";
 import { navigateToAppPath, useAppLocation } from "../../../shared/routing/appLocation";
 import { SecondaryNav } from "../../../shared/ui/secondary-nav/SecondaryNav";
@@ -27,7 +39,6 @@ import { DataTable, type DataTableColumn } from "../../../shared/ui/table/DataTa
 import { useToast } from "../../../shared/ui/toast/ToastProvider";
 
 type ImportType =
-  | "old_contracts"
   | "portal_user_mapping"
   | "rc_po_plan"
   | "tender_cases"
@@ -48,6 +59,38 @@ const importSectionPaths: Record<ImportSectionKey, string> = {
   jobs: "/imports/jobs",
   upload: "/imports/upload",
 };
+
+const importTypeOptions = [
+  {
+    description: "Upload procurement case data with tender milestones, budgets, departments, and owners.",
+    icon: FolderKanban,
+    label: "Tender Bulk Import",
+    value: "tender_cases",
+  },
+  {
+    description: "Create or update portal users, roles, entity access, and credential exports.",
+    icon: UsersRound,
+    label: "Portal Users",
+    value: "portal_user_mapping",
+  },
+  {
+    description: "Create missing entities and update department mappings without duplicate case variants.",
+    icon: Building2,
+    label: "Departments",
+    value: "user_department_mapping",
+  },
+  {
+    description: "Upload legacy RC/PO contract records for renewal and expiry tracking.",
+    icon: FileSpreadsheet,
+    label: "Old Contracts",
+    value: "rc_po_plan",
+  },
+] satisfies Array<{
+  description: string;
+  icon: LucideIcon;
+  label: string;
+  value: ImportType;
+}>;
 
 const columns = (
   onCommit: (jobId: string) => void,
@@ -82,18 +125,21 @@ const columns = (
         <Button onClick={() => onPreview(row.id)} variant="secondary">
           Preview
         </Button>
-        {row.rejectedRows + row.stagedUnknownEntities + row.stagedUnknownUsers > 0 ? (
+        {row.totalRows > row.acceptedRows ? (
           <Button href={importProblemRowsDownloadUrl(row.id)} variant="secondary">
             Problem Rows
+          </Button>
+        ) : null}
+        {row.credentialExportAvailable ? (
+          <Button href={importCredentialExportDownloadUrl(row.id)} variant="secondary">
+            Credentials
           </Button>
         ) : null}
         <Button
           disabled={
             isCommitting ||
             row.status !== "parsed" ||
-            row.rejectedRows > 0 ||
-            row.stagedUnknownEntities > 0 ||
-            row.stagedUnknownUsers > 0
+            row.totalRows > row.acceptedRows
           }
           onClick={() => onCommit(row.id)}
         >
@@ -124,13 +170,15 @@ export function ImportExportWorkspace() {
   const activeSection = importSectionFromPath(location.pathname) ?? "upload";
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [importType, setImportType] = useState<ImportType>("tender_cases");
-  const [activeJobId, setActiveJobId] = useState("");
+  const [jobStatusFilter, setJobStatusFilter] = useState("");
+  const [jobTypeFilter, setJobTypeFilter] = useState("");
+  const [previewJobId, setPreviewJobId] = useState("");
 
   const jobs = useQuery({ queryFn: listImportJobs, queryKey: ["import-jobs"] });
   const previewRows = useQuery({
-    enabled: Boolean(activeJobId) && activeSection === "jobs",
-    queryFn: () => listImportRows(activeJobId),
-    queryKey: ["import-job-rows", activeJobId],
+    enabled: Boolean(previewJobId),
+    queryFn: () => listImportRows(previewJobId),
+    queryKey: ["import-job-rows", previewJobId],
   });
 
   useEffect(() => {
@@ -147,15 +195,21 @@ export function ImportExportWorkspace() {
       return uploadImportFile({ file: selectedFile, importType });
     },
     onSuccess: async (result) => {
-      setActiveJobId(result.id);
       setSelectedFile(null);
       await queryClient.invalidateQueries({ queryKey: ["import-jobs"] });
+      navigateToAppPath(importSectionPaths.jobs);
       notify({ message: `Import job created: ${result.id}`, tone: "success" });
     },
   });
 
   const commitMutation = useMutation({
     mutationFn: commitImport,
+    onError: (error) => {
+      notify({
+        message: error instanceof Error ? error.message : "Import commit failed.",
+        tone: "danger",
+      });
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["import-jobs"] });
       notify({ message: "Import committed.", tone: "success" });
@@ -169,9 +223,16 @@ export function ImportExportWorkspace() {
   };
   const selectedTemplateUrl = templateDownloadUrl(importType);
   const activeJob = useMemo(
-    () => (jobs.data ?? []).find((job) => job.id === activeJobId) ?? null,
-    [activeJobId, jobs.data],
+    () => (jobs.data ?? []).find((job) => job.id === previewJobId) ?? null,
+    [previewJobId, jobs.data],
   );
+  const visibleJobs = useMemo(() => {
+    return (jobs.data ?? []).filter((job) => {
+      if (jobTypeFilter && job.importType !== jobTypeFilter) return false;
+      if (jobStatusFilter && job.status !== jobStatusFilter) return false;
+      return true;
+    });
+  }, [jobStatusFilter, jobTypeFilter, jobs.data]);
 
   return (
     <section className="workspace-section">
@@ -191,32 +252,36 @@ export function ImportExportWorkspace() {
       <section className="module-content-area">
         {activeSection === "upload" ? (
         <section className="state-panel module-focus-panel module-focus-panel-narrow">
-          <div className="detail-header">
-            <div>
-              <p className="eyebrow">Import</p>
-              <h2>Create Job</h2>
-            </div>
-            <div className="panel-icon panel-icon-brand">
-              <UploadCloud size={16} />
-            </div>
-          </div>
           <form className="import-create-form" onSubmit={onCreateJob}>
-            <FormField label="Import Type">
-              <select
-                className="text-input"
-                onChange={(event) => {
-                  setImportType(event.target.value as ImportType);
-                  setSelectedFile(null);
-                }}
-                value={importType}
-              >
-                <option value="tender_cases">Tender Bulk Import</option>
-                <option value="portal_user_mapping">Entity - Portal User Mapping</option>
-                <option value="user_department_mapping">Entity - User Department Mapping</option>
-                <option value="old_contracts">Bulk Upload - Old Contract</option>
-                <option value="rc_po_plan">RC/PO Plan</option>
-              </select>
-            </FormField>
+            <fieldset className="import-type-picker">
+              <legend>Import Type</legend>
+              <div className="import-type-card-grid">
+                {importTypeOptions.map((option) => {
+                  const Icon = option.icon;
+                  const isSelected = importType === option.value;
+                  return (
+                    <button
+                      aria-pressed={isSelected}
+                      className={`import-type-card${isSelected ? " import-type-card-selected" : ""}`}
+                      key={option.value}
+                      onClick={() => {
+                        setImportType(option.value);
+                        setSelectedFile(null);
+                      }}
+                      type="button"
+                    >
+                      <span className="import-type-card-icon">
+                        <Icon size={18} />
+                      </span>
+                      <span className="import-type-card-copy">
+                        <strong>{option.label}</strong>
+                        <small>{option.description}</small>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
             <FormField
               label="Import File"
             >
@@ -278,6 +343,48 @@ export function ImportExportWorkspace() {
               <h2>Import Jobs</h2>
             </div>
           </div>
+          <div className="import-job-toolbar">
+            <label>
+              Type
+              <select
+                className="text-input"
+                onChange={(event) => setJobTypeFilter(event.target.value)}
+                value={jobTypeFilter}
+              >
+                <option value="">All import types</option>
+                {importTypeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Status
+              <select
+                className="text-input"
+                onChange={(event) => setJobStatusFilter(event.target.value)}
+                value={jobStatusFilter}
+              >
+                <option value="">All statuses</option>
+                <option value="queued">Queued</option>
+                <option value="parsing">Parsing</option>
+                <option value="parsed">Parsed</option>
+                <option value="committed">Committed</option>
+                <option value="failed">Failed</option>
+              </select>
+            </label>
+            <Button
+              disabled={!jobTypeFilter && !jobStatusFilter}
+              onClick={() => {
+                setJobTypeFilter("");
+                setJobStatusFilter("");
+              }}
+              variant="secondary"
+            >
+              Clear Filters
+            </Button>
+          </div>
           {jobs.isLoading ? (
             <div style={{ display: "grid", gap: "var(--space-3)" }}>
               {[1, 2, 3].map((i) => (
@@ -295,45 +402,69 @@ export function ImportExportWorkspace() {
             <p className="inline-error">{jobs.error.message}</p>
           ) : (
             <DataTable
-              columns={columns((jobId) => commitMutation.mutate(jobId), setActiveJobId, commitMutation.isPending)}
-              emptyMessage="No import jobs found."
+              columns={columns((jobId) => commitMutation.mutate(jobId), setPreviewJobId, commitMutation.isPending)}
+              emptyMessage={jobs.data?.length ? "No import jobs match the selected filters." : "No import jobs found."}
               getRowKey={(row) => row.id}
-              rows={jobs.data ?? []}
+              pagination={{ pageSize: 10, pageSizeOptions: [10, 25, 50] }}
+              rows={visibleJobs}
             />
           )}
           {commitMutation.error ? <p className="inline-error">{commitMutation.error.message}</p> : null}
-          {activeJobId ? (
-            <section className="import-preview-panel">
-              <div className="detail-header">
-                <div>
-                  <p className="eyebrow">Preview</p>
-                  <h2>Import impact</h2>
-                </div>
-              </div>
-              {activeJob?.status === "failed" ? (
-                <p className="inline-error">{failedJobMessage(activeJob)}</p>
-              ) : null}
-              {previewRows.isLoading ? (
-                <Skeleton height={18} />
-              ) : previewRows.error ? (
-                <p className="inline-error">{previewRows.error.message}</p>
-              ) : (
-                <DataTable
-                  columns={rowColumns}
-                  emptyMessage={
-                    activeJob?.status === "failed"
-                      ? "No row preview is available because the import failed before rows could be staged."
-                      : "No staged rows found for this job."
-                  }
-                  getRowKey={(row) => row.id}
-                  rows={previewRows.data ?? []}
-                />
-              )}
-            </section>
-          ) : null}
         </section>
         ) : null}
       </section>
+      <Modal
+        isOpen={Boolean(previewJobId)}
+        onClose={() => setPreviewJobId("")}
+        size="wide"
+        title="Import Preview"
+      >
+        <div className="import-preview-modal">
+          <div className="import-preview-summary">
+            <div>
+              <p className="eyebrow">Type</p>
+              <strong>{activeJob ? importTypeLabel(activeJob.importType) : "-"}</strong>
+            </div>
+            <div>
+              <p className="eyebrow">Status</p>
+              {activeJob ? <StatusBadge>{activeJob.status}</StatusBadge> : <span>-</span>}
+            </div>
+            <div>
+              <p className="eyebrow">Rows</p>
+              <strong>{activeJob?.totalRows ?? "-"}</strong>
+            </div>
+            <div>
+              <p className="eyebrow">Accepted</p>
+              <strong>{activeJob?.acceptedRows ?? "-"}</strong>
+            </div>
+            <div>
+              <p className="eyebrow">Rejected</p>
+              <strong>{activeJob?.rejectedRows ?? "-"}</strong>
+            </div>
+          </div>
+          {activeJob?.status === "failed" ? (
+            <p className="inline-error">{failedJobMessage(activeJob)}</p>
+          ) : null}
+          {previewRows.isLoading ? (
+            <Skeleton height={18} />
+          ) : previewRows.error ? (
+            <p className="inline-error">{previewRows.error.message}</p>
+          ) : (
+            <div className="import-preview-table">
+              <DataTable
+                columns={rowColumns}
+                emptyMessage={
+                  activeJob?.status === "failed"
+                    ? "No row preview is available because the import failed before rows could be staged."
+                    : "No staged rows found for this job."
+                }
+                getRowKey={(row) => row.id}
+                rows={previewRows.data ?? []}
+              />
+            </div>
+          )}
+        </div>
+      </Modal>
     </section>
   );
 }
@@ -348,7 +479,7 @@ function importTypeLabel(importType: string): string {
   if (importType === "portal_user_mapping") return "Entity - Portal User Mapping";
   if (importType === "user_department_mapping") return "Entity - User Department Mapping";
   if (importType === "old_contracts") return "Bulk Upload - Old Contract";
-  if (importType === "rc_po_plan") return "RC/PO Plan";
+  if (importType === "rc_po_plan") return "Bulk Upload - Old Contract";
   return importType;
 }
 
@@ -356,7 +487,6 @@ function templateDownloadUrl(importType: ImportType): string | null {
   if (importType === "tender_cases") return tenderCasesTemplateDownloadUrl();
   if (importType === "portal_user_mapping") return portalUserMappingTemplateDownloadUrl();
   if (importType === "user_department_mapping") return userDepartmentMappingTemplateDownloadUrl();
-  if (importType === "old_contracts") return oldContractsTemplateDownloadUrl();
   if (importType === "rc_po_plan") return rcPoPlanTemplateDownloadUrl();
   return null;
 }

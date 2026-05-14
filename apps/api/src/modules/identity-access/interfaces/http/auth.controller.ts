@@ -12,10 +12,14 @@ import { AuthGuard } from "../../application/auth.guard.js";
 import { AuthService } from "../../application/auth.service.js";
 import {
   ChangeOwnPasswordRequestSchema,
+  ForgotPasswordRequestSchema,
   LoginRequestSchema,
+  ResetPasswordRequestSchema,
   UpdateOwnProfileRequestSchema,
   type ChangeOwnPasswordRequest,
+  type ForgotPasswordRequest,
   type LoginRequest,
+  type ResetPasswordRequest,
   type UpdateOwnProfileRequest,
 } from "./auth.schemas.js";
 
@@ -71,6 +75,26 @@ export class AuthController {
       user: result.user,
       expiresAt: result.expiresAt.toISOString(),
     };
+  }
+
+  @Post("forgot-password")
+  forgotPassword(
+    @Body(new ZodValidationPipe(ForgotPasswordRequestSchema)) body: ForgotPasswordRequest,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.auth.forgotPassword({
+      email: body.email,
+      tenantCode: body.tenantCode,
+      ipAddress: request.ip,
+      userAgent: this.singleHeader(request.headers["user-agent"]),
+    });
+  }
+
+  @Post("reset-password")
+  resetPassword(
+    @Body(new ZodValidationPipe(ResetPasswordRequestSchema)) body: ResetPasswordRequest,
+  ) {
+    return this.auth.resetPassword(body);
   }
 
   @Post("logout")

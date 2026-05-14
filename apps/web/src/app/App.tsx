@@ -1,5 +1,5 @@
 import { AuthenticatedShell } from "./layouts/AuthenticatedShell";
-import { LoginPage } from "../features/auth/LoginPage";
+import { LoginPage, ResetPasswordPage } from "../features/auth/LoginPage";
 import { useAuth } from "../shared/auth/AuthProvider";
 import { AppErrorBoundary } from "../shared/ui/error-boundary/AppErrorBoundary";
 
@@ -10,5 +10,9 @@ export function App() {
     return <main className="loading-screen">Loading ProcureDesk...</main>;
   }
 
-  return <AppErrorBoundary>{user ? <AuthenticatedShell /> : <LoginPage />}</AppErrorBoundary>;
+  return (
+    <AppErrorBoundary>
+      {user ? <AuthenticatedShell /> : window.location.pathname === "/reset-password" ? <ResetPasswordPage /> : <LoginPage />}
+    </AppErrorBoundary>
+  );
 }

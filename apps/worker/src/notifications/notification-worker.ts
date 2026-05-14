@@ -22,10 +22,11 @@ export async function processNotificationJob(
     const result = await client.query<{
       notification_type: string;
       recipient_email: string;
+      text_body: string | null;
       subject: string;
     }>(
       `
-        select notification_type, recipient_email, subject
+        select notification_type, recipient_email, subject, text_body
         from ops.notification_jobs
         where tenant_id = $1
           and id = $2
@@ -58,7 +59,7 @@ export async function processNotificationJob(
 
     await dependencies.graph.send({
       subject: job.subject,
-      textBody: `${job.subject}\n\nNotification type: ${job.notification_type}`,
+      textBody: job.text_body ?? `${job.subject}\n\nNotification type: ${job.notification_type}`,
       to: job.recipient_email,
     });
 

@@ -144,6 +144,12 @@ export class ImportExportController {
     return this.importExport.downloadProblemRows(user, importJobId);
   }
 
+  @Get("jobs/:importJobId/credentials.xlsx")
+  @RequirePermissions("import.manage")
+  downloadCredentialExport(@CurrentUser() user: AuthenticatedUser, @Param("importJobId", ParseUUIDPipe) importJobId: string) {
+    return this.importExport.downloadCredentialExport(user, importJobId);
+  }
+
   @Post("jobs/:importJobId/dry-run")
   @RequirePermissions("import.manage")
   dryRun(

@@ -13,6 +13,8 @@ import { hasExpandedPermission } from "../../../common/auth/permission-utils.js"
 import { PrivateFileStorageService } from "../../../common/storage/private-file-storage.service.js";
 import { DatabaseService } from "../../../database/database.service.js";
 import { AuditWriterService } from "../../audit/application/audit-writer.service.js";
+import { PasswordPolicyRepository } from "../../identity-access/infrastructure/password-policy.repository.js";
+import { PasswordService } from "../../identity-access/application/password.service.js";
 import type { AuthenticatedUser } from "../../identity-access/domain/authenticated-user.js";
 import { OutboxWriterService } from "../../outbox/application/outbox-writer.service.js";
 import {
@@ -28,6 +30,8 @@ export class ImportExportService {
     private readonly audit: AuditWriterService,
     private readonly db: DatabaseService,
     private readonly outbox: OutboxWriterService,
+    private readonly passwordPolicies: PasswordPolicyRepository,
+    private readonly passwords: PasswordService,
     private readonly storage: PrivateFileStorageService,
   ) {}
 
@@ -182,6 +186,9 @@ export class ImportExportService {
         instructions: [
           "Select Entity and Access Level Required from dropdowns.",
           "Access Level Definition is derived from the role master lookup.",
+          "Use comma-separated Entity values for multi-entity access.",
+          "For Group Manager or Administration Manager, Entity can be blank or ALL.",
+          "Username is automatically set to Mail ID. New users receive generated passwords in the credentials export.",
           "Mail ID must be a valid unique email address.",
           "Contact No. should include country code where applicable.",
         ],
@@ -239,7 +246,7 @@ export class ImportExportService {
     this.requirePermission(actor, "import.manage");
     return await this.templateFile(
       await this.buildRcPoPlanTemplate(tenantId),
-      "procuredesk-rc-po-plan-template.xlsx",
+      "procuredesk-bulk-upload-old-contract-template.xlsx",
     );
   }
 
@@ -251,6 +258,19 @@ export class ImportExportService {
     return new StreamableFile(ReadableStream.from([csv]), {
       disposition: `attachment; filename="import-${importJobId}-problem-rows.csv"`,
       type: "text/csv; charset=utf-8",
+    });
+  }
+
+  async downloadCredentialExport(actor: AuthenticatedUser, importJobId: string) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "import.manage");
+    const file = await this.repository.findCredentialExport({ importJobId, tenantId });
+    if (!file) {
+      throw new BadRequestException("Credential export is not available for this import job.");
+    }
+    return new StreamableFile(await this.storage.read(file.storageKey), {
+      disposition: `attachment; filename="${file.originalFilename ?? `import-${importJobId}-credentials.xlsx`}"`,
+      type: file.contentType ?? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
   }
 
@@ -295,14 +315,22 @@ export class ImportExportService {
   async commit(actor: AuthenticatedUser, importJobId: string) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "import.manage");
+    const importType = await this.repository.getImportJobType({ importJobId, tenantId });
+    const portalUserCredentials =
+      importType === "portal_user_mapping"
+        ? await this.generatePortalUserCredentials(tenantId, importJobId)
+        : [];
+    let credentialRows: Awaited<ReturnType<ImportExportRepository["commitImportJob"]>>["credentialRows"] = [];
     try {
       await this.db.transaction(async () => {
-        const committed = await this.repository.commitImportJob({
+        const commitResult = await this.repository.commitImportJob({
           committedBy: actor.id,
           importJobId,
+          portalUserCredentials,
           tenantId,
         });
-        if (!committed) {
+        credentialRows = commitResult.credentialRows;
+        if (!commitResult.committed) {
           throw new BadRequestException(
             "Import job must be parsed with zero rejected or staged unknown rows before commit.",
           );
@@ -324,7 +352,101 @@ export class ImportExportService {
         "Import commit failed. Review the accepted rows and master data, then try again. If the file was parsed before a recent fix, upload it again and commit the new job.",
       );
     }
+    if (importType === "portal_user_mapping" && credentialRows.length) {
+      await this.writePortalUserCredentialExport({
+        actorUserId: actor.id,
+        importJobId,
+        rows: credentialRows,
+        tenantId,
+      });
+    }
     return { committed: true };
+  }
+
+  private async generatePortalUserCredentials(
+    tenantId: string,
+    importJobId: string,
+  ) {
+    const rows = await this.repository.listAcceptedPortalUserRows({ importJobId, tenantId });
+    if (!rows.length) return [];
+    const policy = await this.passwordPolicies.findByTenantId(tenantId);
+    return Promise.all(
+      rows
+        .filter((row) => !row.isExisting)
+        .map(async (row) => {
+          const password = this.passwords.generate(policy);
+          return {
+            email: row.email,
+            password,
+            passwordHash: await this.passwords.hash(password),
+          };
+        }),
+    );
+  }
+
+  private async writePortalUserCredentialExport(input: {
+    actorUserId: string;
+    importJobId: string;
+    rows: Array<{
+      action: string;
+      email: string;
+      emailStatus: string;
+      entityCode: string;
+      fullName: string;
+      password: string;
+      role: string;
+      username: string;
+    }>;
+    tenantId: string;
+  }): Promise<void> {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "ProcureDesk";
+    workbook.created = new Date();
+    const sheet = workbook.addWorksheet("User Credentials", {
+      views: [{ state: "frozen", xSplit: 0, ySplit: 1 }],
+    });
+    sheet.columns = [
+      { header: "Email", key: "email", width: 32 },
+      { header: "Username", key: "username", width: 28 },
+      { header: "Full Name", key: "fullName", width: 28 },
+      { header: "Entities", key: "entityCode", width: 28 },
+      { header: "Role", key: "role", width: 24 },
+      { header: "Generated Password", key: "password", width: 24 },
+      { header: "Action", key: "action", width: 16 },
+      { header: "Email Status", key: "emailStatus", width: 18 },
+    ];
+    sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    sheet.getRow(1).fill = {
+      fgColor: { argb: "FF0070C0" },
+      pattern: "solid",
+      type: "pattern",
+    };
+    input.rows.forEach((row) => sheet.addRow(row));
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+    const filename = `procuredesk-import-${input.importJobId}-credentials.xlsx`;
+    const stored = await this.storage.writeGeneratedFile({
+      data: buffer,
+      filename,
+      folder: "exports",
+      tenantId: input.tenantId,
+    });
+    const fileAsset = await this.repository.createFileAsset({
+      byteSize: stored.byteSize,
+      checksumSha256: stored.checksumSha256,
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      createdBy: input.actorUserId,
+      originalFilename: filename,
+      purpose: "export",
+      storageKey: stored.storageKey,
+      tenantId: input.tenantId,
+    });
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await this.repository.attachCredentialExport({
+      expiresAt,
+      fileAssetId: fileAsset.id,
+      importJobId: input.importJobId,
+      tenantId: input.tenantId,
+    });
   }
 
   private requirePermission(actor: AuthenticatedUser, permission: string) {
@@ -564,7 +686,7 @@ export class ImportExportService {
     const workbook = new ExcelJS.Workbook();
     workbook.creator = "ProcureDesk";
     workbook.created = new Date();
-    const template = workbook.addWorksheet("RC PO Plan", {
+    const template = workbook.addWorksheet("Old Contracts", {
       views: [{ state: "frozen", xSplit: 0, ySplit: 1 }],
     });
     const lookups = workbook.addWorksheet("Master Lookups");
@@ -590,8 +712,8 @@ export class ImportExportService {
       "Sample tender",
       "Vendor A, Vendor B",
       100000,
-      "2026-01-31",
-      "2027-01-30",
+      "31-01-2026",
+      "30-01-2027",
     ];
 
     columns.forEach((column, index) => {
@@ -606,7 +728,7 @@ export class ImportExportService {
       "Entity Code (required)": lookupData.Entity ?? [],
     };
     this.populateLookupSheet(lookups, rcPoLookupData);
-    this.populateMetadataSheet(metadata, columns, "ProcureDesk RC/PO Plan", 1);
+    this.populateMetadataSheet(metadata, columns, "ProcureDesk Bulk Upload - Old Contract", 1);
     this.applyTemplateValidations(template, columns, rcPoLookupData, 2);
     return workbook;
   }
@@ -783,17 +905,13 @@ function oldContractTemplateColumns(): TenderTemplateColumn[] {
 
 function rcPoPlanTemplateColumns(): TenderTemplateColumn[] {
   return [
-    { label: "Entity Code (required)", type: "Dropdown", width: 26 },
+    { label: "Entity", type: "Dropdown", width: 18 },
     { label: "User Department", type: "Dropdown", width: 24 },
     { label: "Tender Description", type: "Text", width: 32 },
     { label: "Awarded Vendors (comma separated)", type: "Text", width: 36 },
     { label: "RC/PO Amount (Rs.)", type: "Number", width: 22 },
-    { label: "RC/PO Award Date (YYYY-MM-DD)", type: "YYYY-MM-DD", width: 28 },
-    {
-      label: "RC/PO Validity Date (YYYY-MM-DD)",
-      type: "YYYY-MM-DD",
-      width: 30,
-    },
+    { label: "RC/PO Award Date", type: "DD-MM-YYYY", width: 18 },
+    { label: "RC/PO Validity Date", type: "DD-MM-YYYY", width: 20 },
   ];
 }
 

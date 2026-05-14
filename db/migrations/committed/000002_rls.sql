@@ -52,6 +52,7 @@ ALTER TABLE ops.import_job_rows            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ops.export_jobs                ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ops.notification_rules         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ops.notification_jobs          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE iam.password_reset_tokens      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE org.entities                   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE org.departments                ENABLE ROW LEVEL SECURITY;
 
@@ -133,6 +134,10 @@ CREATE POLICY tenant_isolation ON ops.notification_rules
   USING (tenant_id = current_tenant_id());
 
 CREATE POLICY tenant_isolation ON ops.notification_jobs
+  AS RESTRICTIVE TO procuredesk_app
+  USING (tenant_id = current_tenant_id());
+
+CREATE POLICY tenant_isolation ON iam.password_reset_tokens
   AS RESTRICTIVE TO procuredesk_app
   USING (tenant_id = current_tenant_id());
 

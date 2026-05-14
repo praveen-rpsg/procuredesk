@@ -10,6 +10,8 @@ export type FileAsset = {
 
 export type ImportJob = {
   acceptedRows: number;
+  credentialExportAvailable: boolean;
+  credentialExportExpiresAt: string | null;
   createdAt: string;
   id: string;
   importType: string;

@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import * as argon2 from "argon2";
+import { randomInt } from "node:crypto";
 
 import type { PasswordPolicy } from "../domain/password-policy.js";
 
@@ -39,5 +40,32 @@ export class PasswordService {
 
     return errors;
   }
-}
 
+  generate(policy: PasswordPolicy): string {
+    const length = Math.max(policy.minLength, 14);
+    const requiredPools = [
+      policy.requireUppercase ? "ABCDEFGHJKLMNPQRSTUVWXYZ" : "",
+      policy.requireLowercase ? "abcdefghijkmnopqrstuvwxyz" : "",
+      policy.requireNumber ? "23456789" : "",
+      policy.requireSpecialCharacter ? "!@#$%^&*" : "",
+    ].filter(Boolean);
+    const allCharacters = [
+      "ABCDEFGHJKLMNPQRSTUVWXYZ",
+      "abcdefghijkmnopqrstuvwxyz",
+      "23456789",
+      "!@#$%^&*",
+    ].join("");
+    const chars = requiredPools.map((pool) => pool[randomInt(pool.length)] ?? "");
+    while (chars.length < length) {
+      chars.push(allCharacters[randomInt(allCharacters.length)] ?? "");
+    }
+    for (let index = chars.length - 1; index > 0; index -= 1) {
+      const swapIndex = randomInt(index + 1);
+      [chars[index], chars[swapIndex]] = [chars[swapIndex] ?? "", chars[index] ?? ""];
+    }
+    const password = chars.join("");
+    const errors = this.validateAgainstPolicy(password, policy);
+    if (errors.length) return this.generate(policy);
+    return password;
+  }
+}

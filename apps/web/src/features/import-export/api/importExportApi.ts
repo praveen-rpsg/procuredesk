@@ -2,6 +2,8 @@ import { apiBaseUrl, apiRequest } from "../../../shared/api/client";
 
 export type ImportJob = {
   acceptedRows: number;
+  credentialExportAvailable: boolean;
+  credentialExportExpiresAt: string | null;
   createdAt: string;
   id: string;
   importType: string;
@@ -88,6 +90,10 @@ export function commitImport(importJobId: string) {
 
 export function importProblemRowsDownloadUrl(importJobId: string) {
   return `${apiBaseUrl}/imports/jobs/${importJobId}/problem-rows.csv`;
+}
+
+export function importCredentialExportDownloadUrl(importJobId: string) {
+  return `${apiBaseUrl}/imports/jobs/${importJobId}/credentials.xlsx`;
 }
 
 export function tenderCasesTemplateDownloadUrl() {

@@ -680,6 +680,7 @@ create table ops.import_jobs (
   id uuid primary key default gen_random_uuid(),
   tenant_id uuid not null references iam.tenants(id) on delete cascade,
   file_asset_id uuid not null references ops.file_assets(id) on delete restrict,
+  credential_file_asset_id uuid references ops.file_assets(id) on delete set null,
   import_type citext not null,
   status text not null default 'uploaded',
   progress_percent integer not null default 0,
@@ -694,6 +695,7 @@ create table ops.import_jobs (
   completed_at timestamptz,
   committed_at timestamptz,
   committed_by uuid references iam.users(id),
+  credential_export_expires_at timestamptz,
   constraint import_jobs_progress_check check (
     progress_percent between 0 and 100
   ),
@@ -787,11 +789,16 @@ create table ops.notification_jobs (
   recipient_user_id uuid references iam.users(id) on delete set null,
   recipient_email citext not null,
   subject text not null,
+  text_body text,
+  html_body text,
   status text not null default 'queued',
   provider_message_id text,
   error_message text,
   created_at timestamptz not null default now(),
   sent_at timestamptz,
+  constraint notification_jobs_type_check check (
+    notification_type in ('entity_monthly_digest', 'rc_po_expiry', 'stale_tender', 'user_welcome', 'password_reset')
+  ),
   constraint notification_jobs_status_check check (
     status in ('queued', 'sending', 'sent', 'failed', 'cancelled')
   )
@@ -799,3 +806,23 @@ create table ops.notification_jobs (
 
 create index notification_jobs_status_idx
   on ops.notification_jobs (tenant_id, status, created_at desc);
+
+create table iam.password_reset_tokens (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid references iam.tenants(id) on delete cascade,
+  user_id uuid not null references iam.users(id) on delete cascade,
+  token_hash text not null,
+  requested_email citext not null,
+  expires_at timestamptz not null,
+  used_at timestamptz,
+  created_at timestamptz not null default now(),
+  request_ip inet,
+  user_agent text
+);
+
+create unique index password_reset_tokens_hash_uidx
+  on iam.password_reset_tokens (token_hash);
+
+create index password_reset_tokens_user_active_idx
+  on iam.password_reset_tokens (user_id, created_at desc)
+  where used_at is null;

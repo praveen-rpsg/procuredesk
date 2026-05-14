@@ -178,13 +178,15 @@ export class NotificationRepository {
     recipientUserId?: string | null;
     subject: string;
     tenantId: string;
+    textBody?: string | null;
+    htmlBody?: string | null;
   }): Promise<{ id: string }> {
     const row = await this.db.one<QueryResultRow & { id: string }>(
       `
         insert into ops.notification_jobs (
-          tenant_id, notification_type, recipient_user_id, recipient_email, subject
+          tenant_id, notification_type, recipient_user_id, recipient_email, subject, text_body, html_body
         )
-        values ($1, $2, $3, $4, $5)
+        values ($1, $2, $3, $4, $5, $6, $7)
         returning id
       `,
       [
@@ -193,6 +195,8 @@ export class NotificationRepository {
         input.recipientUserId ?? null,
         input.recipientEmail,
         input.subject,
+        input.textBody ?? null,
+        input.htmlBody ?? null,
       ],
     );
     if (!row) throw new Error("Failed to create notification job.");

@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 
 import { DatabaseModule } from "../../database/database.module.js";
+import { OutboxModule } from "../outbox/outbox.module.js";
 import { AuthGuard } from "./application/auth.guard.js";
 import { AuthService } from "./application/auth.service.js";
 import { EntityScopeGuard } from "./application/entity-scope.guard.js";
@@ -28,7 +29,7 @@ const identityCoreProviders = [
 ];
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [DatabaseModule, OutboxModule],
   providers: identityCoreProviders,
   exports: identityCoreProviders,
 })

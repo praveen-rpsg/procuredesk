@@ -56,13 +56,13 @@ const OLD_CONTRACT_TEMPLATE_COLUMNS = [
   "RC/PO Validity Date",
 ] as const;
 const RC_PO_PLAN_TEMPLATE_COLUMNS = [
-  "Entity Code (required)",
+  "Entity",
   "User Department",
   "Tender Description",
   "Awarded Vendors (comma separated)",
   "RC/PO Amount (Rs.)",
-  "RC/PO Award Date (YYYY-MM-DD)",
-  "RC/PO Validity Date (YYYY-MM-DD)",
+  "RC/PO Award Date",
+  "RC/PO Validity Date",
 ] as const;
 const TEMPLATE_COLUMN_SETS = [
   TENDER_TEMPLATE_COLUMNS,

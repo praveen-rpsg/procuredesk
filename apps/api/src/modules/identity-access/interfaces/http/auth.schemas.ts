@@ -14,6 +14,20 @@ export const LoginRequestSchema = z.object({
 
 export type LoginRequest = z.infer<typeof LoginRequestSchema>;
 
+export const ForgotPasswordRequestSchema = z.object({
+  email: z.string().trim().email(),
+  tenantCode: OptionalTenantCodeSchema,
+});
+
+export type ForgotPasswordRequest = z.infer<typeof ForgotPasswordRequestSchema>;
+
+export const ResetPasswordRequestSchema = z.object({
+  newPassword: z.string().min(1).max(1024),
+  token: z.string().trim().min(32).max(512),
+});
+
+export type ResetPasswordRequest = z.infer<typeof ResetPasswordRequestSchema>;
+
 export const UpdateOwnProfileRequestSchema = z.object({
   fullName: z.string().trim().min(2).max(160),
 });

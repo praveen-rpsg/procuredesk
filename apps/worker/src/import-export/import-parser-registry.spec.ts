@@ -233,10 +233,10 @@ describe("CsvImportParser (rc_po_plan)", () => {
     expect(rows[0]!.normalizedPayload!["rcPoAmount"]).toBe("500000");
   });
 
-  it("maps the business-facing RC/PO Plan template labels", async () => {
+  it("maps the business-facing Bulk Upload - Old Contract template labels", async () => {
     const csv = [
-      "Entity Code (required),User Department,Tender Description,Awarded Vendors (comma separated),RC/PO Amount (Rs.),RC/PO Award Date (YYYY-MM-DD),RC/PO Validity Date (YYYY-MM-DD)",
-      "CESC,Mechanical,Sample tender,\"Vendor A, Vendor B\",100000,2026-01-31,2027-01-30",
+      "Entity,User Department,Tender Description,Awarded Vendors (comma separated),RC/PO Amount (Rs.),RC/PO Award Date,RC/PO Validity Date",
+      "CESC,Mechanical,Sample tender,\"Vendor A, Vendor B\",100000,31-01-2026,30-01-2027",
     ].join("\n");
 
     const rows = await registry.rc_po_plan.parse({
@@ -251,24 +251,24 @@ describe("CsvImportParser (rc_po_plan)", () => {
       departmentName: "Mechanical",
       entityCode: "CESC",
       rcPoAmount: "100000",
-      rcPoAwardDate: "2026-01-31",
-      rcPoValidityDate: "2027-01-30",
+      rcPoAwardDate: "31-01-2026",
+      rcPoValidityDate: "30-01-2027",
       tenderDescription: "Sample tender",
     });
   });
 
-  it("detects the RC/PO Plan xlsx header row at the top of the sheet", async () => {
+  it("detects the Bulk Upload - Old Contract xlsx header row at the top of the sheet", async () => {
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet("RC PO Plan");
+    const sheet = workbook.addWorksheet("Old Contracts");
     sheet.getRow(1).values = [
       ,
-      "Entity Code (required)",
+      "Entity",
       "User Department",
       "Tender Description",
       "Awarded Vendors (comma separated)",
       "RC/PO Amount (Rs.)",
-      "RC/PO Award Date (YYYY-MM-DD)",
-      "RC/PO Validity Date (YYYY-MM-DD)",
+      "RC/PO Award Date",
+      "RC/PO Validity Date",
     ];
     sheet.getRow(2).values = [
       ,
@@ -277,8 +277,8 @@ describe("CsvImportParser (rc_po_plan)", () => {
       "Sample tender",
       "Vendor A, Vendor B",
       100000,
-      "2026-01-31",
-      "2027-01-30",
+      "31-01-2026",
+      "30-01-2027",
     ];
 
     const buffer = await workbook.xlsx.writeBuffer();
@@ -294,8 +294,8 @@ describe("CsvImportParser (rc_po_plan)", () => {
       departmentName: "Mechanical",
       entityCode: "CESC",
       rcPoAmount: 100000,
-      rcPoAwardDate: "2026-01-31",
-      rcPoValidityDate: "2027-01-30",
+      rcPoAwardDate: "31-01-2026",
+      rcPoValidityDate: "30-01-2027",
     });
   });
 });
@@ -304,7 +304,7 @@ describe("CsvImportParser (enterprise mapping templates)", () => {
   it("maps Entity - Portal User Mapping labels", async () => {
     const csv = [
       "Entity,Full Name,Access Level Required,Access Level Definition,Mail ID,Contact No.",
-      "LOCAL,Anita Rao,Approver,Can approve procurement cases,anita@example.com,+91 9999999999",
+      "LOCAL,Anita Rao,Tender Owner,Can manage procurement cases,anita@example.com,+91 9999999999",
     ].join("\n");
 
     const rows = await registry.portal_user_mapping.parse({
@@ -315,8 +315,8 @@ describe("CsvImportParser (enterprise mapping templates)", () => {
     });
 
     expect(rows[0]!.normalizedPayload).toMatchObject({
-      accessLevelDefinition: "Can approve procurement cases",
-      accessLevelRequired: "Approver",
+      accessLevelDefinition: "Can manage procurement cases",
+      accessLevelRequired: "Tender Owner",
       contactNo: "+91 9999999999",
       entityCode: "LOCAL",
       fullName: "Anita Rao",

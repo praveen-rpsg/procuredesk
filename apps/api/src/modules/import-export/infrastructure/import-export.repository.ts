@@ -23,12 +23,69 @@ export type CreateUploadedImportJobInput = CreateFileAssetInput & {
   importType: string;
 };
 
+export type PortalUserCredentialInput = {
+  email: string;
+  password: string | null;
+  passwordHash: string | null;
+};
+
+export type PortalUserCredentialExportRow = {
+  action: string;
+  email: string;
+  emailStatus: string;
+  entityCode: string;
+  fullName: string;
+  password: string;
+  role: string;
+  username: string;
+};
+
 @Injectable()
 export class ImportExportRepository {
   constructor(private readonly db: DatabaseService) {}
 
   async createFileAsset(input: CreateFileAssetInput): Promise<{ id: string }> {
     return this.insertFileAsset(input);
+  }
+
+  async attachCredentialExport(input: {
+    expiresAt: Date;
+    fileAssetId: string;
+    importJobId: string;
+    tenantId: string;
+  }): Promise<void> {
+    await this.db.query(
+      `
+        update ops.import_jobs
+        set credential_file_asset_id = $3,
+            credential_export_expires_at = $4
+        where tenant_id = $1
+          and id = $2
+      `,
+      [input.tenantId, input.importJobId, input.fileAssetId, input.expiresAt],
+    );
+  }
+
+  async findCredentialExport(input: {
+    importJobId: string;
+    tenantId: string;
+  }): Promise<FileAsset | null> {
+    const row = await this.db.one<QueryResultRow & FileAssetRowSql>(
+      `
+        select f.id, f.storage_key, f.original_filename, f.content_type,
+               f.byte_size, f.checksum_sha256, f.purpose
+        from ops.import_jobs j
+        join ops.file_assets f on f.id = j.credential_file_asset_id
+        where j.tenant_id = $1
+          and j.id = $2
+          and j.import_type = 'portal_user_mapping'
+          and j.status = 'committed'
+          and (j.credential_export_expires_at is null or j.credential_export_expires_at > now())
+          and f.deleted_at is null
+      `,
+      [input.tenantId, input.importJobId],
+    );
+    return row ? this.mapFileAsset(row) : null;
   }
 
   async createUploadedImportJob(
@@ -107,7 +164,11 @@ export class ImportExportRepository {
         select
           id, import_type, status, progress_percent, progress_message,
           total_rows, accepted_rows, rejected_rows,
-          staged_unknown_users, staged_unknown_entities, created_at
+          staged_unknown_users, staged_unknown_entities, created_at,
+          credential_file_asset_id is not null
+            and (credential_export_expires_at is null or credential_export_expires_at > now())
+            as credential_export_available,
+          credential_export_expires_at
         from ops.import_jobs
         where tenant_id = $1
         order by created_at desc
@@ -167,6 +228,60 @@ export class ImportExportRepository {
       rowNumber: row.row_number,
       sourcePayload: row.source_payload,
       status: row.status,
+    }));
+  }
+
+  async getImportJobType(input: {
+    importJobId: string;
+    tenantId: string;
+  }): Promise<string | null> {
+    const row = await this.db.one<QueryResultRow & { import_type: string }>(
+      `
+        select import_type
+        from ops.import_jobs
+        where tenant_id = $1
+          and id = $2
+      `,
+      [input.tenantId, input.importJobId],
+    );
+    return row?.import_type ?? null;
+  }
+
+  async listAcceptedPortalUserRows(input: {
+    importJobId: string;
+    tenantId: string;
+  }): Promise<
+    Array<{
+      email: string;
+      isExisting: boolean;
+    }>
+  > {
+    const result = await this.db.query<
+      QueryResultRow & {
+        email: string;
+        is_existing: boolean;
+      }
+    >(
+      `
+        select
+          lower(r.normalized_payload->>'mailId') as email,
+          u.id is not null as is_existing
+        from ops.import_job_rows r
+        join ops.import_jobs j on j.id = r.import_job_id
+        left join iam.users u
+          on u.tenant_id = j.tenant_id
+         and u.deleted_at is null
+         and lower(u.email::text) = lower(r.normalized_payload->>'mailId')
+        where j.tenant_id = $1
+          and j.id = $2
+          and j.import_type = 'portal_user_mapping'
+          and r.status = 'accepted'
+      `,
+      [input.tenantId, input.importJobId],
+    );
+    return result.rows.map((row) => ({
+      email: row.email,
+      isExisting: row.is_existing,
     }));
   }
 
@@ -231,8 +346,9 @@ export class ImportExportRepository {
   async commitImportJob(input: {
     committedBy: string;
     importJobId: string;
+    portalUserCredentials?: PortalUserCredentialInput[];
     tenantId: string;
-  }): Promise<boolean> {
+  }): Promise<{ credentialRows: PortalUserCredentialExportRow[]; committed: boolean }> {
     return this.db.transaction(async (client) => {
       const job = await this.db.one<QueryResultRow & { import_type: string }>(
         `
@@ -249,12 +365,13 @@ export class ImportExportRepository {
         [input.tenantId, input.importJobId],
         client,
       );
-      if (!job) return false;
+      if (!job) return { committed: false, credentialRows: [] };
 
+      let credentialRows: PortalUserCredentialExportRow[] = [];
       if (job.import_type === "old_contracts") {
         await this.commitOldContractRows(input, client);
       } else if (job.import_type === "portal_user_mapping") {
-        await this.commitPortalUserRows(input, client);
+        credentialRows = await this.commitPortalUserRows(input, client);
       } else if (job.import_type === "rc_po_plan") {
         await this.commitRcPoPlanRows(input, client);
       } else if (job.import_type === "tender_cases") {
@@ -277,7 +394,7 @@ export class ImportExportRepository {
         [input.tenantId, input.importJobId, input.committedBy],
         client,
       );
-      return (result.rowCount ?? 0) > 0;
+      return { committed: (result.rowCount ?? 0) > 0, credentialRows };
     });
   }
 
@@ -308,8 +425,8 @@ export class ImportExportRepository {
             ),
             $3,
             now(),
-            $3,
-            $3
+            $3::uuid,
+            $3::uuid
           from ops.import_job_rows r
           join org.entities e
             on e.tenant_id = $1
@@ -421,24 +538,89 @@ export class ImportExportRepository {
   ): Promise<void> {
     await this.db.query(
       `
+        with normalized as (
+          select
+            min(trim(r.normalized_payload->>'entityCode')) as entity_value,
+            lower(trim(r.normalized_payload->>'entityCode')) as entity_key,
+            min(trim(r.normalized_payload->>'departmentName')) as department_name,
+            lower(trim(r.normalized_payload->>'departmentName')) as department_key
+          from ops.import_job_rows r
+          where r.import_job_id = $2
+            and r.status = 'accepted'
+            and nullif(trim(r.normalized_payload->>'entityCode'), '') is not null
+            and nullif(trim(r.normalized_payload->>'departmentName'), '') is not null
+          group by
+            lower(trim(r.normalized_payload->>'entityCode')),
+            lower(trim(r.normalized_payload->>'departmentName'))
+        ),
+        entity_values as (
+          select min(entity_value) as entity_value, entity_key
+          from normalized
+          group by entity_key
+        ),
+        existing_entities as (
+          select distinct on (ev.entity_key) e.id, ev.entity_value, ev.entity_key
+          from entity_values ev
+          join org.entities e
+            on e.tenant_id = $1
+           and e.deleted_at is null
+           and (
+             lower(e.code::text) = lower(ev.entity_value)
+             or lower(e.name) = lower(ev.entity_value)
+           )
+          order by ev.entity_key, case when lower(e.code::text) = ev.entity_key then 0 else 1 end
+        ),
+        updated_existing_entities as (
+          update org.entities e
+          set is_active = true,
+              updated_at = now(),
+              updated_by = $3
+          from existing_entities ee
+          where e.id = ee.id
+            and e.tenant_id = $1
+            and e.deleted_at is null
+          returning e.id, ee.entity_key
+        ),
+        inserted_entities as (
+          insert into org.entities (tenant_id, code, name, created_by, updated_by)
+          select
+            $1,
+            upper(ev.entity_value),
+            ev.entity_value,
+            $3,
+            $3
+          from entity_values ev
+          where not exists (
+            select 1
+            from existing_entities ee
+            where ee.entity_key = ev.entity_key
+          )
+          on conflict (tenant_id, code) where deleted_at is null
+          do update set
+            is_active = true,
+            updated_at = now(),
+            updated_by = $3::uuid
+          returning id, lower(code::text) as entity_key
+        ),
+        effective_entities as (
+          select id, entity_key from updated_existing_entities
+          union all
+          select id, entity_key from inserted_entities
+        )
         insert into org.departments (tenant_id, entity_id, name, created_by, updated_by)
         select
           $1,
           e.id,
-          trim(r.normalized_payload->>'departmentName'),
+          n.department_name,
           $3,
           $3
-        from ops.import_job_rows r
-        join org.entities e
-          on e.tenant_id = $1
-         and lower(e.code::text) = lower(r.normalized_payload->>'entityCode')
-         and e.deleted_at is null
-        where r.import_job_id = $2
-          and r.status = 'accepted'
-          and coalesce(r.normalized_payload->>'importAction', '') <> 'existing'
+        from normalized n
+        join effective_entities e
+          on e.entity_key = n.entity_key
         on conflict (tenant_id, entity_id, lower(name)) where deleted_at is null
         do update set
           is_active = true,
+          name = excluded.name,
           updated_at = now(),
           updated_by = $3
       `,
@@ -448,21 +630,48 @@ export class ImportExportRepository {
   }
 
   private async commitPortalUserRows(
-    input: { committedBy: string; importJobId: string; tenantId: string },
+    input: {
+      committedBy: string;
+      importJobId: string;
+      portalUserCredentials?: PortalUserCredentialInput[];
+      tenantId: string;
+    },
     client: PoolClient,
-  ): Promise<void> {
-    await this.db.query(
+  ): Promise<PortalUserCredentialExportRow[]> {
+    const result = await this.db.query<
+      QueryResultRow & {
+        action: string;
+        email: string;
+        email_status: string;
+        entity_code: string;
+        full_name: string;
+        generated_password: string | null;
+        role: string;
+        username: string;
+      }
+    >(
       `
-        with normalized as (
+        with credential_input as (
+          select *
+          from jsonb_to_recordset($4::jsonb) as c(
+            email text,
+            password text,
+            "passwordHash" text
+          )
+        ),
+        normalized as (
           select
             r.normalized_payload,
             lower(r.normalized_payload->>'mailId') as email,
-            lower(r.normalized_payload->>'mailId') as username,
+            lower(coalesce(nullif(r.normalized_payload->>'username', ''), r.normalized_payload->>'mailId')) as username,
             r.normalized_payload->>'fullName' as full_name,
             r.normalized_payload->>'contactNo' as contact_no,
             r.normalized_payload->>'entityCode' as entity_code,
+            coalesce(r.normalized_payload->'entityIds', '[]'::jsonb) as entity_ids,
             r.normalized_payload->>'accessLevelRequired' as access_level,
             case
+              when coalesce(r.normalized_payload->>'dataAccessLevel', '') in ('GROUP', 'ENTITY', 'USER')
+                then r.normalized_payload->>'dataAccessLevel'
               when lower(r.normalized_payload->>'accessLevelRequired') in ('group', 'group manager', 'group_manager', 'administration manager', 'administration_manager', 'group viewer', 'group_viewer', 'tenant admin', 'tenant_admin', 'report viewer', 'report_viewer') then 'GROUP'
               when lower(r.normalized_payload->>'accessLevelRequired') in ('entity', 'entity manager', 'entity_manager') then 'ENTITY'
               else 'USER'
@@ -474,7 +683,7 @@ export class ImportExportRepository {
         upserted_users as (
           insert into iam.users (
             tenant_id, email, username, full_name, contact_no,
-            access_level, status, created_by, updated_by
+            access_level, password_hash, status, password_changed_at, created_by, updated_by
           )
           select
             $1,
@@ -483,45 +692,169 @@ export class ImportExportRepository {
             n.full_name,
             nullif(n.contact_no, ''),
             n.data_access_level,
-            'pending_password_setup',
+            ci."passwordHash",
+            case when ci."passwordHash" is null then 'pending_password_setup' else 'active' end,
+            case when ci."passwordHash" is null then null else now() end,
             $3,
             $3
           from normalized n
-          on conflict (tenant_id, email) where deleted_at is null
+          left join credential_input ci on lower(ci.email) = n.email
+          on conflict (tenant_id, email) where deleted_at is null and tenant_id is not null
           do update set
+            username = excluded.username,
             full_name = excluded.full_name,
             contact_no = excluded.contact_no,
             access_level = excluded.access_level,
+            password_hash = coalesce(excluded.password_hash, iam.users.password_hash),
+            status = case when excluded.password_hash is null then iam.users.status else 'active' end,
+            failed_login_count = case when excluded.password_hash is null then iam.users.failed_login_count else 0 end,
+            locked_until = case when excluded.password_hash is null then iam.users.locked_until else null end,
+            password_changed_at = case when excluded.password_hash is null then iam.users.password_changed_at else now() end,
             updated_at = now(),
             updated_by = $3
-          returning id, email
-        ),
-        scoped as (
-          insert into iam.user_entity_scopes (user_id, entity_id, assigned_by)
-          select distinct u.id, e.id, $3
-          from normalized n
-          join upserted_users u on u.email = n.email
-          join org.entities e
-            on e.tenant_id = $1
-           and lower(e.code::text) = lower(n.entity_code)
-           and e.deleted_at is null
-          on conflict (user_id, entity_id) do nothing
-          returning user_id
+          returning id, email, username, full_name, xmax = 0 as inserted
         )
-        insert into iam.user_roles (user_id, role_id, assigned_by)
-        select distinct u.id, role_match.id, $3
+        select
+          case when u.inserted then 'create' else 'update' end as action,
+          u.email,
+          n.entity_code,
+          u.full_name,
+          ci.password as generated_password,
+          n.access_level as role,
+          u.username,
+          'not_sent' as email_status
         from normalized n
         join upserted_users u on u.email = n.email
+        left join credential_input ci on lower(ci.email) = n.email
+        order by u.email
+      `,
+      [
+        input.tenantId,
+        input.importJobId,
+        input.committedBy,
+        JSON.stringify(input.portalUserCredentials ?? []),
+      ],
+      client,
+    );
+    await this.replacePortalUserEntityScopes(input, client);
+    await this.replacePortalUserRoles(input, client);
+    return result.rows.map((row) => ({
+      action: row.action,
+      email: row.email,
+      emailStatus: row.email_status,
+      entityCode: row.entity_code,
+      fullName: row.full_name,
+      password: row.generated_password ?? "",
+      role: row.role,
+      username: row.username,
+    }));
+  }
+
+  private async replacePortalUserEntityScopes(
+    input: {
+      committedBy: string;
+      importJobId: string;
+      tenantId: string;
+    },
+    client: PoolClient,
+  ): Promise<void> {
+    await this.db.query(
+      `
+        with imported_users as (
+          select u.id
+          from ops.import_job_rows r
+          join iam.users u
+            on u.tenant_id = $1
+           and u.deleted_at is null
+           and lower(u.email::text) = lower(r.normalized_payload->>'mailId')
+          where r.import_job_id = $2
+            and r.status = 'accepted'
+        )
+        delete from iam.user_entity_scopes s
+        using imported_users u
+        where s.user_id = u.id
+      `,
+      [input.tenantId, input.importJobId],
+      client,
+    );
+
+    await this.db.query(
+      `
+        insert into iam.user_entity_scopes (user_id, entity_id, assigned_by)
+        select distinct u.id, entity_ids.entity_id::uuid, $3::uuid
+        from ops.import_job_rows r
+        join iam.users u
+          on u.tenant_id = $1
+         and u.deleted_at is null
+         and lower(u.email::text) = lower(r.normalized_payload->>'mailId')
+        cross join lateral jsonb_array_elements_text(
+          coalesce(r.normalized_payload->'entityIds', '[]'::jsonb)
+        ) as entity_ids(entity_id)
+        join org.entities e
+          on e.id = entity_ids.entity_id::uuid
+         and e.tenant_id = $1
+         and e.deleted_at is null
+        where r.import_job_id = $2
+          and r.status = 'accepted'
+        on conflict (user_id, entity_id) do nothing
+      `,
+      [input.tenantId, input.importJobId, input.committedBy],
+      client,
+    );
+  }
+
+  private async replacePortalUserRoles(
+    input: {
+      committedBy: string;
+      importJobId: string;
+      tenantId: string;
+    },
+    client: PoolClient,
+  ): Promise<void> {
+    await this.db.query(
+      `
+        with imported_users as (
+          select u.id
+          from ops.import_job_rows r
+          join iam.users u
+            on u.tenant_id = $1
+           and u.deleted_at is null
+           and lower(u.email::text) = lower(r.normalized_payload->>'mailId')
+          where r.import_job_id = $2
+            and r.status = 'accepted'
+        )
+        delete from iam.user_roles ur
+        using imported_users u
+        where ur.user_id = u.id
+      `,
+      [input.tenantId, input.importJobId],
+      client,
+    );
+
+    await this.db.query(
+      `
+        insert into iam.user_roles (user_id, role_id, assigned_by)
+        select distinct u.id, role_match.id, $3::uuid
+        from ops.import_job_rows r
+        join iam.users u
+          on u.tenant_id = $1
+         and u.deleted_at is null
+         and lower(u.email::text) = lower(r.normalized_payload->>'mailId')
         join lateral (
-          select r.id
-          from iam.roles r
-          where (r.tenant_id = $1 or r.tenant_id is null)
-            and r.deleted_at is null
-            and r.code <> 'platform_super_admin'
-            and (lower(r.name) = lower(n.access_level) or lower(r.code::text) = lower(n.access_level))
-          order by case when r.tenant_id = $1 then 0 else 1 end
+          select role.id
+          from iam.roles role
+          where (role.tenant_id = $1 or role.tenant_id is null)
+            and role.deleted_at is null
+            and role.code <> 'platform_super_admin'
+            and (
+              lower(role.name) = lower(r.normalized_payload->>'accessLevelRequired')
+              or lower(role.code::text) = lower(r.normalized_payload->>'accessLevelRequired')
+            )
+          order by case when role.tenant_id = $1 then 0 else 1 end
           limit 1
         ) role_match on true
+        where r.import_job_id = $2
+          and r.status = 'accepted'
         on conflict (user_id, role_id) do nothing
       `,
       [input.tenantId, input.importJobId, input.committedBy],
@@ -810,7 +1143,9 @@ export class ImportExportRepository {
   private mapImportJob(row: ImportJobRowSql): ImportJob {
     return {
       acceptedRows: row.accepted_rows,
-      createdAt: row.created_at.toISOString(),
+      credentialExportAvailable: row.credential_export_available === true,
+      credentialExportExpiresAt: toIsoString(row.credential_export_expires_at),
+      createdAt: toIsoString(row.created_at) ?? new Date().toISOString(),
       id: row.id,
       importType: row.import_type,
       progressMessage: row.progress_message,
@@ -822,11 +1157,35 @@ export class ImportExportRepository {
       totalRows: row.total_rows,
     };
   }
+
+  private mapFileAsset(row: FileAssetRowSql): FileAsset {
+    return {
+      byteSize: row.byte_size == null ? null : Number(row.byte_size),
+      checksumSha256: row.checksum_sha256,
+      contentType: row.content_type,
+      id: row.id,
+      originalFilename: row.original_filename,
+      purpose: row.purpose,
+      storageKey: row.storage_key,
+    };
+  }
 }
+
+type FileAssetRowSql = {
+  byte_size: string | number | null;
+  checksum_sha256: string | null;
+  content_type: string | null;
+  id: string;
+  original_filename: string | null;
+  purpose: string;
+  storage_key: string;
+};
 
 type ImportJobRowSql = {
   accepted_rows: number;
-  created_at: Date;
+  credential_export_available: boolean;
+  credential_export_expires_at: Date | string | null;
+  created_at: Date | string;
   id: string;
   import_type: string;
   progress_message: string | null;
@@ -837,6 +1196,11 @@ type ImportJobRowSql = {
   status: string;
   total_rows: number;
 };
+
+function toIsoString(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
 
 type ImportJobRowRowSql = {
   errors: unknown[];

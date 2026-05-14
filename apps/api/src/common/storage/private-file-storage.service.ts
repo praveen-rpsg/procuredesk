@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, unlink } from "node:fs/promises";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Transform, type Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -62,6 +62,35 @@ export class PrivateFileStorageService {
     };
   }
 
+  async writeGeneratedFile(input: {
+    data: Buffer;
+    filename: string;
+    folder: "exports" | "imports";
+    tenantId: string;
+  }): Promise<{ byteSize: number; checksumSha256: string; storageKey: string }> {
+    const storageKey = this.buildGeneratedStorageKey(input.tenantId, input.folder, input.filename);
+    const checksumSha256 = createHash("sha256").update(input.data).digest("hex");
+    if (this.driver === "azure_blob") {
+      await this.blobClient(storageKey).uploadData(input.data, {
+        blobHTTPHeaders: { blobContentType: "application/octet-stream" },
+      });
+      return {
+        byteSize: input.data.byteLength,
+        checksumSha256,
+        storageKey,
+      };
+    }
+
+    const filePath = this.resolve(storageKey);
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(filePath, input.data, { flag: "wx" });
+    return {
+      byteSize: input.data.byteLength,
+      checksumSha256,
+      storageKey,
+    };
+  }
+
   async read(storageKey: string): Promise<Readable> {
     if (this.driver === "azure_blob") {
       const response = await this.blobClient(storageKey).download();
@@ -96,10 +125,14 @@ export class PrivateFileStorageService {
   }
 
   private buildImportStorageKey(tenantId: string, filename?: string | null): string {
+    return this.buildGeneratedStorageKey(tenantId, "imports", filename ?? "import-file");
+  }
+
+  private buildGeneratedStorageKey(tenantId: string, folder: "exports" | "imports", filename?: string | null): string {
     const now = new Date();
     const year = String(now.getUTCFullYear());
     const month = String(now.getUTCMonth() + 1).padStart(2, "0");
-    return `${tenantId}/imports/${year}/${month}/${randomUUID()}-${this.sanitizeFilename(filename)}`;
+    return `${tenantId}/${folder}/${year}/${month}/${randomUUID()}-${this.sanitizeFilename(filename)}`;
   }
 
   private sanitizeFilename(filename?: string | null): string {

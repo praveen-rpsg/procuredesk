@@ -7,6 +7,8 @@ import {
 import { ConfigService } from "@nestjs/config";
 import { createHash, randomBytes } from "node:crypto";
 
+import { DatabaseService } from "../../../database/database.service.js";
+import { OutboxWriterService } from "../../outbox/application/outbox-writer.service.js";
 import type { AuthenticatedUser } from "../domain/authenticated-user.js";
 import type { PasswordPolicy } from "../domain/password-policy.js";
 import { LoginRateLimitRepository } from "../infrastructure/login-rate-limit.repository.js";
@@ -38,6 +40,8 @@ export class AuthService {
     private readonly passwordPolicies: PasswordPolicyRepository,
     private readonly passwords: PasswordService,
     private readonly config: ConfigService,
+    private readonly db: DatabaseService,
+    private readonly outbox: OutboxWriterService,
   ) {}
 
   async login(input: LoginInput): Promise<LoginResult> {
@@ -237,8 +241,142 @@ export class AuthService {
     return { updated: true };
   }
 
+  async forgotPassword(input: {
+    email: string;
+    ipAddress?: string | undefined;
+    tenantCode?: string | undefined;
+    userAgent?: string | undefined;
+  }): Promise<{ ok: true }> {
+    const email = input.email.trim().toLowerCase();
+    const user = await this.users.findForPasswordReset(email, input.tenantCode);
+    if (!user) return { ok: true };
+
+    const token = randomBytes(32).toString("base64url");
+    const tokenHash = this.hashResetToken(token);
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    await this.users.createPasswordResetToken({
+      expiresAt,
+      requestedEmail: email,
+      requestIp: input.ipAddress ?? null,
+      tenantId: user.tenantId,
+      tokenHash,
+      userAgent: input.userAgent ?? null,
+      userId: user.id,
+    });
+
+    if (user.tenantId) {
+      const resetUrl = new URL("/reset-password", this.config.get<string>("APP_URL", "http://localhost:5175"));
+      resetUrl.searchParams.set("token", token);
+      if (user.tenantCode) resetUrl.searchParams.set("tenant", user.tenantCode);
+      const notification = await this.createNotificationJob({
+        notificationType: "password_reset",
+        recipientEmail: user.email,
+        subject: "Reset your ProcureDesk password",
+        tenantId: user.tenantId,
+        textBody: [
+          `Hello ${user.fullName},`,
+          "",
+          "We received a request to reset your ProcureDesk password.",
+          `Reset link: ${resetUrl.toString()}`,
+          "",
+          "This link expires in 1 hour. If you did not request it, ignore this email.",
+        ].join("\n"),
+      });
+      await this.outbox.write({
+        aggregateId: notification.id,
+        aggregateType: "notification_job",
+        eventType: "notification_job.created",
+        payload: { notificationType: "password_reset" },
+        tenantId: user.tenantId,
+      });
+    }
+
+    return { ok: true };
+  }
+
+  async resetPassword(input: {
+    newPassword: string;
+    token: string;
+  }): Promise<{ updated: true }> {
+    const reset = await this.users.consumePasswordResetToken({
+      tokenHash: this.hashResetToken(input.token),
+    });
+    if (!reset) {
+      throw new BadRequestException("Password reset link is invalid or expired.");
+    }
+    const policy = await this.passwordPolicyForUser(reset.tenantId);
+    const errors = this.passwords.validateAgainstPolicy(input.newPassword, policy);
+    const historicalHashes = reset.tenantId
+      ? await this.users.listPasswordHashes({
+          historyCount: policy.passwordHistoryCount,
+          tenantId: reset.tenantId,
+          userId: reset.userId,
+        })
+      : await this.users.listOwnPasswordHashes({
+          historyCount: policy.passwordHistoryCount,
+          tenantId: null,
+          userId: reset.userId,
+        });
+    for (const hash of historicalHashes) {
+      if (await this.passwords.verify(hash, input.newPassword)) {
+        errors.push("Password cannot match the current password or recent password history.");
+        break;
+      }
+    }
+    if (errors.length) {
+      throw new BadRequestException(`Password does not satisfy policy: ${errors.join(" ")}`);
+    }
+    const passwordHash = await this.passwords.hash(input.newPassword);
+    const updated = reset.tenantId
+      ? await this.users.setPassword({
+          passwordHash,
+          tenantId: reset.tenantId,
+          updatedBy: reset.userId,
+          userId: reset.userId,
+        })
+      : await this.users.setOwnPassword({
+          passwordHash,
+          tenantId: null,
+          updatedBy: reset.userId,
+          userId: reset.userId,
+        });
+    if (!updated) throw new BadRequestException("Password reset failed.");
+    return { updated: true };
+  }
+
   hashSessionToken(sessionToken: string): string {
     return createHash("sha256").update(sessionToken).digest("hex");
+  }
+
+  private async createNotificationJob(input: {
+    notificationType: string;
+    recipientEmail: string;
+    subject: string;
+    tenantId: string;
+    textBody: string;
+  }): Promise<{ id: string }> {
+    const row = await this.db.one<{ id: string }>(
+      `
+        insert into ops.notification_jobs (
+          tenant_id, notification_type, recipient_email, subject, text_body
+        )
+        values ($1, $2, $3, $4, $5)
+        returning id
+      `,
+      [
+        input.tenantId,
+        input.notificationType,
+        input.recipientEmail,
+        input.subject,
+        input.textBody,
+      ],
+    );
+    if (!row) throw new Error("Failed to create password reset notification.");
+    return { id: row.id };
+  }
+
+  private hashResetToken(token: string): string {
+    return createHash("sha256").update(token).digest("hex");
   }
 
   private passwordPolicyForUser(

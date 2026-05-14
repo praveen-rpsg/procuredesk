@@ -50,6 +50,14 @@ export type UserPasswordRecord = {
   status: string;
 };
 
+export type PasswordResetUserRecord = {
+  email: string;
+  fullName: string;
+  id: string;
+  tenantCode: string | null;
+  tenantId: string | null;
+};
+
 type LoginUserRow = QueryResultRow & {
   id: string;
   tenant_id: string | null;
@@ -161,6 +169,93 @@ export class UserRepository {
     );
 
     return row?.id ?? null;
+  }
+
+  async findForPasswordReset(
+    email: string,
+    tenantCode?: string,
+  ): Promise<PasswordResetUserRecord | null> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedTenantCode = tenantCode?.trim().toLowerCase() || null;
+    const row = await this.db.one<
+      QueryResultRow & {
+        email: string;
+        full_name: string;
+        id: string;
+        tenant_code: string | null;
+        tenant_id: string | null;
+      }
+    >(
+      `
+        select u.id, u.tenant_id, t.code as tenant_code, u.email, u.full_name
+        from iam.users u
+        left join iam.tenants t on t.id = u.tenant_id
+        where u.deleted_at is null
+          and u.email = $1::citext
+          and u.status in ('active', 'pending_password_setup', 'locked')
+          and (
+            ($2::text is not null and t.code = $2::citext)
+            or ($2::text is null and u.is_platform_super_admin = true)
+          )
+        order by u.is_platform_super_admin desc
+        limit 1
+      `,
+      [normalizedEmail, normalizedTenantCode],
+    );
+    return row
+      ? {
+          email: row.email,
+          fullName: row.full_name,
+          id: row.id,
+          tenantCode: row.tenant_code,
+          tenantId: row.tenant_id,
+        }
+      : null;
+  }
+
+  async createPasswordResetToken(input: {
+    expiresAt: Date;
+    requestedEmail: string;
+    requestIp?: string | null;
+    tenantId: string | null;
+    tokenHash: string;
+    userAgent?: string | null;
+    userId: string;
+  }): Promise<void> {
+    await this.db.query(
+      `
+        insert into iam.password_reset_tokens (
+          tenant_id, user_id, token_hash, requested_email, expires_at, request_ip, user_agent
+        )
+        values ($1, $2, $3, $4, $5, nullif($6, '')::inet, $7)
+      `,
+      [
+        input.tenantId,
+        input.userId,
+        input.tokenHash,
+        input.requestedEmail.toLowerCase(),
+        input.expiresAt,
+        input.requestIp ?? null,
+        input.userAgent ?? null,
+      ],
+    );
+  }
+
+  async consumePasswordResetToken(input: {
+    tokenHash: string;
+  }): Promise<{ tenantId: string | null; userId: string } | null> {
+    const row = await this.db.one<QueryResultRow & { tenant_id: string | null; user_id: string }>(
+      `
+        update iam.password_reset_tokens
+        set used_at = now()
+        where token_hash = $1
+          and used_at is null
+          and expires_at > now()
+        returning tenant_id, user_id
+      `,
+      [input.tokenHash],
+    );
+    return row ? { tenantId: row.tenant_id, userId: row.user_id } : null;
   }
 
   async listTenantUsers(tenantId: string): Promise<UserListItem[]> {

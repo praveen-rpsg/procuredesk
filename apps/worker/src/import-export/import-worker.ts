@@ -237,10 +237,22 @@ function validateImportRow(input: ValidateImportRowInput): ParsedImportRow {
     : undefined;
   const errors = [...row.errors];
 
-  validateEntityScope(errors, entity, entityScope.allowedEntityIds);
+  if (importType === "portal_user_mapping") {
+    // Portal user imports validate comma-separated entity scopes after role resolution.
+  } else if (importType === "user_department_mapping") {
+    validateUserDepartmentEntityScope(
+      errors,
+      normalizedPayload.entityCode,
+      entity,
+      entityScope.allowedEntityIds,
+    );
+  } else {
+    validateEntityScope(errors, entity, entityScope.allowedEntityIds);
+  }
   const moduleRow = validateSpecializedImportRow({
     departments,
     entityId: entity?.id,
+    entityScope,
     errors,
     existingOldContracts,
     existingUsers,
@@ -334,6 +346,7 @@ function validateImportRow(input: ValidateImportRowInput): ParsedImportRow {
 function validateSpecializedImportRow(input: {
   departments: Awaited<ReturnType<typeof loadDepartmentLookups>>;
   entityId: string | undefined;
+  entityScope: Awaited<ReturnType<typeof loadEntityScope>>;
   errors: string[];
   existingOldContracts: Awaited<
     ReturnType<typeof loadExistingOldContractLookups>
@@ -354,7 +367,7 @@ function validateSpecializedImportRow(input: {
     validatePortalUserMapping(
       input.errors,
       payload,
-      input.entityId,
+      input.entityScope,
       input.roles,
       input.existingUsers,
       input.seenEmails,
@@ -475,6 +488,19 @@ function validateEntityScope(
   }
 }
 
+function validateUserDepartmentEntityScope(
+  errors: string[],
+  entityValue: unknown,
+  entity: { id: string } | undefined,
+  allowedEntityIds: Set<string> | null,
+): void {
+  validateRequiredText(errors, entityValue, "Entity is required.");
+  if (!entity) return;
+  if (allowedEntityIds?.has(entity.id) === false) {
+    errors.push("Actor is not allowed to import rows for this entity.");
+  }
+}
+
 function validateCatalogFields(
   errors: string[],
   payload: Record<string, unknown>,
@@ -564,13 +590,17 @@ async function loadEntityScope(
   allowedEntityIds: Set<string> | null;
   entitiesByCode: Map<string, { id: string }>;
 }> {
-  const entities = await pool.query<{ code: string; id: string }>(
-    "select id::text as id, lower(code::text) as code from org.entities where tenant_id = $1 and deleted_at is null and is_active = true",
+  const entities = await pool.query<{ code: string; id: string; name: string }>(
+    "select id::text as id, lower(code::text) as code, lower(name) as name from org.entities where tenant_id = $1 and deleted_at is null and is_active = true",
     [tenantId],
   );
-  const entitiesByCode = new Map(
-    entities.rows.map((row) => [row.code, { id: row.id }]),
-  );
+  const entitiesByCode = new Map<string, { id: string }>();
+  for (const row of entities.rows) {
+    entitiesByCode.set(row.code, { id: row.id });
+    if ("name" in row && typeof row.name === "string") {
+      entitiesByCode.set(row.name, { id: row.id });
+    }
+  }
 
   if (!actorUserId) {
     return { allowedEntityIds: null, entitiesByCode };
@@ -756,20 +786,22 @@ async function loadExistingOldContractLookups(
 async function loadRoleLookups(
   tenantId: string,
   pool: Pool,
-): Promise<Map<string, { description: string | null; id: string }>> {
+): Promise<Map<string, { code: string; description: string | null; id: string; name: string }>> {
   const result = await pool.query<{
+    code: string;
     description: string | null;
     id: string;
     key: string;
+    name: string;
   }>(
     `
-      select id::text, lower(name) as key, description
+      select id::text, code::text, name, lower(name) as key, description
       from iam.roles
       where (tenant_id = $1 or tenant_id is null)
         and deleted_at is null
         and code <> 'platform_super_admin'
       union
-      select id::text, lower(code::text) as key, description
+      select id::text, code::text, name, lower(code::text) as key, description
       from iam.roles
       where (tenant_id = $1 or tenant_id is null)
         and deleted_at is null
@@ -780,7 +812,7 @@ async function loadRoleLookups(
   return new Map(
     result.rows.map((row) => [
       row.key,
-      { description: row.description, id: row.id },
+      { code: row.code, description: row.description, id: row.id, name: row.name },
     ]),
   );
 }
@@ -892,8 +924,8 @@ function normalizeTenderOwner(
 function validatePortalUserMapping(
   errors: string[],
   payload: Record<string, unknown>,
-  entityId: string | undefined,
-  roles: Map<string, { description: string | null; id: string }>,
+  entityScope: Awaited<ReturnType<typeof loadEntityScope>>,
+  roles: Map<string, { code: string; description: string | null; id: string; name: string }>,
   existingUsers: { emails: Set<string>; phoneOwners: Map<string, string> },
   seenEmails: Set<string>,
   seenPhones: Set<string>,
@@ -916,10 +948,45 @@ function validatePortalUserMapping(
   const role = roles.get(textValue(payload.accessLevelRequired).toLowerCase());
   if (!role)
     errors.push("Access Level Required is not available in role master.");
-  if (!entityId)
-    errors.push("User access cannot be mapped without a valid entity.");
+  validatePortalUserEntities(errors, payload, role, entityScope);
   payload.accessLevelDefinition =
     role?.description ?? payload.accessLevelDefinition ?? "";
+}
+
+function validatePortalUserEntities(
+  errors: string[],
+  payload: Record<string, unknown>,
+  role: { code: string; name: string } | undefined,
+  entityScope: Awaited<ReturnType<typeof loadEntityScope>>,
+): void {
+  const accessLevel = accessLevelForRole(role);
+  payload.dataAccessLevel = accessLevel;
+  if (accessLevel === "GROUP") {
+    payload.entityCodes = [];
+    return;
+  }
+
+  const entityValues = splitEntityValues(payload.entityCode);
+  if (!entityValues.length) {
+    errors.push("Entity is required for this access level.");
+    return;
+  }
+
+  const resolved = new Map<string, { id: string; label: string }>();
+  for (const value of entityValues) {
+    const entity = entityScope.entitiesByCode.get(value.toLowerCase());
+    if (!entity) {
+      errors.push(`Unknown entity: ${value}.`);
+      continue;
+    }
+    if (entityScope.allowedEntityIds?.has(entity.id) === false) {
+      errors.push(`Actor is not allowed to import users for entity: ${value}.`);
+      continue;
+    }
+    resolved.set(entity.id, { id: entity.id, label: value });
+  }
+  payload.entityCodes = [...resolved.values()].map((entity) => entity.label);
+  payload.entityIds = [...resolved.keys()];
 }
 
 function validatePortalUserEmail(
@@ -930,6 +997,7 @@ function validatePortalUserEmail(
   const email = textValue(payload.mailId).toLowerCase();
   if (!email) return;
   payload.mailId = email;
+  payload.username = email;
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
     errors.push("Mail ID must be a valid email address.");
   if (seenEmails.has(email))
@@ -972,14 +1040,14 @@ function validateUserDepartmentMapping(
     payload.departmentName,
     "User Department is required.",
   );
-  if (!entityId) return;
   const department = textValue(payload.departmentName);
-  const key = `${entityId}|${department.toLowerCase()}`;
+  const entityKey = entityId ?? textValue(payload.entityCode).toLowerCase();
+  const key = `${entityKey}|${department.toLowerCase()}`;
   if (key.endsWith("|")) return;
   if (seenDepartments.has(key))
     errors.push("Duplicate User Department exists within this import file.");
   seenDepartments.add(key);
-  if (departments.get(entityId)?.has(department.toLowerCase())) {
+  if (entityId && departments.get(entityId)?.has(department.toLowerCase())) {
     payload.importAction = "existing";
   }
 }
@@ -1246,7 +1314,7 @@ function validateOldContractDates(
     ["RC/PO Validity Date", payload.rcPoValidityDate],
   ] as const) {
     if (hasValue(value) && !parseImportDate(value)) {
-      errors.push(`${label} must be a valid date in DD-MM-YYYY format.`);
+      errors.push(`${label} must be a valid date in DD-MM-YYYY or DD/MM/YYYY format.`);
     }
   }
   const awardDate = parseImportDate(payload.rcPoAwardDate);
@@ -1266,7 +1334,7 @@ function validateRcPoPlanDates(
   ] as const) {
     if (hasValue(value) && !parseImportDate(value)) {
       errors.push(
-        `${label} must be a valid date in YYYY-MM-DD or DD-MM-YYYY format.`,
+        `${label} must be a valid date in YYYY-MM-DD, DD-MM-YYYY, or DD/MM/YYYY format.`,
       );
     }
   }
@@ -1297,6 +1365,44 @@ function departmentImportAction(
     ?.has(textValue(payload.departmentName).toLowerCase())
     ? "existing"
     : "create";
+}
+
+function accessLevelForRole(role: { code: string; name: string } | undefined): "ENTITY" | "GROUP" | "USER" {
+  const value = `${role?.code ?? ""} ${role?.name ?? ""}`.toLowerCase();
+  if (
+    [
+      "administration_manager",
+      "administration manager",
+      "group_manager",
+      "group manager",
+      "group_viewer",
+      "group viewer",
+      "tenant_admin",
+      "tenant admin",
+      "report_viewer",
+      "report viewer",
+    ].some((token) => value.includes(token))
+  ) {
+    return "GROUP";
+  }
+  if (["entity_manager", "entity manager", "entity"].some((token) => value.includes(token))) {
+    return "ENTITY";
+  }
+  return "USER";
+}
+
+function splitEntityValues(value: unknown): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const item of textValue(value).split(",")) {
+    const trimmed = item.trim();
+    if (!trimmed || trimmed.toLowerCase() === "all") continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(trimmed);
+  }
+  return result;
 }
 
 function oldContractImportAction(
@@ -1371,11 +1477,14 @@ function statusForRow(
 ): ParsedImportRow["status"] {
   if (currentStatus === "rejected") return "rejected";
   if (!errors.length) return "accepted";
-  const hasUnknownReference =
-    errors.includes(UNKNOWN_ENTITY_ERROR) ||
-    errors.includes(UNKNOWN_USER_ERROR) ||
-    errors.includes(UNKNOWN_DEPARTMENT_ERROR);
-  return hasUnknownReference ? "staged" : "rejected";
+  const stagedReferenceErrors = new Set([
+    UNKNOWN_ENTITY_ERROR,
+    UNKNOWN_USER_ERROR,
+  ]);
+  const hasOnlyStagedReferenceErrors = errors.every((error) =>
+    stagedReferenceErrors.has(error),
+  );
+  return hasOnlyStagedReferenceErrors ? "staged" : "rejected";
 }
 
 function hasValue(value: unknown): boolean {
@@ -1436,8 +1545,11 @@ function normalizeValidatedPayload(
 function parseImportDate(value: unknown): string | null {
   if (!hasValue(value)) return null;
   if (value instanceof Date) return dateToDateOnlyString(value);
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return excelSerialDateToDateOnlyString(value);
+  }
   const text = textValue(value);
-  const ddmmyyyy = /^(\d{1,2})-(\d{1,2})-(\d{4})$/.exec(text);
+  const ddmmyyyy = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/.exec(text);
   if (ddmmyyyy) {
     const dd = ddmmyyyy[1];
     const mm = ddmmyyyy[2];
@@ -1449,6 +1561,18 @@ function parseImportDate(value: unknown): string | null {
   const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
   if (iso && isValidIsoDate(text)) return text;
   return null;
+}
+
+function excelSerialDateToDateOnlyString(value: number): string | null {
+  if (!Number.isInteger(value) || value <= 0) return null;
+  const milliseconds = Math.round((value - 25569) * 86400 * 1000);
+  const date = new Date(milliseconds);
+  if (Number.isNaN(date.getTime())) return null;
+  return formatDateOnlyParts(
+    date.getUTCFullYear(),
+    date.getUTCMonth() + 1,
+    date.getUTCDate(),
+  );
 }
 
 function isValidIsoDate(value: string): boolean {
