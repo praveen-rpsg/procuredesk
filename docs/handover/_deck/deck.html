@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>ProcureDesk — Executive Briefing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0B2545;
+    --navy-2:#0E2D55;
+    --navy-3:#13386A;
+    --teal:#13A89E;
+    --teal-2:#1FC5B8;
+    --gold:#F5C518;
+    --ink:#0E1A2B;
+    --paper:#F5F7FB;
+    --paper-2:#FFFFFF;
+    --line:#1B3A66;
+    --muted:#8FA0B8;
+    --text-on-dark:#E8EDF5;
+    --text-on-light:#1A2B45;
+  }
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html, body { background:#222; }
+  body{
+    font-family:'Inter','Helvetica Neue',Arial,sans-serif;
+    font-feature-settings:"ss01","cv11","tnum";
+    -webkit-font-smoothing:antialiased;
+    color:var(--text-on-dark);
+  }
+
+  @page { size: 13.333in 7.5in; margin: 0; }
+
+  .slide{
+    width:13.333in;
+    height:7.5in;
+    page-break-after: always;
+    page-break-inside: avoid;
+    position:relative;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+  }
+  .slide:last-child{ page-break-after: auto; }
+
+  /* Common chrome */
+  .topbar{
+    position:absolute; top:0; left:0; right:0;
+    height:0.55in;
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 0 0.55in;
+    z-index:5;
+  }
+  .brand{ display:flex; align-items:center; gap:0.14in; font-weight:700; letter-spacing:.02em; font-size:11pt; color:var(--text-on-dark); }
+  .brand .dot{ width:10px; height:10px; border-radius:50%; background:var(--teal); box-shadow:0 0 0 4px rgba(19,168,158,0.18); }
+  .crumbs{ font-size:9pt; color:var(--muted); letter-spacing:.18em; text-transform:uppercase; }
+
+  .footer{
+    position:absolute; bottom:0; left:0; right:0;
+    height:0.42in;
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 0 0.55in;
+    font-size:8.5pt;
+    color:var(--muted);
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    z-index:5;
+  }
+  .footer .pageno{ color:var(--text-on-dark); font-weight:600; }
+
+  .accentline{
+    position:absolute; left:0; top:0; bottom:0;
+    width:6px; background:linear-gradient(180deg,var(--teal) 0%, var(--teal-2) 100%);
+  }
+
+  /* Dark theme slide */
+  .dark{
+    background:
+      radial-gradient(1200px 600px at 12% -10%, rgba(31,197,184,0.12), transparent 60%),
+      radial-gradient(900px 500px at 110% 110%, rgba(245,197,24,0.06), transparent 60%),
+      linear-gradient(180deg, #0B2545 0%, #0A1E3A 100%);
+  }
+  .dark .crumbs{ color:#8FA0B8; }
+
+  /* Light theme slide (paper) */
+  .light{
+    background:
+      radial-gradient(1100px 600px at 90% -10%, rgba(11,37,69,0.06), transparent 60%),
+      linear-gradient(180deg, #F7F9FC 0%, #EEF2F8 100%);
+    color:var(--text-on-light);
+  }
+  .light .brand{ color:var(--ink); }
+  .light .crumbs{ color:#5B6B86; }
+  .light .footer{ color:#5B6B86; }
+  .light .footer .pageno{ color:var(--ink); }
+
+  /* Body container */
+  .body{
+    flex:1;
+    padding: 1.0in 0.7in 0.7in 0.85in;
+    position:relative;
+    z-index:2;
+  }
+  .body.tight{ padding: 0.95in 0.7in 0.65in 0.85in; }
+
+  .eyebrow{
+    font-size:9pt; letter-spacing:.22em; text-transform:uppercase;
+    color:var(--teal-2); font-weight:600; margin-bottom:0.12in;
+  }
+  .light .eyebrow{ color:#0F8A82; }
+
+  h1.title{
+    font-size:30pt; line-height:1.08; font-weight:700;
+    letter-spacing:-0.01em;
+    max-width:11in;
+  }
+  h1.title .accent{ color:var(--teal-2); }
+  .light h1.title .accent{ color:#0F8A82; }
+
+  h2.subtitle{
+    margin-top:0.18in;
+    font-size:13pt; font-weight:400; line-height:1.45;
+    color:var(--muted); max-width:9.5in;
+  }
+  .light h2.subtitle{ color:#5B6B86; }
+
+  /* SLIDE 1 — KPI cards */
+  .kpi-grid{
+    display:grid; grid-template-columns:repeat(4, 1fr); gap:0.22in;
+    margin-top:0.55in;
+  }
+  .kpi{
+    background:rgba(255,255,255,0.04);
+    border:1px solid rgba(255,255,255,0.08);
+    border-radius:14px;
+    padding:0.30in 0.28in;
+    position:relative; overflow:hidden;
+  }
+  .kpi::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:3px;
+    background:var(--teal);
+  }
+  .kpi .num{ font-size:34pt; font-weight:700; line-height:1; letter-spacing:-0.02em; color:#fff; }
+  .kpi .num small{ font-size:13pt; font-weight:600; color:var(--teal-2); margin-left:4px; }
+  .kpi .lbl{ margin-top:0.13in; font-size:9.5pt; color:var(--muted); line-height:1.4; }
+
+  .takeaways{
+    margin-top:0.45in;
+    display:grid; grid-template-columns:repeat(3, 1fr); gap:0.28in;
+  }
+  .take{
+    border-top:2px solid var(--teal);
+    padding-top:0.16in;
+  }
+  .take .h{ font-size:10pt; font-weight:600; color:var(--teal-2); letter-spacing:.06em; text-transform:uppercase; }
+  .take .b{ margin-top:0.08in; font-size:11.5pt; line-height:1.45; color:var(--text-on-dark); font-weight:400; }
+
+  /* SLIDE 2 — before / after columns */
+  .compare{
+    display:grid; grid-template-columns:1fr 1fr; gap:0.42in;
+    margin-top:0.4in;
+  }
+  .col{
+    background:rgba(255,255,255,0.03);
+    border:1px solid rgba(255,255,255,0.07);
+    border-radius:14px;
+    padding:0.34in 0.34in 0.30in;
+  }
+  .col.gain{ background:linear-gradient(180deg, rgba(19,168,158,0.10), rgba(19,168,158,0.03)); border-color:rgba(19,168,158,0.35); }
+  .col .colhead{
+    display:flex; align-items:center; gap:0.14in;
+    font-size:10.5pt; font-weight:600; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--muted); margin-bottom:0.20in;
+  }
+  .col.gain .colhead{ color:var(--teal-2); }
+  .col .pill{ padding:3px 10px; border-radius:999px; font-size:8.5pt; font-weight:700; background:rgba(255,255,255,0.06); color:var(--text-on-dark); letter-spacing:.1em; }
+  .col.gain .pill{ background:var(--teal); color:#062018; }
+  .col ul{ list-style:none; padding:0; }
+  .col li{ position:relative; padding-left:0.25in; margin-bottom:0.16in; font-size:11.5pt; line-height:1.45; color:var(--text-on-dark); font-weight:400; }
+  .col li::before{
+    content:""; position:absolute; left:0; top:8px; width:10px; height:10px; border-radius:2px;
+    background:var(--muted);
+  }
+  .col.gain li::before{ background:var(--teal-2); transform:rotate(45deg); border-radius:0; }
+
+  /* SLIDE 3 — architecture layered */
+  .arch{
+    margin-top:0.32in;
+    display:grid; grid-template-columns:1.7fr 1fr; gap:0.40in;
+  }
+  .layers{ display:flex; flex-direction:column; gap:0.14in; }
+  .layer{
+    border-radius:12px;
+    padding:0.20in 0.26in;
+    background:rgba(255,255,255,0.04);
+    border:1px solid rgba(255,255,255,0.08);
+    display:grid; grid-template-columns:1.6in 1fr; gap:0.22in; align-items:center;
+  }
+  .layer .lh{
+    font-size:9pt; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--teal-2); font-weight:700;
+  }
+  .layer .lt{ font-size:11.5pt; color:var(--text-on-dark); line-height:1.45; }
+  .layer.l1{ border-left:3px solid #6FB8FF; }
+  .layer.l2{ border-left:3px solid #B388FF; }
+  .layer.l3{ border-left:3px solid var(--teal-2); }
+  .layer.l4{ border-left:3px solid var(--gold); }
+
+  .archside{
+    background:rgba(255,255,255,0.03);
+    border:1px solid rgba(255,255,255,0.07);
+    border-radius:14px;
+    padding:0.30in 0.28in;
+    display:flex; flex-direction:column; gap:0.18in;
+  }
+  .archside .h{ font-size:10pt; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); font-weight:600; }
+  .principle{ display:flex; gap:0.14in; align-items:flex-start; }
+  .principle .ic{
+    flex:0 0 auto; width:28px; height:28px; border-radius:8px;
+    background:rgba(19,168,158,0.15); color:var(--teal-2);
+    display:flex; align-items:center; justify-content:center; font-weight:700; font-size:11pt;
+  }
+  .principle .pt{ font-size:11pt; color:var(--text-on-dark); line-height:1.4; }
+  .principle .pt b{ color:#fff; }
+
+  /* SLIDE 4 — capability grid + workflow */
+  .capgrid{
+    display:grid; grid-template-columns:repeat(3, 1fr); gap:0.22in;
+    margin-top:0.30in;
+  }
+  .cap{
+    border-radius:12px;
+    padding:0.22in 0.24in;
+    background:#fff;
+    border:1px solid #E1E7F0;
+    box-shadow: 0 1px 0 rgba(11,37,69,0.04);
+    color:var(--text-on-light);
+  }
+  .cap .ch{
+    display:flex; align-items:center; gap:0.12in;
+    font-size:10pt; font-weight:700; letter-spacing:.04em; color:var(--ink);
+    margin-bottom:0.10in;
+  }
+  .cap .ic{
+    width:24px; height:24px; border-radius:6px; background:#E5F6F4; color:#0F8A82;
+    display:flex; align-items:center; justify-content:center; font-weight:700; font-size:10pt;
+  }
+  .cap .cb{ font-size:10pt; line-height:1.45; color:#3D506E; }
+
+  .flow{
+    margin-top:0.32in;
+    display:flex; align-items:stretch; gap:0;
+    background:#fff; border:1px solid #E1E7F0; border-radius:12px; padding:0.16in;
+  }
+  .step{
+    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:0.10in 0.06in; position:relative;
+  }
+  .step + .step::before{
+    content:""; position:absolute; left:0; top:50%; transform:translate(-50%,-50%);
+    width:18px; height:18px; border-radius:50%;
+    background: #fff;
+    border:2px solid var(--teal);
+  }
+  .step + .step::after{
+    content:""; position:absolute; left:0; top:50%; transform:translate(-50%, -50%) rotate(45deg);
+    width:7px; height:7px; border-right:2px solid var(--teal); border-top:2px solid var(--teal); margin-left:0;
+  }
+  .step .sn{ font-size:9pt; color:#5B6B86; letter-spacing:.16em; text-transform:uppercase; font-weight:600; }
+  .step .st{ margin-top:0.05in; font-size:11pt; color:var(--ink); font-weight:600; }
+
+  /* SLIDE 5 — three-col governance */
+  .triad{
+    display:grid; grid-template-columns:repeat(3, 1fr); gap:0.28in;
+    margin-top:0.40in;
+  }
+  .pillar{
+    background:rgba(255,255,255,0.03);
+    border:1px solid rgba(255,255,255,0.08);
+    border-radius:14px;
+    padding:0.32in 0.30in;
+    display:flex; flex-direction:column;
+  }
+  .pillar .ph{
+    display:flex; align-items:center; gap:0.14in;
+    font-size:10pt; letter-spacing:.16em; text-transform:uppercase; color:var(--teal-2); font-weight:700;
+    margin-bottom:0.20in;
+  }
+  .pillar .pi{
+    width:36px; height:36px; border-radius:10px;
+    background:rgba(19,168,158,0.15); color:var(--teal-2);
+    display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14pt;
+  }
+  .pillar ul{ list-style:none; padding:0; }
+  .pillar li{ position:relative; padding-left:0.22in; font-size:11pt; line-height:1.5; color:var(--text-on-dark); margin-bottom:0.10in; font-weight:400; }
+  .pillar li::before{ content:""; position:absolute; left:2px; top:8px; width:8px; height:8px; border-radius:50%; background:var(--teal); }
+
+  /* SLIDE 6 — KPIs + roadmap */
+  .impactgrid{
+    display:grid; grid-template-columns:repeat(4, 1fr); gap:0.20in;
+    margin-top:0.30in;
+  }
+  .impact{
+    background:#fff;
+    border:1px solid #E1E7F0;
+    border-radius:12px;
+    padding:0.24in 0.22in;
+    color:var(--text-on-light);
+  }
+  .impact .h{ font-size:9pt; letter-spacing:.14em; text-transform:uppercase; color:#0F8A82; font-weight:700; }
+  .impact .v{ margin-top:0.10in; font-size:22pt; font-weight:700; color:var(--ink); line-height:1.05; letter-spacing:-0.01em; }
+  .impact .b{ margin-top:0.06in; font-size:9.5pt; color:#3D506E; line-height:1.4; }
+
+  .roadmap{
+    margin-top:0.34in;
+    background:#fff; border:1px solid #E1E7F0; border-radius:14px;
+    padding:0.32in 0.30in;
+    color:var(--text-on-light);
+  }
+  .roadmap .rh{
+    font-size:10pt; letter-spacing:.18em; text-transform:uppercase; color:#5B6B86; font-weight:600;
+    margin-bottom:0.18in;
+  }
+  .timeline{ display:grid; grid-template-columns:repeat(5, 1fr); gap:0.0in; position:relative; }
+  .timeline::before{
+    content:""; position:absolute; left:0.18in; right:0.18in; top:0.20in;
+    height:2px; background:linear-gradient(90deg, var(--teal-2), var(--gold));
+    border-radius:2px;
+  }
+  .tnode{ position:relative; padding-top:0.40in; padding-right:0.16in; }
+  .tnode::before{
+    content:""; position:absolute; left:0.10in; top:0.13in;
+    width:14px; height:14px; border-radius:50%;
+    background:#fff; border:3px solid var(--teal);
+  }
+  .tnode.gold::before{ border-color:var(--gold); }
+  .tnode .stage{ font-size:9pt; letter-spacing:.16em; text-transform:uppercase; color:var(--teal); font-weight:700; }
+  .tnode.gold .stage{ color:#B58A00; }
+  .tnode .label{ margin-top:0.06in; font-size:10.5pt; line-height:1.4; color:var(--ink); font-weight:500; }
+
+  /* Title-slide-specific cover */
+  .cover{
+    padding: 1.5in 0.85in 1in;
+  }
+  .cover .meta{
+    margin-top:0.55in;
+    display:flex; gap:0.5in; color:var(--muted); font-size:10pt;
+    letter-spacing:.10em; text-transform:uppercase;
+  }
+  .cover .meta b{ color:var(--text-on-dark); font-weight:600; letter-spacing:.04em; text-transform:none; }
+
+  /* Decorative grid for cover */
+  .gridbg{
+    position:absolute; inset:0; opacity:.10; pointer-events:none;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px);
+    background-size: 60px 60px;
+    mask-image: radial-gradient(ellipse at 80% 30%, black 30%, transparent 70%);
+    -webkit-mask-image: radial-gradient(ellipse at 80% 30%, black 30%, transparent 70%);
+  }
+
+  .ribbon{
+    position:absolute; right:0.85in; top:1.1in;
+    width:4.6in; height:4.6in;
+    background:
+      conic-gradient(from 200deg at 50% 50%, rgba(19,168,158,0.25), rgba(245,197,24,0.10), rgba(19,168,158,0.25));
+    border-radius:50%;
+    filter: blur(40px);
+    opacity:.65;
+  }
+
+</style>
+</head>
+<body>
+
+<!-- ============== SLIDE 1 — EXECUTIVE SUMMARY ============== -->
+<section class="slide dark">
+  <div class="accentline"></div>
+  <div class="gridbg"></div>
+  <div class="ribbon"></div>
+
+  <div class="topbar">
+    <div class="brand"><span class="dot"></span>ProcureDesk Platform</div>
+    <div class="crumbs">Executive Briefing · Confidential</div>
+  </div>
+
+  <div class="body cover">
+    <div class="eyebrow">01 · Executive Summary</div>
+    <h1 class="title">Procurement, <span class="accent">re-engineered</span><br/>for the Group.</h1>
+    <h2 class="subtitle">A multi-tenant, audit-grade procurement command center — replacing spreadsheet-driven workflows with a governed, integrated, scalable system of record.</h2>
+
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="num">11</div>
+        <div class="lbl">Domain modules<br/>covering the full case lifecycle</div>
+      </div>
+      <div class="kpi">
+        <div class="num">6</div>
+        <div class="lbl">Tenant-isolated database<br/>schemas with row-level security</div>
+      </div>
+      <div class="kpi">
+        <div class="num">4</div>
+        <div class="lbl">Asynchronous queues<br/>imports · exports · alerts · projections</div>
+      </div>
+      <div class="kpi">
+        <div class="num">100<small>%</small></div>
+        <div class="lbl">Mutating actions written<br/>to an append-only audit trail</div>
+      </div>
+    </div>
+
+    <div class="takeaways">
+      <div class="take">
+        <div class="h">Strategic Outcome</div>
+        <div class="b">A single, governed source of truth for procurement across legal entities and departments.</div>
+      </div>
+      <div class="take">
+        <div class="h">Enterprise Readiness</div>
+        <div class="b">Production-grade controls — RLS, RBAC, CSRF, Argon2id, idempotency, append-only audit.</div>
+      </div>
+      <div class="take">
+        <div class="h">Built to Scale</div>
+        <div class="b">Stateless tier, per-queue worker scale-out, managed-DB &amp; Kubernetes path defined.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>ProcureDesk Platform — Boardroom Briefing</div>
+    <div class="pageno">01 / 06</div>
+  </div>
+</section>
+
+<!-- ============== SLIDE 2 — OPPORTUNITY ============== -->
+<section class="slide dark">
+  <div class="accentline"></div>
+
+  <div class="topbar">
+    <div class="brand"><span class="dot"></span>ProcureDesk Platform</div>
+    <div class="crumbs">02 · Opportunity</div>
+  </div>
+
+  <div class="body">
+    <div class="eyebrow">02 · Business Problem &amp; Opportunity</div>
+    <h1 class="title">From spreadsheet sprawl to a <span class="accent">procurement system of record.</span></h1>
+    <h2 class="subtitle">Procurement teams spend more time reconciling than deciding. ProcureDesk closes the governance, visibility, and accountability gaps that legacy tooling cannot.</h2>
+
+    <div class="compare">
+      <div class="col">
+        <div class="colhead"><span class="pill">Today</span> Operating reality</div>
+        <ul>
+          <li>Procurement tracked across siloed spreadsheets</li>
+          <li>No reliable audit trail; decisions hard to defend</li>
+          <li>Manual reconciliation across entities and departments</li>
+          <li>Contract &amp; RC/PO expiries surfaced too late</li>
+          <li>Cross-entity governance brittle and informal</li>
+        </ul>
+      </div>
+      <div class="col gain">
+        <div class="colhead"><span class="pill">With ProcureDesk</span> Target state</div>
+        <ul>
+          <li>Single tenant-isolated source of truth</li>
+          <li>Append-only audit on every state change</li>
+          <li>Automated imports, exports, and notifications</li>
+          <li>Forward-looking expiry projections &amp; saved views</li>
+          <li>Role- and entity-scoped access by design</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>ProcureDesk Platform — Boardroom Briefing</div>
+    <div class="pageno">02 / 06</div>
+  </div>
+</section>
+
+<!-- ============== SLIDE 3 — ARCHITECTURE ============== -->
+<section class="slide dark">
+  <div class="accentline"></div>
+
+  <div class="topbar">
+    <div class="brand"><span class="dot"></span>ProcureDesk Platform</div>
+    <div class="crumbs">03 · Architecture</div>
+  </div>
+
+  <div class="body">
+    <div class="eyebrow">03 · Solution Architecture</div>
+    <h1 class="title">Modular, asynchronous, <span class="accent">multi-tenant by design.</span></h1>
+    <h2 class="subtitle">Four cleanly separated layers — designed to scale horizontally and isolate tenants at the data tier.</h2>
+
+    <div class="arch">
+      <div class="layers">
+        <div class="layer l1">
+          <div class="lh">Experience</div>
+          <div class="lt">React 19 SPA · TanStack Router &amp; Query · role-aware UI</div>
+        </div>
+        <div class="layer l2">
+          <div class="lh">Edge</div>
+          <div class="lt">Nginx · TLS termination · rate limiting · CSRF · WAF-ready</div>
+        </div>
+        <div class="layer l3">
+          <div class="lh">Application</div>
+          <div class="lt">NestJS modular monolith (11 domains) · BullMQ worker · transactional outbox</div>
+        </div>
+        <div class="layer l4">
+          <div class="lh">Data &amp; Integration</div>
+          <div class="lt">PostgreSQL 16 with RLS · Redis 7 · Azure Blob · Microsoft Graph · Prometheus + Grafana</div>
+        </div>
+      </div>
+
+      <div class="archside">
+        <div class="h">Architectural Principles</div>
+        <div class="principle">
+          <div class="ic">A</div>
+          <div class="pt"><b>Stateless application tier.</b> Sessions in DB, counters in Redis — linear horizontal scale.</div>
+        </div>
+        <div class="principle">
+          <div class="ic">B</div>
+          <div class="pt"><b>Transactional outbox.</b> At-least-once async dispatch without distributed transactions.</div>
+        </div>
+        <div class="principle">
+          <div class="ic">C</div>
+          <div class="pt"><b>Defence in depth.</b> Service-layer checks plus Postgres row-level security as the floor.</div>
+        </div>
+        <div class="principle">
+          <div class="ic">D</div>
+          <div class="pt"><b>Forward-only schema.</b> Backward-compatible migrations enable safe rolling deploys.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>ProcureDesk Platform — Boardroom Briefing</div>
+    <div class="pageno">03 / 06</div>
+  </div>
+</section>
+
+<!-- ============== SLIDE 4 — CAPABILITIES ============== -->
+<section class="slide light">
+  <div class="accentline"></div>
+
+  <div class="topbar">
+    <div class="brand"><span class="dot" style="background:#0F8A82"></span>ProcureDesk Platform</div>
+    <div class="crumbs">04 · Capabilities</div>
+  </div>
+
+  <div class="body">
+    <div class="eyebrow">04 · Core Capabilities</div>
+    <h1 class="title">One platform — the <span class="accent">full procurement lifecycle.</span></h1>
+    <h2 class="subtitle">Six capability domains, an asynchronous backbone, and one continuous workflow from planning to renewal.</h2>
+
+    <div class="capgrid">
+      <div class="cap">
+        <div class="ch"><span class="ic">ID</span> Identity &amp; Access</div>
+        <div class="cb">Multi-tenant RBAC, entity scopes, password policy, session lifecycle.</div>
+      </div>
+      <div class="cap">
+        <div class="ch"><span class="ic">CT</span> Catalog &amp; Reference</div>
+        <div class="cb">Tender types, stage policies, completion rules, tenant choice categories.</div>
+      </div>
+      <div class="cap">
+        <div class="ch"><span class="ic">PC</span> Procurement Cases</div>
+        <div class="cb">Lifecycle, milestones, financials, delays, governed transitions.</div>
+      </div>
+      <div class="cap">
+        <div class="ch"><span class="ic">AP</span> Awards &amp; Planning</div>
+        <div class="cb">Case awards, RC/PO plans, tender-plan-to-case linkage.</div>
+      </div>
+      <div class="cap">
+        <div class="ch"><span class="ic">RP</span> Reporting</div>
+        <div class="cb">Case facts, contract-expiry projections, saved views, dashboards.</div>
+      </div>
+      <div class="cap">
+        <div class="ch"><span class="ic">AS</span> Async Backbone</div>
+        <div class="cb">Excel imports/exports, notifications, audit trail, outbox &amp; DLQ.</div>
+      </div>
+    </div>
+
+    <div class="flow">
+      <div class="step"><div class="sn">Stage 1</div><div class="st">Plan</div></div>
+      <div class="step"><div class="sn">Stage 2</div><div class="st">Case</div></div>
+      <div class="step"><div class="sn">Stage 3</div><div class="st">Approve</div></div>
+      <div class="step"><div class="sn">Stage 4</div><div class="st">Award</div></div>
+      <div class="step"><div class="sn">Stage 5</div><div class="st">Track</div></div>
+      <div class="step"><div class="sn">Stage 6</div><div class="st">Renew</div></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>ProcureDesk Platform — Boardroom Briefing</div>
+    <div class="pageno">04 / 06</div>
+  </div>
+</section>
+
+<!-- ============== SLIDE 5 — TRUST & SCALE ============== -->
+<section class="slide dark">
+  <div class="accentline"></div>
+
+  <div class="topbar">
+    <div class="brand"><span class="dot"></span>ProcureDesk Platform</div>
+    <div class="crumbs">05 · Trust &amp; Scale</div>
+  </div>
+
+  <div class="body">
+    <div class="eyebrow">05 · Security · Scalability · Integrations</div>
+    <h1 class="title">Built for trust, <span class="accent">engineered for scale.</span></h1>
+    <h2 class="subtitle">Enterprise controls baked in from day one, with a defined path from single-host launch to group-wide multi-tenant scale.</h2>
+
+    <div class="triad">
+      <div class="pillar">
+        <div class="ph"><div class="pi">S</div> Governance &amp; Security</div>
+        <ul>
+          <li>PostgreSQL row-level security per tenant</li>
+          <li>RBAC + entity scopes + access levels</li>
+          <li>Argon2id, CSRF, signed sessions, login throttle</li>
+          <li>Append-only audit · idempotency keys</li>
+          <li>CI gates: Gitleaks · pnpm audit · Trivy CVE</li>
+        </ul>
+      </div>
+      <div class="pillar">
+        <div class="ph"><div class="pi">↗</div> Scalability</div>
+        <ul>
+          <li>Stateless API — linear horizontal scale</li>
+          <li>Per-queue worker autoscaling</li>
+          <li>Read-replica + PgBouncer ready</li>
+          <li>Kubernetes target topology defined</li>
+          <li>Edge CDN / WAF path identified</li>
+        </ul>
+      </div>
+      <div class="pillar">
+        <div class="ph"><div class="pi">⬡</div> Integrations</div>
+        <ul>
+          <li>Microsoft Graph — notification email</li>
+          <li>Azure Blob — private file storage</li>
+          <li>Prometheus / Grafana — observability</li>
+          <li>GitHub Actions / GHCR — secure delivery</li>
+          <li>SSO / OIDC — extension seam</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>ProcureDesk Platform — Boardroom Briefing</div>
+    <div class="pageno">05 / 06</div>
+  </div>
+</section>
+
+<!-- ============== SLIDE 6 — IMPACT & ROADMAP ============== -->
+<section class="slide light">
+  <div class="accentline"></div>
+
+  <div class="topbar">
+    <div class="brand"><span class="dot" style="background:#0F8A82"></span>ProcureDesk Platform</div>
+    <div class="crumbs">06 · Impact &amp; Roadmap</div>
+  </div>
+
+  <div class="body">
+    <div class="eyebrow">06 · Business Impact &amp; Roadmap</div>
+    <h1 class="title">Measurable impact, a clear path to <span class="accent">group-wide scale.</span></h1>
+    <h2 class="subtitle">From production handover today, to multi-tenant rollout, Kubernetes-native operations, and AI-assisted procurement insight.</h2>
+
+    <div class="impactgrid">
+      <div class="impact">
+        <div class="h">Audit posture</div>
+        <div class="v">7&nbsp;yrs+</div>
+        <div class="b">Append-only retention supports SOX-aligned governance.</div>
+      </div>
+      <div class="impact">
+        <div class="h">Async latency</div>
+        <div class="v">&lt; 10&nbsp;s</div>
+        <div class="b">End-to-end outbox dispatch under target SLO.</div>
+      </div>
+      <div class="impact">
+        <div class="h">Release safety</div>
+        <div class="v">N-1</div>
+        <div class="b">Forward-only, backward-compatible migrations.</div>
+      </div>
+      <div class="impact">
+        <div class="h">Bulk ingest</div>
+        <div class="v">25&nbsp;MiB</div>
+        <div class="b">Per Excel job, with per-row reconciliation.</div>
+      </div>
+    </div>
+
+    <div class="roadmap">
+      <div class="rh">Phased Roadmap</div>
+      <div class="timeline">
+        <div class="tnode">
+          <div class="stage">Now</div>
+          <div class="label">Production handover · single-tenant launch</div>
+        </div>
+        <div class="tnode">
+          <div class="stage">Q + 1</div>
+          <div class="label">Multi-tenant rollout · managed Postgres + replica</div>
+        </div>
+        <div class="tnode">
+          <div class="stage">Q + 2</div>
+          <div class="label">Kubernetes HPA · per-queue workers · edge CDN / WAF</div>
+        </div>
+        <div class="tnode gold">
+          <div class="stage">Q + 3</div>
+          <div class="label">Supplier portal · e-tendering capabilities</div>
+        </div>
+        <div class="tnode gold">
+          <div class="stage">Q + 4</div>
+          <div class="label">AI-assisted catalog &amp; case insights</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>ProcureDesk Platform — Boardroom Briefing</div>
+    <div class="pageno">06 / 06</div>
+  </div>
+</section>
+
+</body>
+</html>
