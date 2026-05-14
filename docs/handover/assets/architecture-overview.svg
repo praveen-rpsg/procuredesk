@@ -1,0 +1,348 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1080" font-family="Inter, 'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FBFCFE"/>
+      <stop offset="1" stop-color="#F2F5FA"/>
+    </linearGradient>
+    <linearGradient id="exp" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#E8F1FF"/>
+      <stop offset="1" stop-color="#F4F8FF"/>
+    </linearGradient>
+    <linearGradient id="app" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F1ECFF"/>
+      <stop offset="1" stop-color="#F8F4FF"/>
+    </linearGradient>
+    <linearGradient id="dat" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#E5F7F4"/>
+      <stop offset="1" stop-color="#F1FAF8"/>
+    </linearGradient>
+    <linearGradient id="inf" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#EAEEFF"/>
+      <stop offset="1" stop-color="#F4F6FF"/>
+    </linearGradient>
+    <linearGradient id="cross" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0E2D55"/>
+      <stop offset="1" stop-color="#0B2545"/>
+    </linearGradient>
+    <linearGradient id="outc" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F0FAF8"/>
+      <stop offset="1" stop-color="#FFF8E1"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5B6B86"/>
+    </marker>
+    <filter id="card" x="-2%" y="-10%" width="104%" height="120%">
+      <feDropShadow dx="0" dy="1" stdDeviation="1.2" flood-color="#0B2545" flood-opacity="0.07"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1600" height="1080" fill="url(#bg)"/>
+
+  <!-- Title -->
+  <text x="800" y="58" text-anchor="middle" font-size="32" font-weight="700" fill="#0B2545" letter-spacing="-0.4">ProcureDesk Platform — High-Level Architecture</text>
+  <text x="800" y="92" text-anchor="middle" font-size="16" font-weight="400" fill="#5B6B86">A Secure, Scalable, Multi-Tenant Procurement Operating Platform</text>
+
+  <!-- ====================== USERS COLUMN ====================== -->
+  <g>
+    <rect x="30" y="140" width="200" height="700" rx="14" fill="#FFFFFF" stroke="#E1E7F0"/>
+    <text x="130" y="172" text-anchor="middle" font-size="13" font-weight="700" fill="#0B2545" letter-spacing="2.4">USERS</text>
+    <line x1="50" y1="186" x2="210" y2="186" stroke="#E1E7F0"/>
+
+    <g transform="translate(50,210)">
+      <rect width="160" height="120" rx="10" fill="#F7F9FC" stroke="#E1E7F0"/>
+      <circle cx="80" cy="36" r="18" fill="#0B2545"/>
+      <text x="80" y="41" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">⊞</text>
+      <text x="80" y="78" text-anchor="middle" font-size="12" font-weight="600" fill="#0B2545">Multi-Entity</text>
+      <text x="80" y="94" text-anchor="middle" font-size="12" font-weight="600" fill="#0B2545">Organisations</text>
+    </g>
+    <g transform="translate(50,350)">
+      <rect width="160" height="120" rx="10" fill="#F7F9FC" stroke="#E1E7F0"/>
+      <circle cx="80" cy="36" r="18" fill="#0B2545"/>
+      <text x="80" y="41" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">☷</text>
+      <text x="80" y="78" text-anchor="middle" font-size="12" font-weight="600" fill="#0B2545">Procurement</text>
+      <text x="80" y="94" text-anchor="middle" font-size="12" font-weight="600" fill="#0B2545">Teams</text>
+    </g>
+    <g transform="translate(50,490)">
+      <rect width="160" height="120" rx="10" fill="#F7F9FC" stroke="#E1E7F0"/>
+      <circle cx="80" cy="36" r="18" fill="#0B2545"/>
+      <text x="80" y="41" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">✓</text>
+      <text x="80" y="78" text-anchor="middle" font-size="12" font-weight="600" fill="#0B2545">Evaluators &amp;</text>
+      <text x="80" y="94" text-anchor="middle" font-size="12" font-weight="600" fill="#0B2545">Approvers</text>
+    </g>
+    <g transform="translate(50,630)">
+      <rect width="160" height="120" rx="10" fill="#F7F9FC" stroke="#E1E7F0"/>
+      <circle cx="80" cy="36" r="18" fill="#0B2545"/>
+      <text x="80" y="41" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">▲</text>
+      <text x="80" y="78" text-anchor="middle" font-size="12" font-weight="600" fill="#0B2545">Leadership &amp;</text>
+      <text x="80" y="94" text-anchor="middle" font-size="12" font-weight="600" fill="#0B2545">Executives</text>
+    </g>
+
+    <!-- arrow into Application layer -->
+    <line x1="230" y1="490" x2="270" y2="490" stroke="#5B6B86" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- ====================== INTEGRATIONS COLUMN ====================== -->
+  <g>
+    <rect x="1370" y="140" width="200" height="700" rx="14" fill="#FFFFFF" stroke="#E1E7F0"/>
+    <text x="1470" y="172" text-anchor="middle" font-size="12" font-weight="700" fill="#0B2545" letter-spacing="1.5">EXTERNAL INTEGRATIONS</text>
+    <line x1="1390" y1="186" x2="1550" y2="186" stroke="#E1E7F0"/>
+
+    <g transform="translate(1390,210)">
+      <rect width="160" height="120" rx="10" fill="#F7F9FC" stroke="#E1E7F0"/>
+      <rect x="62" y="22" width="36" height="28" rx="6" fill="#0F8A82"/>
+      <text x="80" y="42" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">M</text>
+      <text x="80" y="78" text-anchor="middle" font-size="11" font-weight="600" fill="#0B2545">Microsoft Graph</text>
+      <text x="80" y="94" text-anchor="middle" font-size="10" fill="#5B6B86">(Mail.Send)</text>
+    </g>
+    <g transform="translate(1390,350)">
+      <rect width="160" height="120" rx="10" fill="#F7F9FC" stroke="#E1E7F0"/>
+      <rect x="62" y="22" width="36" height="28" rx="6" fill="#0F8A82"/>
+      <text x="80" y="42" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">⛁</text>
+      <text x="80" y="78" text-anchor="middle" font-size="11" font-weight="600" fill="#0B2545">Azure Blob Storage</text>
+      <text x="80" y="94" text-anchor="middle" font-size="10" fill="#5B6B86">(Private Files)</text>
+    </g>
+    <g transform="translate(1390,490)">
+      <rect width="160" height="120" rx="10" fill="#F7F9FC" stroke="#E1E7F0"/>
+      <rect x="62" y="22" width="36" height="28" rx="6" fill="#0F8A82"/>
+      <text x="80" y="42" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">↑</text>
+      <text x="80" y="78" text-anchor="middle" font-size="11" font-weight="600" fill="#0B2545">Bulk Imports</text>
+      <text x="80" y="94" text-anchor="middle" font-size="10" fill="#5B6B86">(Excel .xlsx)</text>
+    </g>
+    <g transform="translate(1390,630)">
+      <rect width="160" height="120" rx="10" fill="#F7F9FC" stroke="#E1E7F0"/>
+      <rect x="62" y="22" width="36" height="28" rx="6" fill="#0F8A82"/>
+      <text x="80" y="42" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">∿</text>
+      <text x="80" y="78" text-anchor="middle" font-size="11" font-weight="600" fill="#0B2545">Prometheus + Grafana</text>
+      <text x="80" y="94" text-anchor="middle" font-size="10" fill="#5B6B86">(Observability)</text>
+    </g>
+
+    <!-- arrow into Application layer -->
+    <line x1="1370" y1="490" x2="1330" y2="490" stroke="#5B6B86" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- ====================== LAYER 1 — EXPERIENCE ====================== -->
+  <g>
+    <rect x="270" y="140" width="1060" height="120" rx="14" fill="url(#exp)" stroke="#CBD9F0" filter="url(#card)"/>
+    <rect x="270" y="140" width="40" height="120" rx="14" fill="#3B6FE0"/>
+    <text x="290" y="206" text-anchor="middle" font-size="20" font-weight="700" fill="#fff">1</text>
+    <text x="328" y="172" font-size="14" font-weight="700" fill="#0B2545" letter-spacing="2">EXPERIENCE LAYER</text>
+    <text x="328" y="192" font-size="11" fill="#5B6B86">React 19 SPA · TanStack Router &amp; Query · role-aware UI</text>
+
+    <g transform="translate(360,210)">
+      <rect width="200" height="40" rx="8" fill="#fff" stroke="#CBD9F0"/>
+      <text x="100" y="25" text-anchor="middle" font-size="12" font-weight="600" fill="#0B2545">Web Application</text>
+    </g>
+    <g transform="translate(580,210)">
+      <rect width="200" height="40" rx="8" fill="#fff" stroke="#CBD9F0"/>
+      <text x="100" y="25" text-anchor="middle" font-size="12" font-weight="600" fill="#0B2545">Dashboards &amp; Analytics</text>
+    </g>
+    <g transform="translate(800,210)">
+      <rect width="200" height="40" rx="8" fill="#fff" stroke="#CBD9F0"/>
+      <text x="100" y="25" text-anchor="middle" font-size="12" font-weight="600" fill="#0B2545">Workspaces &amp; Modules</text>
+    </g>
+    <g transform="translate(1020,210)">
+      <rect width="200" height="40" rx="8" fill="#fff" stroke="#CBD9F0"/>
+      <text x="100" y="25" text-anchor="middle" font-size="12" font-weight="600" fill="#0B2545">Notifications &amp; Alerts</text>
+    </g>
+  </g>
+
+  <!-- arrow between L1 and L2 -->
+  <line x1="800" y1="262" x2="800" y2="290" stroke="#5B6B86" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ====================== LAYER 2 — APPLICATION / SERVICES ====================== -->
+  <g>
+    <rect x="270" y="290" width="1060" height="190" rx="14" fill="url(#app)" stroke="#D9CFF5" filter="url(#card)"/>
+    <rect x="270" y="290" width="40" height="190" rx="14" fill="#7C3AED"/>
+    <text x="290" y="390" text-anchor="middle" font-size="20" font-weight="700" fill="#fff">2</text>
+    <text x="328" y="322" font-size="14" font-weight="700" fill="#0B2545" letter-spacing="2">APPLICATION / SERVICES LAYER</text>
+    <text x="328" y="342" font-size="11" fill="#5B6B86">NestJS modular monolith — 11 domains, Fastify HTTP, Zod-validated</text>
+
+    <g transform="translate(330,360)">
+      <rect width="155" height="60" rx="8" fill="#fff" stroke="#D9CFF5"/>
+      <text x="78" y="26" text-anchor="middle" font-size="11" font-weight="700" fill="#0B2545">Auth &amp; Access</text>
+      <text x="78" y="44" text-anchor="middle" font-size="10" fill="#5B6B86">Service</text>
+    </g>
+    <g transform="translate(495,360)">
+      <rect width="155" height="60" rx="8" fill="#fff" stroke="#D9CFF5"/>
+      <text x="78" y="26" text-anchor="middle" font-size="11" font-weight="700" fill="#0B2545">Procurement</text>
+      <text x="78" y="44" text-anchor="middle" font-size="10" fill="#5B6B86">Lifecycle Service</text>
+    </g>
+    <g transform="translate(660,360)">
+      <rect width="155" height="60" rx="8" fill="#fff" stroke="#D9CFF5"/>
+      <text x="78" y="26" text-anchor="middle" font-size="11" font-weight="700" fill="#0B2545">Stage &amp;</text>
+      <text x="78" y="44" text-anchor="middle" font-size="10" fill="#5B6B86">Transition Engine</text>
+    </g>
+    <g transform="translate(825,360)">
+      <rect width="155" height="60" rx="8" fill="#fff" stroke="#D9CFF5"/>
+      <text x="78" y="26" text-anchor="middle" font-size="11" font-weight="700" fill="#0B2545">Reporting &amp;</text>
+      <text x="78" y="44" text-anchor="middle" font-size="10" fill="#5B6B86">Saved Views</text>
+    </g>
+    <g transform="translate(990,360)">
+      <rect width="155" height="60" rx="8" fill="#fff" stroke="#D9CFF5"/>
+      <text x="78" y="26" text-anchor="middle" font-size="11" font-weight="700" fill="#0B2545">Import / Export</text>
+      <text x="78" y="44" text-anchor="middle" font-size="10" fill="#5B6B86">Service</text>
+    </g>
+    <g transform="translate(1155,360)">
+      <rect width="155" height="60" rx="8" fill="#fff" stroke="#D9CFF5"/>
+      <text x="78" y="26" text-anchor="middle" font-size="11" font-weight="700" fill="#0B2545">Notifications</text>
+      <text x="78" y="44" text-anchor="middle" font-size="10" fill="#5B6B86">Service</text>
+    </g>
+
+    <g transform="translate(330,435)">
+      <rect width="980" height="34" rx="17" fill="#FFFFFF" stroke="#D9CFF5"/>
+      <text x="490" y="22" text-anchor="middle" font-size="11" font-weight="700" fill="#0B2545">
+        API (NestJS + Fastify)  ·  Validation (Zod)  ·  Rate Limiting (Redis)  ·  CSRF + Helmet  ·  Idempotency-Key
+      </text>
+    </g>
+  </g>
+
+  <!-- arrow between L2 and L3 -->
+  <line x1="800" y1="482" x2="800" y2="510" stroke="#5B6B86" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ====================== LAYER 3 — DATA & PROCESSING ====================== -->
+  <g>
+    <rect x="270" y="510" width="1060" height="170" rx="14" fill="url(#dat)" stroke="#BDE5DD" filter="url(#card)"/>
+    <rect x="270" y="510" width="40" height="170" rx="14" fill="#0F8A82"/>
+    <text x="290" y="600" text-anchor="middle" font-size="20" font-weight="700" fill="#fff">3</text>
+    <text x="328" y="542" font-size="14" font-weight="700" fill="#0B2545" letter-spacing="2">DATA &amp; PROCESSING LAYER</text>
+    <text x="328" y="562" font-size="11" fill="#5B6B86">Tenant-isolated Postgres · Redis · Worker pool · Transactional Outbox + DLQ</text>
+
+    <g transform="translate(360,580)">
+      <rect width="240" height="80" rx="10" fill="#fff" stroke="#BDE5DD"/>
+      <rect x="14" y="14" width="36" height="36" rx="8" fill="#0F8A82"/>
+      <text x="32" y="38" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">PG</text>
+      <text x="62" y="32" font-size="12" font-weight="700" fill="#0B2545">PostgreSQL 16</text>
+      <text x="62" y="48" font-size="10" fill="#5B6B86">RLS · 6 schemas · audit · outbox</text>
+      <text x="62" y="62" font-size="10" fill="#5B6B86">Multi-tenant by row</text>
+    </g>
+
+    <g transform="translate(620,580)">
+      <rect width="240" height="80" rx="10" fill="#fff" stroke="#BDE5DD"/>
+      <rect x="14" y="14" width="36" height="36" rx="8" fill="#C8372D"/>
+      <text x="32" y="38" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RD</text>
+      <text x="62" y="32" font-size="12" font-weight="700" fill="#0B2545">Redis 7</text>
+      <text x="62" y="48" font-size="10" fill="#5B6B86">BullMQ queues</text>
+      <text x="62" y="62" font-size="10" fill="#5B6B86">Rate-limit counters · cache</text>
+    </g>
+
+    <g transform="translate(880,580)">
+      <rect width="240" height="80" rx="10" fill="#fff" stroke="#BDE5DD"/>
+      <rect x="14" y="14" width="36" height="36" rx="8" fill="#7C3AED"/>
+      <text x="32" y="38" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">BQ</text>
+      <text x="62" y="32" font-size="12" font-weight="700" fill="#0B2545">BullMQ Workers</text>
+      <text x="62" y="48" font-size="10" fill="#5B6B86">imports · exports · notifications</text>
+      <text x="62" y="62" font-size="10" fill="#5B6B86">reporting projections · outbox</text>
+    </g>
+
+    <!-- DLQ chip -->
+    <g transform="translate(1150,600)">
+      <rect width="150" height="44" rx="8" fill="#FFF3CC" stroke="#F0CE61"/>
+      <text x="75" y="20" text-anchor="middle" font-size="10" font-weight="700" fill="#7A5A00">OUTBOX → DLQ</text>
+      <text x="75" y="34" text-anchor="middle" font-size="9" fill="#7A5A00">at-least-once dispatch</text>
+    </g>
+
+    <line x1="600" y1="620" x2="620" y2="620" stroke="#5B6B86" stroke-width="2" marker-end="url(#arrow)"/>
+    <line x1="860" y1="620" x2="880" y2="620" stroke="#5B6B86" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- arrow between L3 and L4 -->
+  <line x1="800" y1="682" x2="800" y2="710" stroke="#5B6B86" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ====================== LAYER 4 — INFRASTRUCTURE ====================== -->
+  <g>
+    <rect x="270" y="710" width="1060" height="120" rx="14" fill="url(#inf)" stroke="#CBD0F0" filter="url(#card)"/>
+    <rect x="270" y="710" width="40" height="120" rx="14" fill="#4338CA"/>
+    <text x="290" y="776" text-anchor="middle" font-size="20" font-weight="700" fill="#fff">4</text>
+    <text x="328" y="742" font-size="14" font-weight="700" fill="#0B2545" letter-spacing="2">INFRASTRUCTURE LAYER</text>
+    <text x="328" y="762" font-size="11" fill="#5B6B86">Container orchestration · TLS edge · CI/CD delivery</text>
+
+    <g transform="translate(360,778)">
+      <rect width="180" height="40" rx="8" fill="#fff" stroke="#CBD0F0"/>
+      <text x="90" y="25" text-anchor="middle" font-size="11" font-weight="600" fill="#0B2545">Docker Containers</text>
+    </g>
+    <g transform="translate(560,778)">
+      <rect width="180" height="40" rx="8" fill="#fff" stroke="#CBD0F0"/>
+      <text x="90" y="25" text-anchor="middle" font-size="11" font-weight="600" fill="#0B2545">Compose / K8s-ready</text>
+    </g>
+    <g transform="translate(760,778)">
+      <rect width="180" height="40" rx="8" fill="#fff" stroke="#CBD0F0"/>
+      <text x="90" y="25" text-anchor="middle" font-size="11" font-weight="600" fill="#0B2545">Nginx Reverse Proxy</text>
+    </g>
+    <g transform="translate(960,778)">
+      <rect width="180" height="40" rx="8" fill="#fff" stroke="#CBD0F0"/>
+      <text x="90" y="25" text-anchor="middle" font-size="11" font-weight="600" fill="#0B2545">TLS / Let's Encrypt</text>
+    </g>
+    <g transform="translate(1160,778)">
+      <rect width="150" height="40" rx="8" fill="#fff" stroke="#CBD0F0"/>
+      <text x="75" y="25" text-anchor="middle" font-size="11" font-weight="600" fill="#0B2545">GHCR · CI/CD</text>
+    </g>
+  </g>
+
+  <!-- ====================== CROSS-CUTTING CONCERNS ====================== -->
+  <g>
+    <rect x="30" y="860" width="1540" height="86" rx="14" fill="url(#cross)"/>
+    <text x="60" y="893" font-size="11" font-weight="700" fill="#1FC5B8" letter-spacing="2">CROSS-CUTTING CONCERNS</text>
+    <text x="60" y="912" font-size="10" fill="#8FA0B8" letter-spacing="1">Enforced across every layer · audited · operationally proven</text>
+
+    <g transform="translate(280,876)">
+      <text font-size="11" font-weight="700" fill="#fff">⚿  Multi-Tenant Isolation</text>
+      <text y="18" font-size="9.5" fill="#8FA0B8">Postgres RLS · per-tenant scope</text>
+    </g>
+    <g transform="translate(530,876)">
+      <text font-size="11" font-weight="700" fill="#fff">◉  RBAC + Entity Scopes</text>
+      <text y="18" font-size="9.5" fill="#8FA0B8">Roles · permissions · access levels</text>
+    </g>
+    <g transform="translate(770,876)">
+      <text font-size="11" font-weight="700" fill="#fff">◫  Audit + Idempotency</text>
+      <text y="18" font-size="9.5" fill="#8FA0B8">Append-only · key-deduplicated writes</text>
+    </g>
+    <g transform="translate(1010,876)">
+      <text font-size="11" font-weight="700" fill="#fff">⛨  CSRF · Helmet · Argon2id</text>
+      <text y="18" font-size="9.5" fill="#8FA0B8">HTTP hardening · password hashing</text>
+    </g>
+    <g transform="translate(1280,876)">
+      <text font-size="11" font-weight="700" fill="#fff">⚷  Secrets Management</text>
+      <text y="18" font-size="9.5" fill="#8FA0B8">Boot-time validation · 0600 env</text>
+    </g>
+  </g>
+
+  <!-- ====================== OUTCOMES BAND ====================== -->
+  <g>
+    <rect x="30" y="960" width="1540" height="100" rx="14" fill="url(#outc)" stroke="#CFE7E2"/>
+    <text x="60" y="996" font-size="11" font-weight="700" fill="#0B2545" letter-spacing="2">PLATFORM OUTCOMES</text>
+
+    <g transform="translate(220,990)">
+      <circle cx="14" cy="14" r="14" fill="#0F8A82"/>
+      <text x="14" y="19" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">↔</text>
+      <text x="38" y="13" font-size="11" font-weight="700" fill="#0B2545">Scalable Horizontally</text>
+      <text x="38" y="29" font-size="9.5" fill="#5B6B86">Stateless API · per-queue worker scale</text>
+    </g>
+    <g transform="translate(490,990)">
+      <circle cx="14" cy="14" r="14" fill="#0F8A82"/>
+      <text x="14" y="19" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">⛨</text>
+      <text x="38" y="13" font-size="11" font-weight="700" fill="#0B2545">Secure by Design</text>
+      <text x="38" y="29" font-size="9.5" fill="#5B6B86">RLS · audit · CI security gates</text>
+    </g>
+    <g transform="translate(740,990)">
+      <circle cx="14" cy="14" r="14" fill="#0F8A82"/>
+      <text x="14" y="19" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">☂</text>
+      <text x="38" y="13" font-size="11" font-weight="700" fill="#0B2545">High Availability Ready</text>
+      <text x="38" y="29" font-size="9.5" fill="#5B6B86">Replica · PgBouncer · K8s path</text>
+    </g>
+    <g transform="translate(1010,990)">
+      <circle cx="14" cy="14" r="14" fill="#0F8A82"/>
+      <text x="14" y="19" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">∿</text>
+      <text x="38" y="13" font-size="11" font-weight="700" fill="#0B2545">Observable</text>
+      <text x="38" y="29" font-size="9.5" fill="#5B6B86">Prometheus · Grafana · structured logs</text>
+    </g>
+    <g transform="translate(1240,990)">
+      <circle cx="14" cy="14" r="14" fill="#F5C518"/>
+      <text x="14" y="19" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">∞</text>
+      <text x="38" y="13" font-size="11" font-weight="700" fill="#0B2545">Automated CI/CD</text>
+      <text x="38" y="29" font-size="9.5" fill="#5B6B86">Gitleaks · pnpm audit · Trivy · GHCR</text>
+    </g>
+  </g>
+
+</svg>

@@ -5,6 +5,23 @@
 
 ---
 
+## 2.0 Architecture at a Glance
+
+![ProcureDesk Platform — High-Level Architecture](./assets/architecture-overview.png)
+
+*Figure 2.0 — Canonical platform architecture. Four logical layers (Experience, Application/Services, Data & Processing, Infrastructure) bracket multi-persona user access on the left and the external integration ecosystem on the right. The lower bands summarise cross-cutting controls and platform outcomes. Detailed layer-by-layer breakdowns follow.*
+
+> **Implementation notes (mapping the diagram to code):**
+> - "API Gateway (NestJS)" is the NestJS application running on Fastify (`apps/api`); there is no separate gateway product.
+> - "BullMQ Workers" map to `apps/worker` consuming the `imports`, `exports`, `notifications`, and `reporting-projections` queues, plus the outbox dispatcher.
+> - "Import Sources (Excel/CSV)" today is Excel `.xlsx` via `exceljs`; CSV is a roadmap extension.
+> - "Monitoring & Observability" is Prometheus (`prom-client` at `/api/v1/metrics`) and Grafana (`infra/monitoring/grafana`).
+> - The diagram does not depict the **transactional outbox / DLQ pattern** explicitly — it lives inside the Data & Processing layer (`ops.outbox_events` → `ops.dead_letter_events`) and is described in §2.4.6.
+
+A **refined SVG variant** of the same architecture, with the implementation labels above already applied (NestJS + Fastify, Excel `.xlsx`, Prometheus + Grafana, explicit Outbox → DLQ chip, Idempotency-Key in the API band) is committed alongside as [`assets/architecture-overview.svg`](./assets/architecture-overview.svg) — use it where vector scaling or precise label fidelity is required (print, A3 boards, web rendering).
+
+---
+
 ## 2.1 Architecture Overview
 
 ### 2.1.1 Architectural Style

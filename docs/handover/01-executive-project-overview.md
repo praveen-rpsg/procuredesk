@@ -59,6 +59,10 @@ The backend (NestJS modular monolith) is organised into domain modules — each 
 
 ## 1.6 High-Level Architecture
 
+![ProcureDesk Platform — High-Level Architecture](./assets/architecture-overview.png)
+
+*Figure 1.1 — Layered architecture: Experience · Application & Services · Data & Processing · Infrastructure, with multi-persona access on the left and external integrations on the right. Cross-cutting controls (tenant isolation, RBAC, audit, CSRF, secrets) and platform outcomes (scalability, security, observability, CI/CD) are summarised at the foot of the diagram.*
+
 ```mermaid
 flowchart LR
     subgraph Client[Client Tier]

@@ -186,44 +186,35 @@
   }
   .col.gain li::before{ background:var(--teal-2); transform:rotate(45deg); border-radius:0; }
 
-  /* SLIDE 3 — architecture layered */
-  .arch{
-    margin-top:0.32in;
-    display:grid; grid-template-columns:1.7fr 1fr; gap:0.40in;
+  /* SLIDE 3 — architecture (image-led) */
+  .archblock{
+    margin-top:0.18in;
+    display:grid; grid-template-columns: 1fr 2.6in; gap:0.34in;
+    align-items:stretch;
   }
-  .layers{ display:flex; flex-direction:column; gap:0.14in; }
-  .layer{
-    border-radius:12px;
-    padding:0.20in 0.26in;
-    background:rgba(255,255,255,0.04);
-    border:1px solid rgba(255,255,255,0.08);
-    display:grid; grid-template-columns:1.6in 1fr; gap:0.22in; align-items:center;
+  .archimage{
+    background:#fff;
+    border:1px solid rgba(255,255,255,0.10);
+    border-radius:14px;
+    padding:0.18in;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.30), inset 0 0 0 1px rgba(255,255,255,0.04);
+    display:flex; align-items:center; justify-content:center;
   }
-  .layer .lh{
-    font-size:9pt; letter-spacing:.16em; text-transform:uppercase;
+  .archimage img{ width:100%; height:auto; display:block; border-radius:6px; }
+  .archnotes{
+    display:flex; flex-direction:column; gap:0.16in;
+  }
+  .archnotes .nh{
+    font-size:9pt; letter-spacing:.18em; text-transform:uppercase;
     color:var(--teal-2); font-weight:700;
   }
-  .layer .lt{ font-size:11.5pt; color:var(--text-on-dark); line-height:1.45; }
-  .layer.l1{ border-left:3px solid #6FB8FF; }
-  .layer.l2{ border-left:3px solid #B388FF; }
-  .layer.l3{ border-left:3px solid var(--teal-2); }
-  .layer.l4{ border-left:3px solid var(--gold); }
-
-  .archside{
-    background:rgba(255,255,255,0.03);
-    border:1px solid rgba(255,255,255,0.07);
-    border-radius:14px;
-    padding:0.30in 0.28in;
-    display:flex; flex-direction:column; gap:0.18in;
-  }
-  .archside .h{ font-size:10pt; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); font-weight:600; }
-  .principle{ display:flex; gap:0.14in; align-items:flex-start; }
+  .principle{ display:flex; gap:0.12in; align-items:flex-start; }
   .principle .ic{
-    flex:0 0 auto; width:28px; height:28px; border-radius:8px;
-    background:rgba(19,168,158,0.15); color:var(--teal-2);
-    display:flex; align-items:center; justify-content:center; font-weight:700; font-size:11pt;
+    flex:0 0 auto; width:24px; height:24px; border-radius:7px;
+    background:rgba(19,168,158,0.18); color:var(--teal-2);
+    display:flex; align-items:center; justify-content:center; font-weight:700; font-size:10pt;
   }
-  .principle .pt{ font-size:11pt; color:var(--text-on-dark); line-height:1.4; }
+  .principle .pt{ font-size:10pt; color:var(--text-on-dark); line-height:1.4; }
   .principle .pt b{ color:#fff; }
 
   /* SLIDE 4 — capability grid + workflow */
@@ -490,37 +481,20 @@
   <div class="body">
     <div class="eyebrow">03 · Solution Architecture</div>
     <h1 class="title">Modular, asynchronous, <span class="accent">multi-tenant by design.</span></h1>
-    <h2 class="subtitle">Four cleanly separated layers — designed to scale horizontally and isolate tenants at the data tier.</h2>
 
-    <div class="arch">
-      <div class="layers">
-        <div class="layer l1">
-          <div class="lh">Experience</div>
-          <div class="lt">React 19 SPA · TanStack Router &amp; Query · role-aware UI</div>
-        </div>
-        <div class="layer l2">
-          <div class="lh">Edge</div>
-          <div class="lt">Nginx · TLS termination · rate limiting · CSRF · WAF-ready</div>
-        </div>
-        <div class="layer l3">
-          <div class="lh">Application</div>
-          <div class="lt">NestJS modular monolith (11 domains) · BullMQ worker · transactional outbox</div>
-        </div>
-        <div class="layer l4">
-          <div class="lh">Data &amp; Integration</div>
-          <div class="lt">PostgreSQL 16 with RLS · Redis 7 · Azure Blob · Microsoft Graph · Prometheus + Grafana</div>
-        </div>
+    <div class="archblock">
+      <div class="archimage">
+        <img src="../assets/architecture-overview.png" alt="ProcureDesk Platform — High-Level Architecture" />
       </div>
-
-      <div class="archside">
-        <div class="h">Architectural Principles</div>
+      <div class="archnotes">
+        <div class="nh">Architectural Principles</div>
         <div class="principle">
           <div class="ic">A</div>
-          <div class="pt"><b>Stateless application tier.</b> Sessions in DB, counters in Redis — linear horizontal scale.</div>
+          <div class="pt"><b>Stateless tier.</b> Sessions in DB, counters in Redis — linear horizontal scale.</div>
         </div>
         <div class="principle">
           <div class="ic">B</div>
-          <div class="pt"><b>Transactional outbox.</b> At-least-once async dispatch without distributed transactions.</div>
+          <div class="pt"><b>Transactional outbox.</b> At-least-once async dispatch — no distributed transactions.</div>
         </div>
         <div class="principle">
           <div class="ic">C</div>
@@ -528,7 +502,11 @@
         </div>
         <div class="principle">
           <div class="ic">D</div>
-          <div class="pt"><b>Forward-only schema.</b> Backward-compatible migrations enable safe rolling deploys.</div>
+          <div class="pt"><b>Forward-only schema.</b> Backward-compatible migrations for safe rolling deploys.</div>
+        </div>
+        <div class="principle">
+          <div class="ic">E</div>
+          <div class="pt"><b>Idempotent writes.</b> Every mutating endpoint accepts an Idempotency-Key.</div>
         </div>
       </div>
     </div>
