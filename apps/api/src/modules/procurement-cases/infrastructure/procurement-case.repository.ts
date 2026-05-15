@@ -28,6 +28,7 @@ export type CaseListFilters = {
   status?: "running" | "completed";
   tenderTypeIds?: string[];
   trackStatus?: "delayed" | "off_track" | "on_track";
+  trackStatuses?: Array<"delayed" | "off_track" | "on_track">;
   valueSlab?: ValueSlabKey;
   valueSlabs?: ValueSlabKey[];
 };
@@ -1118,7 +1119,7 @@ function applyCaseListFilters(where: string[], values: unknown[], filters: CaseL
     appendOptionalBooleanFilter(where, values, filter);
   }
   appendDelayedStatusFilter(where, filters.isDelayed);
-  appendTrackStatusFilter(where, filters.trackStatus);
+  appendTrackStatusFilter(where, filters.trackStatuses ?? (filters.trackStatus ? [filters.trackStatus] : undefined));
   for (const filter of arrayFilters) {
     appendOptionalArrayFilter(where, values, filter);
   }
@@ -1141,34 +1142,35 @@ function applyCaseListFilters(where: string[], values: unknown[], filters: CaseL
 
 function appendTrackStatusFilter(
   where: string[],
-  trackStatus: CaseListFilters["trackStatus"],
+  trackStatuses: CaseListFilters["trackStatuses"],
 ): void {
-  if (!trackStatus) return;
+  if (!trackStatuses?.length) return;
 
-  if (trackStatus === "delayed") {
-    where.push(`
+  const predicates = trackStatuses.map((trackStatus) => {
+    if (trackStatus === "delayed") {
+      return `
       c.status = 'running'
       and c.tentative_completion_date is not null
       and c.tentative_completion_date < current_date
-    `);
-    return;
-  }
+    `;
+    }
 
-  if (trackStatus === "off_track") {
-    where.push(`
+    if (trackStatus === "off_track") {
+      return `
       c.status = 'running'
       and (c.tentative_completion_date is null or c.tentative_completion_date >= current_date)
       and c.desired_stage_code is not null
       and c.stage_code < c.desired_stage_code
-    `);
-    return;
-  }
+    `;
+    }
 
-  where.push(`
+    return `
     c.status = 'running'
     and (c.tentative_completion_date is null or c.tentative_completion_date >= current_date)
     and (c.desired_stage_code is null or c.stage_code >= c.desired_stage_code)
-  `);
+  `;
+  });
+  where.push(`(${predicates.map((predicate) => `(${predicate})`).join(" or ")})`);
 }
 
 function appendDelayedStatusFilter(

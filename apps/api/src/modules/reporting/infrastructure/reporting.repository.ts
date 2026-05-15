@@ -44,6 +44,7 @@ export type ReportFilters = {
   status?: "completed" | "running";
   tenderTypeIds?: string[];
   trackStatus?: "delayed" | "off_track" | "on_track";
+  trackStatuses?: Array<"delayed" | "off_track" | "on_track">;
   valueSlabs?: string[];
 };
 
@@ -1445,7 +1446,7 @@ export class ReportingRepository {
           `,
       );
     }
-    this.applyTrackStatusFilter(where, filters.trackStatus);
+    this.applyTrackStatusFilter(where, filters.trackStatuses ?? (filters.trackStatus ? [filters.trackStatus] : undefined));
     if (filters.loiAwarded !== undefined) {
       values.push(filters.loiAwarded);
       where.push(`exists (
@@ -1522,34 +1523,35 @@ export class ReportingRepository {
 
   private applyTrackStatusFilter(
     where: string[],
-    trackStatus: ReportFilters["trackStatus"],
+    trackStatuses: ReportFilters["trackStatuses"],
   ) {
-    if (!trackStatus) return;
+    if (!trackStatuses?.length) return;
 
-    if (trackStatus === "delayed") {
-      where.push(`
+    const predicates = trackStatuses.map((trackStatus) => {
+      if (trackStatus === "delayed") {
+        return `
         f.status = 'running'
         and c.tentative_completion_date is not null
         and c.tentative_completion_date < current_date
-      `);
-      return;
-    }
+      `;
+      }
 
-    if (trackStatus === "off_track") {
-      where.push(`
+      if (trackStatus === "off_track") {
+        return `
         f.status = 'running'
         and (c.tentative_completion_date is null or c.tentative_completion_date >= current_date)
         and f.desired_stage_code is not null
         and f.stage_code < f.desired_stage_code
-      `);
-      return;
-    }
+      `;
+      }
 
-    where.push(`
+      return `
       f.status = 'running'
       and (c.tentative_completion_date is null or c.tentative_completion_date >= current_date)
       and (f.desired_stage_code is null or f.stage_code >= f.desired_stage_code)
-    `);
+    `;
+    });
+    where.push(`(${predicates.map((predicate) => `(${predicate})`).join(" or ")})`);
   }
 
   private caseDeletionPredicate(filters: Pick<ReportFilters, "deletedOnly">) {

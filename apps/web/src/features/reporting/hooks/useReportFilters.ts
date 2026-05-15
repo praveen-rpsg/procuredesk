@@ -6,6 +6,7 @@ import {
   buildReportParams,
   type AmountUnit,
   type ReportStatusFilter,
+  type TrackStatusValue,
 } from "../utils/reportUtils";
 import { useDebouncedValue } from "../../../shared/hooks/useDebouncedValue";
 
@@ -36,7 +37,7 @@ export type ReportFiltersState = {
   selectedTenderTypeIds: string[];
   selectedValueSlabs: string[];
   statusFilter: ReportStatusFilter;
-  trackStatus: "all" | "delayed" | "off_track" | "on_track";
+  trackStatuses: TrackStatusValue[];
   setAmountUnit: (v: AmountUnit) => void;
   setCpcInvolved: (v: "any" | "false" | "true") => void;
   setDelayStatus: (v: "all" | "delayed" | "on_time") => void;
@@ -59,7 +60,7 @@ export type ReportFiltersState = {
   setSelectedTenderTypeIds: (v: string[]) => void;
   setSelectedValueSlabs: (v: string[]) => void;
   setStatusFilter: (v: ReportStatusFilter) => void;
-  setTrackStatus: (v: "all" | "delayed" | "off_track" | "on_track") => void;
+  setTrackStatuses: (v: TrackStatusValue[]) => void;
   clearFilters: () => void;
 };
 
@@ -86,7 +87,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
   const [selectedTenderTypeIds, setSelectedTenderTypeIds] = useState<string[]>([]);
   const [selectedValueSlabs, setSelectedValueSlabs] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<ReportStatusFilter>("all");
-  const [trackStatus, setTrackStatus] = useState<"all" | "delayed" | "off_track" | "on_track">("all");
+  const [trackStatuses, setTrackStatuses] = useState<TrackStatusValue[]>([]);
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 350);
 
   const includeStatus = reportCode === "tender_details" || reportCode === "stage_time";
@@ -131,10 +132,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
       stageCodes: includeWorkflowHealthFilters ? selectedStageCodes : [],
       status: statusFilter,
       tenderTypeIds: includeCaseWorkflowFilters ? selectedTenderTypeIds : [],
-      trackStatus:
-        includeWorkflowHealthFilters && trackStatus !== "all"
-          ? trackStatus
-          : undefined,
+      trackStatuses: includeWorkflowHealthFilters ? trackStatuses : [],
       valueSlabs: selectedValueSlabs,
     }),
     [
@@ -163,7 +161,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
       selectedTenderTypeIds,
       selectedValueSlabs,
       statusFilter,
-      trackStatus,
+      trackStatuses,
     ],
   );
 
@@ -210,7 +208,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
     setSelectedPrReceiptMonths([]);
     setSelectedCompletionMonths([]);
     setStatusFilter("all");
-    setTrackStatus("all");
+    setTrackStatuses([]);
   }
 
   return {
@@ -240,7 +238,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
     selectedTenderTypeIds,
     selectedValueSlabs,
     statusFilter,
-    trackStatus,
+    trackStatuses,
     setAmountUnit,
     setCpcInvolved,
     setDelayStatus,
@@ -263,7 +261,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
     setSelectedTenderTypeIds,
     setSelectedValueSlabs,
     setStatusFilter,
-    setTrackStatus,
+    setTrackStatuses,
     clearFilters,
   };
 }

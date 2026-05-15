@@ -136,6 +136,7 @@ export function listCases(params: {
   status?: string | undefined;
   tenderTypeIds?: string[] | undefined;
   trackStatus?: "delayed" | "off_track" | "on_track" | undefined;
+  trackStatuses?: Array<"delayed" | "off_track" | "on_track"> | undefined;
   valueSlab?: string | undefined;
   valueSlabs?: string[] | undefined;
 }) {
@@ -167,6 +168,7 @@ function setCaseListSearchParams(
   setStringParam(search, "status", params.status);
   setArrayParam(search, "tenderTypeIds", params.tenderTypeIds);
   setStringParam(search, "trackStatus", params.trackStatus);
+  setArrayParam(search, "trackStatuses", params.trackStatuses);
   setStringParam(search, "valueSlab", params.valueSlab);
   setArrayParam(search, "valueSlabs", params.valueSlabs);
 }

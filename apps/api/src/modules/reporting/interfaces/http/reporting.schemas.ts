@@ -24,6 +24,12 @@ const csvTextList = z
   .optional()
   .transform((value) => (value ? value.split(",").map((item) => item.trim()).filter(Boolean) : undefined))
   .pipe(z.array(z.string().min(1).max(32)).optional());
+const trackStatusValues = ["delayed", "off_track", "on_track"] as const;
+const csvTrackStatusList = z
+  .string()
+  .optional()
+  .transform((value) => (value ? value.split(",").filter(Boolean) : undefined))
+  .pipe(z.array(z.enum(trackStatusValues)).optional());
 const nullableDateString = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -53,7 +59,8 @@ export const ReportQuerySchema = z.object({
   stageCodes: csvIntList,
   status: z.enum(["completed", "running"]).optional(),
   tenderTypeIds: csvUuidList,
-  trackStatus: z.enum(["delayed", "off_track", "on_track"]).optional(),
+  trackStatus: z.enum(trackStatusValues).optional(),
+  trackStatuses: csvTrackStatusList,
   valueSlabs: csvTextList,
 });
 

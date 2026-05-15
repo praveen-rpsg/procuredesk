@@ -1325,7 +1325,7 @@ export function ReportsWorkspace() {
       setStageCodes: filters.setSelectedStageCodes,
       setStatusFilter: filters.setStatusFilter,
       setTenderTypeIds: filters.setSelectedTenderTypeIds,
-      setTrackStatus: filters.setTrackStatus,
+      setTrackStatuses: filters.setTrackStatuses,
       setValueSlabs: filters.setSelectedValueSlabs,
     });
     notify({ message: `Applied view: ${view.name}`, tone: "success" });
@@ -1726,6 +1726,11 @@ export function ReportsWorkspace() {
 }
 
 type ReportOption = { entityId?: string | null; label: string; value: string };
+const trackStatusFilterOptions = [
+  { label: "Delayed", value: "delayed" },
+  { label: "Off Track", value: "off_track" },
+  { label: "On Track", value: "on_track" },
+] as const;
 type RcPoExpiryDraft = {
   tenderFloatedOrNotRequired: boolean;
   tentativeTenderingDate: string | null;
@@ -2207,11 +2212,10 @@ function formatValueSlabLabel(value: string) {
   return value;
 }
 
-function trackStatusLabel(value: "all" | "delayed" | "off_track" | "on_track") {
+function trackStatusLabel(value: "delayed" | "off_track" | "on_track") {
   if (value === "delayed") return "Delayed";
   if (value === "off_track") return "Off Track";
   if (value === "on_track") return "On Track";
-  return "All";
 }
 
 function formatSavingsPercent(
@@ -3358,24 +3362,24 @@ function ReportFilterPanel({
           />
           {showTrackStatusFilter ? (
             <FormField label="Delay Indicator">
-              <Select
-                onChange={(event) =>
-                  filters.setTrackStatus(
-                    (event.target.value || "all") as
-                      | "all"
-                      | "delayed"
-                      | "off_track"
-                      | "on_track",
-                  )
-                }
-                options={[
-                  { label: "Delayed", value: "delayed" },
-                  { label: "Off Track", value: "off_track" },
-                  { label: "On Track", value: "on_track" },
-                ]}
-                placeholder="All"
-                value={filters.trackStatus === "all" ? "" : filters.trackStatus}
-              />
+              <div className="case-filter-checks">
+                {trackStatusFilterOptions.map((option) => (
+                  <Checkbox
+                    checked={filters.trackStatuses.includes(option.value)}
+                    key={option.value}
+                    label={option.label}
+                    onChange={(event) =>
+                      filters.setTrackStatuses(
+                        toggleArrayValue(
+                          filters.trackStatuses,
+                          option.value,
+                          event.target.checked,
+                        ),
+                      )
+                    }
+                  />
+                ))}
+              </div>
             </FormField>
           ) : null}
           <FormField label="Routed Through CPC">
@@ -3979,7 +3983,7 @@ function countActiveReportFilters(
     statusFilterApplies && filters.statusFilter !== "all"
       ? filters.statusFilter
       : "",
-    includeTrackStatusFilter && filters.trackStatus !== "all" ? filters.trackStatus : "",
+    ...(includeTrackStatusFilter ? filters.trackStatuses : []),
     filters.deletedOnly ? "deleted" : "",
     filters.loiAwarded !== "all" ? filters.loiAwarded : "",
     filters.cpcInvolved !== "any" ? filters.cpcInvolved : "",
@@ -4070,8 +4074,8 @@ function buildActiveReportFilterChips(
     options.statusFilterApplies && filters.statusFilter !== "all"
       ? `Status: ${filters.statusFilter}`
       : "",
-    options.includeTrackStatusFilter && filters.trackStatus !== "all"
-      ? `Delay Indicator: ${trackStatusLabel(filters.trackStatus)}`
+    options.includeTrackStatusFilter && filters.trackStatuses.length
+      ? `Delay Indicator: ${filters.trackStatuses.map(trackStatusLabel).join(", ")}`
       : "",
     filters.deletedOnly ? "Deletion Flag: deleted only" : "",
     filters.loiAwarded !== "all"
@@ -4154,6 +4158,10 @@ function labelsForSelection(
     options.map((option) => [option.value, option.label]),
   );
   return values.map((value) => `${prefix}: ${byValue.get(value) ?? value}`);
+}
+
+function toggleArrayValue<T extends string>(values: T[], value: T, checked: boolean): T[] {
+  return checked ? [...new Set([...values, value])] : values.filter((item) => item !== value);
 }
 
 function uniqueReportFilterOptions<TRow>(

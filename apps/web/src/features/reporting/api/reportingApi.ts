@@ -34,6 +34,7 @@ export type ReportQueryParams = {
   status?: "completed" | "running";
   tenderTypeIds?: string[];
   trackStatus?: "delayed" | "off_track" | "on_track";
+  trackStatuses?: Array<"delayed" | "off_track" | "on_track">;
   valueSlabs?: string[];
 };
 
@@ -391,6 +392,7 @@ function buildReportQuery(params: ReportQueryParams) {
   if (params.status) search.set("status", params.status);
   setCsvParam(search, "tenderTypeIds", params.tenderTypeIds);
   if (params.trackStatus) search.set("trackStatus", params.trackStatus);
+  setCsvParam(search, "trackStatuses", params.trackStatuses);
   setCsvParam(search, "valueSlabs", params.valueSlabs);
   const query = search.toString();
   return query ? `?${query}` : "";

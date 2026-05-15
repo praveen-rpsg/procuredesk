@@ -6,6 +6,7 @@ import type { ReportCode, ReportQueryParams, SavedReportView } from "../api/repo
 export type AmountUnit = "lakh" | "rupees";
 export type ReportViewKey = ReportCode | "analytics" | "export_jobs" | "saved_views";
 export type ReportStatusFilter = "all" | "completed" | "running";
+export type TrackStatusValue = "delayed" | "off_track" | "on_track";
 
 export function buildReportParams(input: {
   budgetTypeIds: string[];
@@ -30,7 +31,7 @@ export function buildReportParams(input: {
   stageCodes: string[];
   status: ReportStatusFilter;
   tenderTypeIds: string[];
-  trackStatus: "delayed" | "off_track" | "on_track" | undefined;
+  trackStatuses: TrackStatusValue[];
   valueSlabs: string[];
 }): ReportQueryParams {
   const params: ReportQueryParams = {};
@@ -56,7 +57,7 @@ export function buildReportParams(input: {
   assignStringArrayParam(params, "prReceiptMonths", input.prReceiptMonths);
   assignStringArrayParam(params, "completionMonths", input.completionMonths);
   assignStatusParam(params, input.includeStatus, input.status);
-  assignStringParam(params, "trackStatus", input.trackStatus ?? "");
+  assignStringArrayParam(params, "trackStatuses", input.trackStatuses);
   return params;
 }
 
@@ -83,7 +84,7 @@ export function buildReportFilterPayload(input: {
   stageCodes: string[];
   status: ReportStatusFilter;
   tenderTypeIds: string[];
-  trackStatus: "delayed" | "off_track" | "on_track" | undefined;
+  trackStatuses: TrackStatusValue[];
   valueSlabs: string[];
 }) {
   const payload: Record<string, unknown> = {};
@@ -108,7 +109,7 @@ export function buildReportFilterPayload(input: {
   assignStringArrayParam(payload, "prReceiptMonths", input.prReceiptMonths);
   assignStringArrayParam(payload, "completionMonths", input.completionMonths);
   assignStatusParam(payload, input.includeStatus, input.status);
-  assignStringParam(payload, "trackStatus", input.trackStatus ?? "");
+  assignStringArrayParam(payload, "trackStatuses", input.trackStatuses);
   assignAmountUnitParam(payload, input.amountUnit);
   return payload;
 }
@@ -237,7 +238,7 @@ export function applySavedView(
     setStageCodes: (v: string[]) => void;
     setStatusFilter: (v: ReportStatusFilter) => void;
     setTenderTypeIds: (v: string[]) => void;
-    setTrackStatus: (v: "all" | "delayed" | "off_track" | "on_track") => void;
+    setTrackStatuses: (v: TrackStatusValue[]) => void;
     setValueSlabs: (v: string[]) => void;
   },
 ) {
@@ -257,7 +258,7 @@ export function applySavedView(
   setters.setStatusFilter(toStatusFilter(typeof filters.status === "string" ? filters.status : "all"));
   setters.setDelayStatus(filters.delayStatus === "delayed" || filters.delayStatus === "on_time" ? filters.delayStatus : "all");
   setters.setDeletedOnly(filters.deletedOnly === true);
-  setters.setTrackStatus(toTrackStatus(filters.trackStatus, filters.delayStatus));
+  setters.setTrackStatuses(toTrackStatuses(filters.trackStatuses, filters.trackStatus, filters.delayStatus));
   setters.setExpiryHorizonDays(
     typeof filters.days === "number" ? String(filters.days) : "",
   );
@@ -271,18 +272,28 @@ export function applySavedView(
   }
 }
 
-function toTrackStatus(
+function toTrackStatuses(
+  trackStatuses: unknown,
   trackStatus: unknown,
   legacyDelayStatus: unknown,
-): "all" | "delayed" | "off_track" | "on_track" {
+): TrackStatusValue[] {
+  const statusSet = new Set<TrackStatusValue>();
+  if (Array.isArray(trackStatuses)) {
+    for (const item of trackStatuses) {
+      if (item === "delayed" || item === "off_track" || item === "on_track") {
+        statusSet.add(item);
+      }
+    }
+  }
+  if (statusSet.size) return [...statusSet];
   if (
     trackStatus === "delayed" ||
     trackStatus === "off_track" ||
     trackStatus === "on_track"
   ) {
-    return trackStatus;
+    return [trackStatus];
   }
-  if (legacyDelayStatus === "delayed") return "delayed";
-  if (legacyDelayStatus === "on_time") return "on_track";
-  return "all";
+  if (legacyDelayStatus === "delayed") return ["delayed"];
+  if (legacyDelayStatus === "on_time") return ["on_track"];
+  return [];
 }

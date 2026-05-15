@@ -74,6 +74,7 @@ type CaseColumnKey =
 type ValueSlabFilter = "" | "100l_200l" | "10l_25l" | "25l_50l" | "2l_5l" | "50l_100l" | "5l_10l" | "gte_200l" | "lt_2l";
 type StatusFilter = "completed" | "running";
 type TrackStatusFilter = "" | "delayed" | "off_track" | "on_track";
+type TrackStatusValue = Exclude<TrackStatusFilter, "">;
 type ValueSlabOption = Exclude<ValueSlabFilter, "">;
 type CasesSectionKey = "active" | "recovery";
 
@@ -92,6 +93,12 @@ const casesSectionPaths: Record<CasesSectionKey, string> = {
   recovery: "/cases/recovery",
 };
 
+const trackStatusFilterOptions = [
+  { label: "Delayed", value: "delayed" },
+  { label: "Off Track", value: "off_track" },
+  { label: "On Track", value: "on_track" },
+] as const;
+
 type CaseViewState = {
   budgetTypeIds: string[];
   completionFys: string[];
@@ -109,7 +116,8 @@ type CaseViewState = {
   q: string;
   statusValues: StatusFilter[];
   tenderTypeIds: string[];
-  trackStatus: TrackStatusFilter;
+  trackStatus?: TrackStatusFilter;
+  trackStatuses: TrackStatusValue[];
   valueSlabs: ValueSlabOption[];
   visibleColumnKeys: CaseColumnKey[];
 };
@@ -202,7 +210,7 @@ function CasesWorkspaceList() {
   const [savedViews, setSavedViews] = useState<SavedCaseView[]>(readSavedCaseViews);
   const [statusValues, setStatusValues] = useState<StatusFilter[]>([]);
   const [tenderTypeIds, setTenderTypeIds] = useState<string[]>([]);
-  const [trackStatus, setTrackStatus] = useState<TrackStatusFilter>("");
+  const [trackStatuses, setTrackStatuses] = useState<TrackStatusValue[]>([]);
   const [valueSlabs, setValueSlabs] = useState<ValueSlabOption[]>([]);
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<CaseColumnKey[]>(defaultVisibleColumnKeys);
   const debouncedQ = useDebouncedValue(q, 350);
@@ -245,7 +253,7 @@ function CasesWorkspaceList() {
       q: debouncedQ || undefined,
       status: selectedStatus || undefined,
       tenderTypeIds: tenderTypeIds.length ? tenderTypeIds : undefined,
-      trackStatus: trackStatus || undefined,
+      trackStatuses: trackStatuses.length ? trackStatuses : undefined,
       valueSlabs: valueSlabs.length ? valueSlabs : undefined,
     }),
     [
@@ -265,7 +273,7 @@ function CasesWorkspaceList() {
       prReceiptMonths,
       selectedStatus,
       tenderTypeIds,
-      trackStatus,
+      trackStatuses,
       valueSlabs,
     ],
   );
@@ -288,7 +296,7 @@ function CasesWorkspaceList() {
     prReceiptMonths,
     selectedStatus,
     tenderTypeIds,
-    trackStatus,
+    trackStatuses,
     valueSlabs,
   ]);
 
@@ -319,15 +327,18 @@ function CasesWorkspaceList() {
     const nextIsDelayed = toBooleanFilter(params.get("isDelayed") ?? "");
     const nextPriorityCase = toBooleanFilter(params.get("priorityCase") ?? "");
     const nextTenderTypeIds = csvParam(params.get("tenderTypeIds"));
+    const nextTrackStatuses = csvParam(params.get("trackStatuses"))
+      .map(toTrackStatusFilter)
+      .filter(Boolean) as TrackStatusValue[];
     const nextTrackStatus = toTrackStatusFilter(params.get("trackStatus") ?? "");
 
-    if (!params.has("status") && !params.has("isDelayed") && !params.has("priorityCase") && !params.has("tenderTypeIds") && !params.has("trackStatus")) return;
+    if (!params.has("status") && !params.has("isDelayed") && !params.has("priorityCase") && !params.has("tenderTypeIds") && !params.has("trackStatus") && !params.has("trackStatuses")) return;
 
     setStatusValues(nextStatus ? [nextStatus as StatusFilter] : []);
     setIsDelayed(nextIsDelayed);
     setPriorityCase(nextPriorityCase);
     setTenderTypeIds(nextTenderTypeIds);
-    setTrackStatus(nextTrackStatus || trackStatusFromLegacyDelay(nextIsDelayed));
+    setTrackStatuses(nextTrackStatuses.length ? nextTrackStatuses : toTrackStatuses(nextTrackStatus || trackStatusFromLegacyDelay(nextIsDelayed)));
     setPageCursors([""]);
   }, [location.search]);
 
@@ -394,7 +405,7 @@ function CasesWorkspaceList() {
     ...prReceiptMonths,
     ...statusValues,
     ...tenderTypeIds,
-    trackStatus,
+    ...trackStatuses,
     ...valueSlabs,
   ]);
 
@@ -420,7 +431,7 @@ function CasesWorkspaceList() {
     if (natureOfWorkIds.length) {
       chips.push({ key: "nature", label: `Nature: ${labelSelected(natureOfWorkIds, natureOfWork.map((n) => ({ label: n.label, value: n.id })))}`, onClear: () => setNatureOfWorkIds([]) });
     }
-    if (trackStatus) chips.push({ key: "trackStatus", label: `Delay Indicator: ${formatTrackStatus(trackStatus)}`, onClear: () => setTrackStatus("") });
+    if (trackStatuses.length) chips.push({ key: "trackStatuses", label: `Delay Indicator: ${trackStatuses.map(formatTrackStatus).join(", ")}`, onClear: () => setTrackStatuses([]) });
     if (priorityCase) chips.push({ key: "priority", label: priorityCase === "true" ? "Priority" : "Not Priority", onClear: () => setPriorityCase("") });
     if (cpcInvolved) chips.push({ key: "cpc", label: cpcInvolved === "true" ? "CPC: Yes" : "CPC: No", onClear: () => setCpcInvolved("") });
     if (loiAwarded) chips.push({ key: "loi", label: loiAwarded === "true" ? "LOI Awarded" : "LOI Not Awarded", onClear: () => setLoiAwarded("") });
@@ -430,7 +441,7 @@ function CasesWorkspaceList() {
     if (completionFys.length) chips.push({ key: "completionFy", label: `Comp. FY: ${completionFys.join(", ")}`, onClear: () => setCompletionFys([]) });
     if (valueSlabs.length) chips.push({ key: "valueSlab", label: `Value: ${labelSelected(valueSlabs, valueSlabOptions.filter((o) => o.value) as Array<{ label: string; value: string }> )}`, onClear: () => setValueSlabs([]) });
     return chips;
-  }, [budgetTypeIds, budgetTypes, catalog.data, completionFys, cpcInvolved, dateFrom, dateTo, departmentIds, departments.data, entityIds, entities.data, loiAwarded, natureOfWork, natureOfWorkIds, ownerUserId, ownerOptions, prReceiptMonths, priorityCase, statusValues, tenderTypeIds, trackStatus, valueSlabs]);
+  }, [budgetTypeIds, budgetTypes, catalog.data, completionFys, cpcInvolved, dateFrom, dateTo, departmentIds, departments.data, entityIds, entities.data, loiAwarded, natureOfWork, natureOfWorkIds, ownerUserId, ownerOptions, prReceiptMonths, priorityCase, statusValues, tenderTypeIds, trackStatuses, valueSlabs]);
   const caseRows = cases.data ?? [];
   const entityFilterOptions = useMemo(
     () => uniqueFilterOptions(caseRows, (row) => entityNameById.get(row.entityId) ?? row.entityId),
@@ -694,16 +705,24 @@ function CasesWorkspaceList() {
               </div>
             </FormField>
             <FormField label="Delay Indicator">
-              <Select
-                onChange={(event) => setTrackStatus(toTrackStatusFilter(event.target.value))}
-                options={[
-                  { label: "Delayed", value: "delayed" },
-                  { label: "Off Track", value: "off_track" },
-                  { label: "On Track", value: "on_track" },
-                ]}
-                placeholder="All"
-                value={trackStatus}
-              />
+              <div className="case-filter-checks">
+                {trackStatusFilterOptions.map((option) => (
+                  <Checkbox
+                    checked={trackStatuses.includes(option.value)}
+                    key={option.value}
+                    label={option.label}
+                    onChange={(event) =>
+                      setTrackStatuses(
+                        toggleArrayValue(
+                          trackStatuses,
+                          option.value,
+                          event.target.checked,
+                        ),
+                      )
+                    }
+                  />
+                ))}
+              </div>
             </FormField>
             <FormField label="Routed Through CPC">
               <Select
@@ -909,7 +928,7 @@ function CasesWorkspaceList() {
     setQ("");
     setStatusValues([]);
     setTenderTypeIds([]);
-    setTrackStatus("");
+    setTrackStatuses([]);
     setValueSlabs([]);
   }
 
@@ -931,7 +950,7 @@ function CasesWorkspaceList() {
       q,
       statusValues,
       tenderTypeIds,
-      trackStatus,
+      trackStatuses,
       valueSlabs,
       visibleColumnKeys,
     };
@@ -964,7 +983,7 @@ function CasesWorkspaceList() {
     setQ(view.state.q);
     setStatusValues(view.state.statusValues ?? []);
     setTenderTypeIds(view.state.tenderTypeIds ?? []);
-    setTrackStatus(view.state.trackStatus ?? trackStatusFromLegacyDelay(view.state.isDelayed));
+    setTrackStatuses(view.state.trackStatuses ?? toTrackStatuses(view.state.trackStatus ?? trackStatusFromLegacyDelay(view.state.isDelayed)));
     setValueSlabs(view.state.valueSlabs ?? []);
     setVisibleColumnKeys(normalizeColumnKeys(view.state.visibleColumnKeys));
   }
@@ -1105,6 +1124,10 @@ function trackStatusFromLegacyDelay(value: BooleanFilter): TrackStatusFilter {
   if (value === "true") return "delayed";
   if (value === "false") return "on_track";
   return "";
+}
+
+function toTrackStatuses(value: TrackStatusFilter): TrackStatusValue[] {
+  return value ? [value] : [];
 }
 
 function formatTrackStatus(value: TrackStatusFilter): string {
