@@ -4,6 +4,8 @@ import {
   CalendarClock,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Trash2,
   Download,
   FilePlus2,
@@ -18,6 +20,7 @@ import {
 } from "lucide-react";
 import {
   type CSSProperties,
+  type MouseEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -120,6 +123,8 @@ export function ReportsWorkspace() {
   const [rcPoExpiryDrafts, setRcPoExpiryDrafts] = useState<
     Record<string, RcPoExpiryDraft>
   >({});
+  const [rcPoPageIndex, setRcPoPageIndex] = useState(0);
+  const [rcPoPageSize, setRcPoPageSize] = useState(25);
   const [creatingCaseFromRcPo, setCreatingCaseFromRcPo] =
     useState<CreatingCaseFromRcPo | null>(null);
   const initialExportJobId = useMemo(
@@ -128,9 +133,20 @@ export function ReportsWorkspace() {
   );
 
   const filters = useReportFilters(reportCode);
+  const rcPoExpiryParams = useMemo(
+    () =>
+      reportCode === "rc_po_expiry"
+        ? {
+            ...filters.reportParams,
+            limit: rcPoPageSize + 1,
+            offset: rcPoPageIndex * rcPoPageSize,
+          }
+        : filters.reportParams,
+    [filters.reportParams, rcPoPageIndex, rcPoPageSize, reportCode],
+  );
   const data = useReportData(
     reportCode,
-    filters.reportParams,
+    rcPoExpiryParams,
     filters.analyticsParams,
   );
   const exportState = useReportExport(
@@ -226,7 +242,14 @@ export function ReportsWorkspace() {
     }
   }, [location.pathname]);
 
+  useEffect(() => {
+    setRcPoPageIndex(0);
+  }, [filters.reportParams, reportCode]);
+
   const metrics = data.analytics.data;
+  const rcPoExpiryRows = data.rcPoExpiry.data ?? [];
+  const rcPoVisibleRows = rcPoExpiryRows.slice(0, rcPoPageSize);
+  const rcPoHasNextPage = rcPoExpiryRows.length > rcPoPageSize;
   const selectedReportLabel = getReportLabel(activeReport);
   const rcPoMetadata = data.filterMetadata.data?.rcPoExpiry;
   const statusFilterApplies =
@@ -535,34 +558,44 @@ export function ReportsWorkspace() {
       {
         key: "bidders",
         header: "Bidder Participated Count",
-        render: (row) => row.biddersParticipated ?? "-",
+        render: (row) =>
+          row.status === "completed" ? (row.biddersParticipated ?? "-") : "-",
       },
       {
         key: "qualified",
         header: "Qualified Bidders Count",
-        render: (row) => row.qualifiedBidders ?? "-",
+        render: (row) =>
+          row.status === "completed" ? (row.qualifiedBidders ?? "-") : "-",
       },
       {
         key: "cycle",
         header: "Completed Cycle Time (Days)",
-        render: (row) => row.completedCycleTimeDays ?? "-",
+        render: (row) =>
+          row.status === "completed" ? (row.completedCycleTimeDays ?? "-") : "-",
       },
       {
         key: "award",
-        header: `Total Award Amt (${amountUnitLabel(filters.amountUnit)}) [All Inclusive]`,
+        header: `NFA Approved Amount (${amountUnitLabel(filters.amountUnit)}) [All Inclusive]`,
         render: (row) =>
-          formatAmount(row.totalAwardedAmount, filters.amountUnit),
+          row.status === "completed"
+            ? formatAmount(row.approvedAmount, filters.amountUnit)
+            : "-",
       },
       {
         key: "savingsPr",
         header: `Savings vs PR Value / Approved Budget (${amountUnitLabel(filters.amountUnit)}) [All Inclusive]`,
-        render: (row) => formatAmount(row.savingsWrtPr, filters.amountUnit),
+        render: (row) =>
+          row.status === "completed"
+            ? formatAmount(row.savingsWrtPr, filters.amountUnit)
+            : "-",
       },
       {
         key: "savingsEstimate",
         header: `Savings vs Estimate / Benchmark (${amountUnitLabel(filters.amountUnit)}) [All Inclusive]`,
         render: (row) =>
-          formatAmount(row.savingsWrtEstimate, filters.amountUnit),
+          row.status === "completed"
+            ? formatAmount(row.savingsWrtEstimate, filters.amountUnit)
+            : "-",
       },
       {
         key: "owner",
@@ -1642,14 +1675,31 @@ export function ReportsWorkspace() {
               />
             ) : null}
             {reportCode === "rc_po_expiry" ? (
-              <ReportTable
-                columns={rcPoColumns}
-                data={data.rcPoExpiry.data}
-                emptyMessage="No RC/PO expiry rows match the current filters."
-                error={data.rcPoExpiry.error}
-                getRowKey={(row) => row.sourceId}
-                isLoading={data.rcPoExpiry.isLoading}
-              />
+              <>
+                <ReportTable
+                  columns={rcPoColumns}
+                  data={rcPoVisibleRows}
+                  emptyMessage="No RC/PO expiry rows match the current filters."
+                  error={data.rcPoExpiry.error}
+                  getRowKey={(row) => row.sourceId}
+                  isLoading={data.rcPoExpiry.isLoading}
+                  pagination={false}
+                />
+                {!data.rcPoExpiry.isLoading && !data.rcPoExpiry.error ? (
+                  <RcPoExpiryPagination
+                    hasNextPage={rcPoHasNextPage}
+                    isDisabled={data.rcPoExpiry.isFetching}
+                    onPageChange={setRcPoPageIndex}
+                    onPageSizeChange={(nextPageSize) => {
+                      setRcPoPageSize(nextPageSize);
+                      setRcPoPageIndex(0);
+                    }}
+                    pageIndex={rcPoPageIndex}
+                    pageSize={rcPoPageSize}
+                    rowCount={rcPoVisibleRows.length}
+                  />
+                ) : null}
+              </>
             ) : null}
           </section>
         </section>
@@ -1781,6 +1831,10 @@ function TenderDetailsKpis({
       <article>
         <span>Total Tenders</span>
         <strong>{formatInteger(metrics?.totalCases ?? 0)}</strong>
+        <small>
+          {formatInteger(metrics?.runningCases ?? 0)} running /{" "}
+          {formatInteger(metrics?.completedCases ?? 0)} completed
+        </small>
       </article>
       <article>
         <span>
@@ -1804,7 +1858,7 @@ function TenderDetailsKpis({
         </span>
         <strong>{formatAmount(metrics?.savingsWrtPr ?? 0, amountUnit)}</strong>
         <small>
-          {formatSavingsPercent(metrics?.savingsWrtPr, metrics?.totalPrValue)}
+          {formatSavingsPercent(metrics?.savingsWrtPr, metrics?.completedPrValue)}
         </small>
       </article>
       <article className="report-tender-kpi-positive">
@@ -1818,7 +1872,7 @@ function TenderDetailsKpis({
         <small>
           {formatSavingsPercent(
             metrics?.savingsWrtEstimate,
-            metrics?.totalEstimateBenchmark,
+            metrics?.completedEstimateBenchmark,
           )}
         </small>
       </article>
@@ -1874,6 +1928,7 @@ function ReportAnalyticsDashboard({
   );
   const tenderTypeRows = (metrics?.byTenderType ?? []).map((row) => ({
     amount: row.totalAwardedAmount,
+    id: row.tenderTypeId,
     label: row.tenderTypeName,
     secondaryValue: row.delayedCount,
     tertiaryValue: row.offTrackCount,
@@ -1883,8 +1938,8 @@ function ReportAnalyticsDashboard({
   const completedRatio = metrics?.totalCases
     ? Math.round(((metrics.completedCases ?? 0) / metrics.totalCases) * 100)
     : 0;
-  const delayedRatio = metrics?.totalCases
-    ? Math.round(((metrics.delayedCases ?? 0) / metrics.totalCases) * 100)
+  const delayedRatio = metrics?.runningCases
+    ? Math.round(((metrics.delayedCases ?? 0) / metrics.runningCases) * 100)
     : 0;
   const offTrackRatio = metrics?.runningCases
     ? Math.round(((metrics.offTrackCases ?? 0) / metrics.runningCases) * 100)
@@ -1895,9 +1950,21 @@ function ReportAnalyticsDashboard({
   const kpiTiles = [
     {
       label: "Tenders Count",
-      meta: "",
+      meta: `${formatInteger(metrics?.runningCases ?? 0)} running / ${formatInteger(metrics?.completedCases ?? 0)} completed`,
       tone: "neutral",
       value: formatInteger(metrics?.totalCases ?? 0),
+    },
+    {
+      label: "Running Tender Count",
+      meta: "",
+      tone: "warning",
+      value: formatInteger(metrics?.runningCases ?? 0),
+    },
+    {
+      label: "Completed Tender Count",
+      meta: "",
+      tone: "success",
+      value: formatInteger(metrics?.completedCases ?? 0),
     },
     {
       label: `Tender Value (${amountUnitLabel(amountUnit)}) [All Inclusive]`,
@@ -1913,7 +1980,7 @@ function ReportAnalyticsDashboard({
     },
     {
       label: `Savings wrt PR Value/Approved Budget (${amountUnitLabel(amountUnit)}) [All Inclusive]`,
-      meta: formatSavingsPercent(metrics?.savingsWrtPr, metrics?.totalPrValue),
+      meta: formatSavingsPercent(metrics?.savingsWrtPr, metrics?.completedPrValue),
       tone: "success",
       value: formatAmount(metrics?.savingsWrtPr ?? 0, amountUnit),
     },
@@ -1921,7 +1988,7 @@ function ReportAnalyticsDashboard({
       label: `Savings wrt Estimate/Benchmark (${amountUnitLabel(amountUnit)}) [All Inclusive]`,
       meta: formatSavingsPercent(
         metrics?.savingsWrtEstimate,
-        metrics?.totalEstimateBenchmark,
+        metrics?.completedEstimateBenchmark,
       ),
       tone: "success",
       value: formatAmount(metrics?.savingsWrtEstimate ?? 0, amountUnit),
@@ -1943,6 +2010,12 @@ function ReportAnalyticsDashboard({
       meta: metrics?.completedCases != null ? `${metrics.completedCases} completed` : "",
       tone: delayedRatio > 0 ? "danger" : "success",
       value: formatNullableDecimal(metrics?.averageCycleTimeDays),
+    },
+    {
+      label: "Avg Running Tender Cycle Time (Days)",
+      meta: metrics?.runningCases != null ? `${metrics.runningCases} running` : "",
+      tone: "warning",
+      value: formatNullableDecimal(metrics?.averageRunningCycleTimeDays),
     },
   ];
   const filterLabel = activeFilterCount
@@ -2041,7 +2114,17 @@ function ReportAnalyticsDashboard({
         />
         <ReportTenderTypeStackedChart
           rows={tenderTypeRows}
-          amountUnit={amountUnit}
+          onTenderTypeClick={(tenderTypeId) => {
+            const params = new URLSearchParams();
+            params.set("tenderTypeIds", tenderTypeId);
+            navigateToAppPath(`/cases?${params.toString()}`);
+          }}
+          onTenderTypeStatusClick={(tenderTypeId, trackStatus) => {
+            const params = new URLSearchParams();
+            params.set("tenderTypeIds", tenderTypeId);
+            params.set("trackStatus", trackStatus);
+            navigateToAppPath(`/cases?${params.toString()}`);
+          }}
         />
       </section>
 
@@ -2470,12 +2553,18 @@ function ReportDepartmentNatureStackedBar({
 }
 
 function ReportTenderTypeStackedChart({
-  amountUnit,
+  onTenderTypeClick,
+  onTenderTypeStatusClick,
   rows,
 }: {
-  amountUnit: AmountUnit;
+  onTenderTypeClick?: (tenderTypeId: string) => void;
+  onTenderTypeStatusClick?: (
+    tenderTypeId: string,
+    trackStatus: "delayed" | "off_track" | "on_track",
+  ) => void;
   rows: Array<{
     amount: number;
+    id: string | null;
     label: string;
     secondaryValue: number;
     tertiaryValue?: number;
@@ -2542,8 +2631,32 @@ function ReportTenderTypeStackedChart({
               row.value > 0 ? (offTrack / row.value) * 100 : 0;
             const delayedShare =
               row.value > 0 ? (delayed / row.value) * 100 : 0;
+            const canDrillDown = Boolean(row.id && onTenderTypeClick);
+            const drillIntoStatus = (
+              event: MouseEvent<HTMLSpanElement>,
+              trackStatus: "delayed" | "off_track" | "on_track",
+            ) => {
+              event.stopPropagation();
+              if (row.id) onTenderTypeStatusClick?.(row.id, trackStatus);
+            };
             return (
-              <div className="report-tender-type-bar-item" key={row.label}>
+              <div
+                className="report-tender-type-bar-item"
+                key={row.label}
+                onClick={() => {
+                  if (row.id) onTenderTypeClick?.(row.id);
+                }}
+                onKeyDown={(event) => {
+                  if (!canDrillDown) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    if (row.id) onTenderTypeClick?.(row.id);
+                  }
+                }}
+                role={canDrillDown ? "button" : undefined}
+                tabIndex={canDrillDown ? 0 : undefined}
+                title={canDrillDown ? `Open ${row.label} cases` : undefined}
+              >
                 <div className="report-tender-type-bar-value">{row.value}</div>
                 <div
                   aria-label={`${row.label}: ${row.value} cases, ${delayed} delayed, ${offTrack} off track, ${onTrack} on track`}
@@ -2559,13 +2672,25 @@ function ReportTenderTypeStackedChart({
                   }
                 >
                   {onTrack > 0 ? (
-                    <span className="report-tender-type-bar-on-track" />
+                    <span
+                      className="report-tender-type-bar-on-track"
+                      onClick={(event) => drillIntoStatus(event, "on_track")}
+                      title={`Open ${row.label} on-track cases`}
+                    />
                   ) : null}
                   {offTrack > 0 ? (
-                    <span className="report-tender-type-bar-off-track" />
+                    <span
+                      className="report-tender-type-bar-off-track"
+                      onClick={(event) => drillIntoStatus(event, "off_track")}
+                      title={`Open ${row.label} off-track cases`}
+                    />
                   ) : null}
                   {delayed > 0 ? (
-                    <span className="report-tender-type-bar-delayed" />
+                    <span
+                      className="report-tender-type-bar-delayed"
+                      onClick={(event) => drillIntoStatus(event, "delayed")}
+                      title={`Open ${row.label} delayed cases`}
+                    />
                   ) : null}
                 </div>
                 <div className="report-tender-type-x-label">
@@ -2578,64 +2703,6 @@ function ReportTenderTypeStackedChart({
         </div>
       </div>
       <div className="report-tender-type-x-title">Tender type</div>
-      <ReportTenderTypeDrilldownTable
-        amountUnit={amountUnit}
-        rows={sortedRows}
-        total={total}
-      />
-    </div>
-  );
-}
-
-function ReportTenderTypeDrilldownTable({
-  amountUnit,
-  rows,
-  total,
-}: {
-  amountUnit: AmountUnit;
-  rows: Array<{
-    amount: number;
-    label: string;
-    secondaryValue: number;
-    tertiaryValue?: number;
-    value: number;
-  }>;
-  total: number;
-}) {
-  return (
-    <div className="report-tender-type-drilldown">
-      <table>
-        <thead>
-          <tr>
-            <th>Tender Type</th>
-            <th>Total</th>
-            <th>On-Track</th>
-            <th>Off-Track</th>
-            <th>Delayed</th>
-            <th>Awarded Value</th>
-            <th>Share</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const delayed = Math.min(row.secondaryValue, row.value);
-            const offTrack = Math.min(row.tertiaryValue ?? 0, Math.max(row.value - delayed, 0));
-            const onTrack = Math.max(row.value - delayed - offTrack, 0);
-            const share = total > 0 ? (row.value / total) * 100 : 0;
-            return (
-              <tr key={row.label}>
-                <td>{row.label}</td>
-                <td>{row.value}</td>
-                <td><span className="report-status-pill report-status-pill-success">{onTrack}</span></td>
-                <td><span className="report-status-pill report-status-pill-warning">{offTrack}</span></td>
-                <td><span className="report-status-pill report-status-pill-danger">{delayed}</span></td>
-                <td>{formatAmount(row.amount, amountUnit)}</td>
-                <td>{share.toFixed(1)}%</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
     </div>
   );
 }
@@ -3745,6 +3812,70 @@ function ReportMultiSelectFilter({
   );
 }
 
+function RcPoExpiryPagination({
+  hasNextPage,
+  isDisabled,
+  onPageChange,
+  onPageSizeChange,
+  pageIndex,
+  pageSize,
+  rowCount,
+}: {
+  hasNextPage: boolean;
+  isDisabled: boolean;
+  onPageChange: (updater: (current: number) => number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+  pageIndex: number;
+  pageSize: number;
+  rowCount: number;
+}) {
+  const rangeStart = rowCount === 0 ? 0 : pageIndex * pageSize + 1;
+  const rangeEnd = pageIndex * pageSize + rowCount;
+
+  return (
+    <div className="pagination-bar table-pagination-bar">
+      <span className="pagination-info">
+        Showing {rangeStart} - {rangeEnd}
+      </span>
+      <label className="pagination-size-control">
+        Rows
+        <select
+          aria-label="Rows per page"
+          onChange={(event) => onPageSizeChange(Number(event.target.value))}
+          value={pageSize}
+        >
+          {[25, 50].map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <Button
+        aria-label="Previous page"
+        disabled={isDisabled || pageIndex === 0}
+        onClick={() => onPageChange((current) => Math.max(0, current - 1))}
+        size="sm"
+        variant="secondary"
+      >
+        <ChevronLeft aria-hidden="true" size={15} />
+        Previous
+      </Button>
+      <span className="pagination-page-pill">Page {pageIndex + 1}</span>
+      <Button
+        aria-label="Next page"
+        disabled={isDisabled || !hasNextPage}
+        onClick={() => onPageChange((current) => current + 1)}
+        size="sm"
+        variant="secondary"
+      >
+        Next
+        <ChevronRight aria-hidden="true" size={15} />
+      </Button>
+    </div>
+  );
+}
+
 function ReportTable<TRow>({
   columns,
   data,
@@ -3752,6 +3883,7 @@ function ReportTable<TRow>({
   error,
   getRowKey,
   isLoading,
+  pagination = true,
 }: {
   columns: VirtualTableColumn<TRow>[];
   data: TRow[] | undefined;
@@ -3759,6 +3891,7 @@ function ReportTable<TRow>({
   error: Error | null;
   getRowKey: (row: TRow) => string;
   isLoading: boolean;
+  pagination?: boolean;
 }) {
   const rows = data ?? [];
 
@@ -3787,6 +3920,7 @@ function ReportTable<TRow>({
         emptyMessage={emptyMessage}
         getRowKey={getRowKey}
         maxHeight={520}
+        pagination={pagination}
         rowHeight={48}
         rows={rows}
       />

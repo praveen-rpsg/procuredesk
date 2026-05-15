@@ -35,6 +35,7 @@ export type ReportFilters = {
   limit?: number;
   loiAwarded?: boolean;
   natureOfWorkIds?: string[];
+  offset?: number;
   ownerUserIds?: string[];
   prReceiptMonths?: string[];
   priorityCase?: boolean;
@@ -303,11 +304,14 @@ export class ReportingRepository {
           )::text as on_track_cases,
           coalesce(sum(f.pr_value), 0)::text as total_pr_value,
           coalesce(sum(f.estimate_benchmark), 0)::text as total_estimate_benchmark,
-          coalesce(sum(f.approved_amount), 0)::text as total_approved_amount,
+          coalesce(sum(f.pr_value) filter (where f.status = 'completed'), 0)::text as completed_pr_value,
+          coalesce(sum(f.estimate_benchmark) filter (where f.status = 'completed'), 0)::text as completed_estimate_benchmark,
+          coalesce(sum(f.approved_amount) filter (where f.status = 'completed'), 0)::text as total_approved_amount,
           coalesce(sum(f.total_awarded_amount), 0)::text as total_awarded_amount,
-          coalesce(sum(f.savings_wrt_pr), 0)::text as savings_wrt_pr,
-          coalesce(sum(f.savings_wrt_estimate), 0)::text as savings_wrt_estimate,
-          avg(coalesce(f.completed_age_days, f.running_age_days))::text as average_cycle_time_days
+          coalesce(sum(f.savings_wrt_pr) filter (where f.status = 'completed'), 0)::text as savings_wrt_pr,
+          coalesce(sum(f.savings_wrt_estimate) filter (where f.status = 'completed'), 0)::text as savings_wrt_estimate,
+          (avg(f.completed_age_days) filter (where f.status = 'completed'))::text as average_cycle_time_days,
+          (avg(f.running_age_days) filter (where f.status = 'running'))::text as average_running_cycle_time_days
         from reporting.case_facts f
         join procurement.cases c on c.id = f.case_id and c.tenant_id = f.tenant_id and ${caseDeletionPredicate}
         where ${where.join(" and ")}
@@ -394,12 +398,23 @@ export class ReportingRepository {
     const bidderRow = await this.db.one<QueryResultRow & AnalyticsBidderRow>(
       `
         select
-          avg(m.bidders_participated)::text as average_bidders_participated,
-          avg(m.qualified_bidders)::text as average_qualified_bidders,
-          count(*) filter (where m.bidders_participated is not null)::text as bidder_case_count
+          (avg(m.bidders_participated) filter (
+            where f.status = 'completed'
+              and lower(coalesce(tt.name, '')) in ('open', 'limited')
+          ))::text as average_bidders_participated,
+          (avg(m.qualified_bidders) filter (
+            where f.status = 'completed'
+              and lower(coalesce(tt.name, '')) in ('open', 'limited')
+          ))::text as average_qualified_bidders,
+          count(*) filter (
+            where f.status = 'completed'
+              and lower(coalesce(tt.name, '')) in ('open', 'limited')
+              and m.bidders_participated is not null
+          )::text as bidder_case_count
         from reporting.case_facts f
         join procurement.cases c on c.id = f.case_id and c.tenant_id = f.tenant_id and ${caseDeletionPredicate}
         left join procurement.case_milestones m on m.case_id = f.case_id and m.tenant_id = f.tenant_id
+        left join catalog.tender_types tt on tt.id = f.tender_type_id and tt.tenant_id = f.tenant_id
         where ${where.join(" and ")}
       `,
       values,
@@ -758,6 +773,8 @@ export class ReportingRepository {
     ]);
     values.push(input.filters.limit ?? 50);
     const limitPosition = values.length;
+    values.push(input.filters.offset ?? 0);
+    const offsetPosition = values.length;
 
     const result = await this.db.query<QueryResultRow & ContractExpiryRow>(
       `
@@ -809,6 +826,7 @@ export class ReportingRepository {
         group by filtered.report_group_key
         order by min(filtered.rc_po_validity_date) asc
         limit $${limitPosition}
+        offset $${offsetPosition}
       `,
       values,
     );
@@ -1702,6 +1720,7 @@ export class ReportingRepository {
       averageBiddersParticipated: this.numberOrNull(nullable(rowValue(bidderRow, "average_bidders_participated"))),
       averageCycleTimeDays: this.numberOrNull(nullable(rowValue(row, "average_cycle_time_days"))),
       averageQualifiedBidders: this.numberOrNull(nullable(rowValue(bidderRow, "average_qualified_bidders"))),
+      averageRunningCycleTimeDays: this.numberOrNull(nullable(rowValue(row, "average_running_cycle_time_days"))),
       bidderCaseCount: Number(rowValue(bidderRow, "bidder_case_count", "0")),
       byDepartmentNatureOfWork: departmentNatureRows.map(mapAnalyticsDepartmentNatureRow),
       byEntity: entityRows.map(mapAnalyticsEntityRow),
@@ -1711,6 +1730,8 @@ export class ReportingRepository {
       offTrackCases: Number(rowValue(row, "off_track_cases", "0")),
       onTrackCases: Number(rowValue(row, "on_track_cases", "0")),
       runningCases: Number(rowValue(row, "running_cases", "0")),
+      completedEstimateBenchmark: Number(rowValue(row, "completed_estimate_benchmark", "0")),
+      completedPrValue: Number(rowValue(row, "completed_pr_value", "0")),
       savingsWrtEstimate: Number(rowValue(row, "savings_wrt_estimate", "0")),
       savingsWrtPr: Number(rowValue(row, "savings_wrt_pr", "0")),
       totalApprovedAmount: Number(rowValue(row, "total_approved_amount", "0")),
@@ -1781,7 +1802,10 @@ function mapAnalyticsTenderTypeRow(row: AnalyticsTenderTypeRow) {
 
 type AnalyticsRow = {
   average_cycle_time_days: string | null;
+  average_running_cycle_time_days: string | null;
   completed_cases: string;
+  completed_estimate_benchmark: string;
+  completed_pr_value: string;
   delayed_cases: string;
   off_track_cases: string;
   on_track_cases: string;

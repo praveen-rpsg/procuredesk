@@ -211,7 +211,14 @@ export function ImportExportWorkspace() {
         tone: "danger",
       });
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
+      if (!result.committed) {
+        notify({
+          message: "Import was not committed. Review the staged rows and try again.",
+          tone: "danger",
+        });
+        return;
+      }
       await queryClient.invalidateQueries({ queryKey: ["import-jobs"] });
       notify({ message: "Import committed.", tone: "success" });
     },

@@ -45,6 +45,7 @@ export const ReportQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
   loiAwarded: z.enum(["true", "false"]).optional().transform((value) => value === undefined ? undefined : value === "true"),
   natureOfWorkIds: csvUuidList,
+  offset: z.coerce.number().int().min(0).max(100000).optional(),
   ownerUserIds: csvUuidList,
   prReceiptMonths: csvTextList,
   priorityCase: z.enum(["true", "false"]).optional().transform((value) => value === undefined ? undefined : value === "true"),

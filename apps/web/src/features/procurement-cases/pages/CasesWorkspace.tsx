@@ -318,13 +318,15 @@ function CasesWorkspaceList() {
     const nextStatus = toStatusFilter(params.get("status"));
     const nextIsDelayed = toBooleanFilter(params.get("isDelayed") ?? "");
     const nextPriorityCase = toBooleanFilter(params.get("priorityCase") ?? "");
+    const nextTenderTypeIds = csvParam(params.get("tenderTypeIds"));
     const nextTrackStatus = toTrackStatusFilter(params.get("trackStatus") ?? "");
 
-    if (!params.has("status") && !params.has("isDelayed") && !params.has("priorityCase") && !params.has("trackStatus")) return;
+    if (!params.has("status") && !params.has("isDelayed") && !params.has("priorityCase") && !params.has("tenderTypeIds") && !params.has("trackStatus")) return;
 
     setStatusValues(nextStatus ? [nextStatus as StatusFilter] : []);
     setIsDelayed(nextIsDelayed);
     setPriorityCase(nextPriorityCase);
+    setTenderTypeIds(nextTenderTypeIds);
     setTrackStatus(nextTrackStatus || trackStatusFromLegacyDelay(nextIsDelayed));
     setPageCursors([""]);
   }, [location.search]);
@@ -1081,6 +1083,12 @@ function booleanFilter(value: BooleanFilter) {
 
 function toBooleanFilter(value: string): BooleanFilter {
   return value === "true" || value === "false" ? value : "";
+}
+
+function csvParam(value: string | null): string[] {
+  return value
+    ? value.split(",").map((item) => item.trim()).filter(Boolean)
+    : [];
 }
 
 function toStatusFilter(value: string | null): string {

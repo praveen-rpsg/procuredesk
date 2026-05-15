@@ -442,7 +442,14 @@ export class ImportExportRepository {
             on nowv.tenant_id = $1
            and lower(nowv.label) = lower(r.normalized_payload->>'natureOfWork')
            and nowv.deleted_at is null
-           and nowv.category_id = (select id from catalog.reference_categories where code = 'nature_of_work')
+           and exists (
+             select 1
+             from catalog.reference_categories rc
+             where rc.id = nowv.category_id
+               and rc.code = 'nature_of_work'
+               and (rc.tenant_id = $1 or rc.tenant_id is null)
+               and rc.deleted_at is null
+           )
           where r.import_job_id = $2
             and r.status = 'accepted'
           returning
@@ -519,7 +526,14 @@ export class ImportExportRepository {
             on nowv.tenant_id = $1
            and lower(nowv.label) = lower(r.normalized_payload->>'natureOfWork')
            and nowv.deleted_at is null
-           and nowv.category_id = (select id from catalog.reference_categories where code = 'nature_of_work')
+           and exists (
+             select 1
+             from catalog.reference_categories rc
+             where rc.id = nowv.category_id
+               and rc.code = 'nature_of_work'
+               and (rc.tenant_id = $1 or rc.tenant_id is null)
+               and rc.deleted_at is null
+           )
           where r.import_job_id = $2
             and r.status = 'accepted'
             and coalesce(r.normalized_payload->>'importAction', '') <> 'existing'
@@ -966,17 +980,38 @@ export class ImportExportRepository {
             on prm.tenant_id = $1
            and lower(prm.label) = lower(n.pr_receiving_medium)
            and prm.deleted_at is null
-           and prm.category_id = (select id from catalog.reference_categories where code = 'pr_receiving_medium')
+           and exists (
+             select 1
+             from catalog.reference_categories rc
+             where rc.id = prm.category_id
+               and rc.code = 'pr_receiving_medium'
+               and (rc.tenant_id = $1 or rc.tenant_id is null)
+               and rc.deleted_at is null
+           )
           left join catalog.reference_values btv
             on btv.tenant_id = $1
            and lower(btv.label) = lower(n.budget_type)
            and btv.deleted_at is null
-           and btv.category_id = (select id from catalog.reference_categories where code = 'budget_type')
+           and exists (
+             select 1
+             from catalog.reference_categories rc
+             where rc.id = btv.category_id
+               and rc.code = 'budget_type'
+               and (rc.tenant_id = $1 or rc.tenant_id is null)
+               and rc.deleted_at is null
+           )
           left join catalog.reference_values nowv
             on nowv.tenant_id = $1
            and lower(nowv.label) = lower(n.nature_of_work)
            and nowv.deleted_at is null
-           and nowv.category_id = (select id from catalog.reference_categories where code = 'nature_of_work')
+           and exists (
+             select 1
+             from catalog.reference_categories rc
+             where rc.id = nowv.category_id
+               and rc.code = 'nature_of_work'
+               and (rc.tenant_id = $1 or rc.tenant_id is null)
+               and rc.deleted_at is null
+           )
           left join iam.users u
             on u.tenant_id = $1
            and (lower(u.username) = lower(n.owner_username) or lower(u.email) = lower(n.owner_username))

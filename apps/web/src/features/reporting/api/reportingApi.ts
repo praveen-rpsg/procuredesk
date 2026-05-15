@@ -25,6 +25,7 @@ export type ReportQueryParams = {
   limit?: number;
   loiAwarded?: boolean;
   natureOfWorkIds?: string[];
+  offset?: number;
   ownerUserIds?: string[];
   prReceiptMonths?: string[];
   priorityCase?: boolean;
@@ -40,6 +41,7 @@ export type ReportingAnalytics = {
   averageBiddersParticipated: number | null;
   averageCycleTimeDays: number | null;
   averageQualifiedBidders: number | null;
+  averageRunningCycleTimeDays: number | null;
   bidderCaseCount: number;
   byDepartmentNatureOfWork: Array<{
     caseCount: number;
@@ -67,6 +69,8 @@ export type ReportingAnalytics = {
     totalAwardedAmount: number;
   }>;
   completedCases: number;
+  completedEstimateBenchmark: number;
+  completedPrValue: number;
   delayedCases: number;
   offTrackCases: number;
   onTrackCases: number;
@@ -378,6 +382,7 @@ function buildReportQuery(params: ReportQueryParams) {
   if (params.limit != null) search.set("limit", String(params.limit));
   setBooleanParam(search, "loiAwarded", params.loiAwarded);
   setCsvParam(search, "natureOfWorkIds", params.natureOfWorkIds);
+  if (params.offset != null) search.set("offset", String(params.offset));
   setCsvParam(search, "ownerUserIds", params.ownerUserIds);
   setCsvParam(search, "prReceiptMonths", params.prReceiptMonths);
   setBooleanParam(search, "priorityCase", params.priorityCase);
