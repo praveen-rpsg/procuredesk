@@ -1082,6 +1082,7 @@ function validateOldContract(
 ): void {
   validateDepartment(errors, payload.departmentName, entityId, departments);
   validateOwner(errors, payload.ownerUsername, entityId, users);
+  validateRcPoNatureOfWork(errors, payload.natureOfWork);
   validateRequiredText(
     errors,
     payload.tenderDescription,
@@ -1125,6 +1126,7 @@ function validateRcPoPlan(
   seenContracts: Set<string>,
 ): void {
   validateDepartment(errors, payload.departmentName, entityId, departments);
+  validateRcPoNatureOfWork(errors, payload.natureOfWork);
   validateRequiredText(
     errors,
     payload.tenderDescription,
@@ -1156,6 +1158,13 @@ function validateRcPoPlan(
       errors.push("Duplicate RC/PO plan exists within this import file.");
     seenContracts.add(key);
     if (existingOldContracts.has(key)) payload.importAction = "existing";
+  }
+}
+
+function validateRcPoNatureOfWork(errors: string[], value: unknown): void {
+  if (!hasValue(value)) return;
+  if (!["supply", "service", "composite"].includes(textValue(value).toLowerCase())) {
+    errors.push("Nature of Work must be Supply, Service, or Composite.");
   }
 }
 

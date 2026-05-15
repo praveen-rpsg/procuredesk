@@ -551,7 +551,7 @@ export class PlanningRepository {
           p.department_id,
           coalesce(p.owner_user_id, c.owner_user_id),
           c.budget_type_id,
-          c.nature_of_work_id,
+          coalesce(p.nature_of_work_id, c.nature_of_work_id),
           p.tender_description,
           p.awarded_vendors,
           p.rc_po_amount,

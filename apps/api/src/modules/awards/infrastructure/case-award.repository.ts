@@ -329,7 +329,13 @@ export class CaseAwardRepository {
           c.status,
           c.stage_code,
           c.desired_stage_code,
-          c.is_delayed,
+          case
+            when c.status = 'running'
+              and c.tentative_completion_date is not null
+              and c.tentative_completion_date < current_date
+            then true
+            else false
+          end,
           c.priority_case,
           c.cpc_involved,
           c.pr_receipt_date,

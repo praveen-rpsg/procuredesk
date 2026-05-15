@@ -406,7 +406,7 @@ export class ImportExportRepository {
       `
         with inserted as (
           insert into procurement.rc_po_plans (
-          tenant_id, entity_id, department_id, tender_description, awarded_vendors, rc_po_amount,
+          tenant_id, entity_id, department_id, nature_of_work_id, tender_description, awarded_vendors, rc_po_amount,
           rc_po_award_date, rc_po_validity_date, tentative_tendering_date,
           uploaded_by, uploaded_at, created_by, updated_by
           )
@@ -414,6 +414,7 @@ export class ImportExportRepository {
             $1,
             e.id,
             d.id,
+            nowv.id,
             r.normalized_payload->>'tenderDescription',
             r.normalized_payload->>'awardedVendors',
             nullif(r.normalized_payload->>'rcPoAmount', '')::numeric,
@@ -437,11 +438,16 @@ export class ImportExportRepository {
            and d.entity_id = e.id
            and lower(d.name) = lower(r.normalized_payload->>'departmentName')
            and d.deleted_at is null
+          left join catalog.reference_values nowv
+            on nowv.tenant_id = $1
+           and lower(nowv.label) = lower(r.normalized_payload->>'natureOfWork')
+           and nowv.deleted_at is null
+           and nowv.category_id = (select id from catalog.reference_categories where code = 'nature_of_work')
           where r.import_job_id = $2
             and r.status = 'accepted'
           returning
             tenant_id, id, source_case_id, entity_id, department_id, owner_user_id,
-            tender_description, awarded_vendors, rc_po_amount, rc_po_award_date,
+            nature_of_work_id, tender_description, awarded_vendors, rc_po_amount, rc_po_award_date,
             rc_po_validity_date, tentative_tendering_date, tender_floated_or_not_required
         )
         insert into reporting.contract_expiry_facts (
@@ -453,7 +459,7 @@ export class ImportExportRepository {
         )
         select
           tenant_id, id, source_case_id, entity_id, department_id,
-          owner_user_id, null::uuid, null::uuid, tender_description,
+          owner_user_id, null::uuid, nature_of_work_id, tender_description,
           awarded_vendors, rc_po_amount, rc_po_award_date,
           rc_po_validity_date, tentative_tendering_date,
           tender_floated_or_not_required, null::timestamptz, 'manual_plan',
@@ -474,7 +480,7 @@ export class ImportExportRepository {
       `
         with inserted as (
           insert into procurement.rc_po_plans (
-          tenant_id, entity_id, department_id, owner_user_id, tender_description,
+          tenant_id, entity_id, department_id, owner_user_id, nature_of_work_id, tender_description,
           awarded_vendors, rc_po_amount, rc_po_award_date, rc_po_validity_date,
           tentative_tendering_date,
           uploaded_by, uploaded_at, created_by, updated_by
@@ -484,6 +490,7 @@ export class ImportExportRepository {
             e.id,
             d.id,
             u.id,
+            nowv.id,
             r.normalized_payload->>'tenderDescription',
             r.normalized_payload->>'awardedVendors',
             nullif(r.normalized_payload->>'rcPoAmount', '')::numeric,
@@ -508,12 +515,17 @@ export class ImportExportRepository {
             on u.tenant_id = $1
            and (lower(u.username) = lower(r.normalized_payload->>'ownerUsername') or lower(u.email) = lower(r.normalized_payload->>'ownerUsername'))
            and u.deleted_at is null
+          left join catalog.reference_values nowv
+            on nowv.tenant_id = $1
+           and lower(nowv.label) = lower(r.normalized_payload->>'natureOfWork')
+           and nowv.deleted_at is null
+           and nowv.category_id = (select id from catalog.reference_categories where code = 'nature_of_work')
           where r.import_job_id = $2
             and r.status = 'accepted'
             and coalesce(r.normalized_payload->>'importAction', '') <> 'existing'
           returning
             tenant_id, id, source_case_id, entity_id, department_id, owner_user_id,
-            tender_description, awarded_vendors, rc_po_amount, rc_po_award_date,
+            nature_of_work_id, tender_description, awarded_vendors, rc_po_amount, rc_po_award_date,
             rc_po_validity_date, tentative_tendering_date, tender_floated_or_not_required
         )
         insert into reporting.contract_expiry_facts (
@@ -525,7 +537,7 @@ export class ImportExportRepository {
         )
         select
           tenant_id, id, source_case_id, entity_id, department_id,
-          owner_user_id, null::uuid, null::uuid, tender_description,
+          owner_user_id, null::uuid, nature_of_work_id, tender_description,
           awarded_vendors, rc_po_amount, rc_po_award_date,
           rc_po_validity_date, tentative_tendering_date,
           tender_floated_or_not_required, null::timestamptz, 'manual_plan',
@@ -1143,7 +1155,13 @@ export class ImportExportRepository {
           c.status,
           c.stage_code,
           c.desired_stage_code,
-          c.is_delayed,
+          case
+            when c.status = 'running'
+              and c.tentative_completion_date is not null
+              and c.tentative_completion_date < current_date
+            then true
+            else false
+          end,
           c.priority_case,
           c.cpc_involved,
           c.pr_receipt_date,

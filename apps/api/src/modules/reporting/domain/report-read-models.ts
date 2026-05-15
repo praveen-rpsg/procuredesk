@@ -103,6 +103,7 @@ export type ContractExpiryReportRow = {
   ownerFullName: string | null;
   ownerUserId: string | null;
   natureOfWorkId: string | null;
+  natureOfWorkName: string;
   rcPoAwardDate: string | null;
   rcPoAmount: number | null;
   rcPoValidityDate: string;

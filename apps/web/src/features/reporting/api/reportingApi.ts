@@ -20,6 +20,7 @@ export type ReportQueryParams = {
   departmentIds?: string[];
   days?: number;
   entityIds?: string[];
+  includeExpiredContracts?: boolean;
   includeTenderFloatedOrNotRequired?: boolean;
   limit?: number;
   loiAwarded?: boolean;
@@ -219,6 +220,7 @@ export type ContractExpiryReportRow = {
   ownerFullName: string | null;
   ownerUserId: string | null;
   natureOfWorkId: string | null;
+  natureOfWorkName: string;
   rcPoAwardDate: string | null;
   rcPoAmount: number | null;
   rcPoValidityDate: string;
@@ -367,6 +369,7 @@ function buildReportQuery(params: ReportQueryParams) {
   setCsvParam(search, "departmentIds", params.departmentIds);
   if (params.days != null) search.set("days", String(params.days));
   setCsvParam(search, "entityIds", params.entityIds);
+  setBooleanParam(search, "includeExpiredContracts", params.includeExpiredContracts);
   setBooleanParam(
     search,
     "includeTenderFloatedOrNotRequired",

@@ -46,7 +46,13 @@ async function upsertCaseFact(tenantId: string, caseId: string, pool: Pool): Pro
         c.status,
         c.stage_code,
         c.desired_stage_code,
-        c.is_delayed,
+        case
+          when c.status = 'running'
+            and c.tentative_completion_date is not null
+            and c.tentative_completion_date < current_date
+          then true
+          else false
+        end,
         c.priority_case,
         c.cpc_involved,
         c.pr_receipt_date,
@@ -222,7 +228,7 @@ async function refreshContractExpiryForPlan(tenantId: string, planId: string, po
           p.department_id,
           coalesce(p.owner_user_id, c.owner_user_id),
           c.budget_type_id,
-          c.nature_of_work_id,
+          coalesce(p.nature_of_work_id, c.nature_of_work_id),
           p.tender_description,
           p.awarded_vendors,
           p.rc_po_amount,

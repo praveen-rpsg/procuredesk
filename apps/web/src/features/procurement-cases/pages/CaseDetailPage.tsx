@@ -62,7 +62,7 @@ type CaseDetailTabKey = "activity" | "awards" | "overview" | "timeline" | "updat
 const caseDetailTabs: Array<SecondaryNavItem<CaseDetailTabKey>> = [
   { description: "Key case information, PR details, and financial summary.", icon: FileText, key: "overview", label: "Overview" },
   { description: "Update case details, milestone dates, and award readiness.", icon: SquarePen, key: "update", label: "Update" },
-  { description: "Track stages, target dates, and delay status.", icon: CalendarClock, key: "timeline", label: "Timeline" },
+  { description: "Track stages, target dates, and delay indicator.", icon: CalendarClock, key: "timeline", label: "Timeline" },
   { description: "Manage vendor awards, RC/PO values, and savings.", icon: Trophy, key: "awards", label: "Awards" },
   { description: "Review case audit events and operational history.", icon: Activity, key: "activity", label: "Activity" },
 ];
@@ -474,7 +474,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
                 }
               >
                 <div className="case-info-list">
-                  <InfoRow label="Track Status" value={trackStatus?.label ?? "—"} />
+                  <InfoRow label="Delay Indicator" value={trackStatus?.label ?? "—"} />
                   <InfoRow label="External Delay Days" value={String(kase.delay.delayExternalDays ?? 0)} />
                   <InfoRow label="Delay Reason" value={kase.delay.delayReason ?? "—"} />
                 </div>

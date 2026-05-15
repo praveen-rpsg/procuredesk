@@ -17,6 +17,7 @@ export function buildReportParams(input: {
   departmentIds: string[];
   days: number | undefined;
   entityIds: string[];
+  includeExpiredContracts: boolean | undefined;
   includeTenderFloatedOrNotRequired: boolean | undefined;
   includeStatus: boolean;
   loiAwarded: boolean | undefined;
@@ -29,6 +30,7 @@ export function buildReportParams(input: {
   stageCodes: string[];
   status: ReportStatusFilter;
   tenderTypeIds: string[];
+  trackStatus: "delayed" | "off_track" | "on_track" | undefined;
   valueSlabs: string[];
 }): ReportQueryParams {
   const params: ReportQueryParams = {};
@@ -41,6 +43,7 @@ export function buildReportParams(input: {
   assignStringArrayParam(params, "departmentIds", input.departmentIds);
   assignNumberParam(params, "days", input.days);
   assignStringArrayParam(params, "entityIds", input.entityIds);
+  assignBooleanParam(params, "includeExpiredContracts", input.includeExpiredContracts);
   assignBooleanParam(params, "includeTenderFloatedOrNotRequired", input.includeTenderFloatedOrNotRequired);
   assignBooleanParam(params, "loiAwarded", input.loiAwarded);
   assignStringArrayParam(params, "natureOfWorkIds", input.natureOfWorkIds);
@@ -53,6 +56,7 @@ export function buildReportParams(input: {
   assignStringArrayParam(params, "prReceiptMonths", input.prReceiptMonths);
   assignStringArrayParam(params, "completionMonths", input.completionMonths);
   assignStatusParam(params, input.includeStatus, input.status);
+  assignStringParam(params, "trackStatus", input.trackStatus ?? "");
   return params;
 }
 
@@ -67,6 +71,7 @@ export function buildReportFilterPayload(input: {
   departmentIds: string[];
   days: number | undefined;
   entityIds: string[];
+  includeExpiredContracts: boolean | undefined;
   includeTenderFloatedOrNotRequired: boolean | undefined;
   includeStatus: boolean;
   loiAwarded: boolean | undefined;
@@ -78,6 +83,7 @@ export function buildReportFilterPayload(input: {
   stageCodes: string[];
   status: ReportStatusFilter;
   tenderTypeIds: string[];
+  trackStatus: "delayed" | "off_track" | "on_track" | undefined;
   valueSlabs: string[];
 }) {
   const payload: Record<string, unknown> = {};
@@ -89,6 +95,7 @@ export function buildReportFilterPayload(input: {
   assignStringArrayParam(payload, "departmentIds", input.departmentIds);
   assignNumberParam(payload, "days", input.days);
   assignStringArrayParam(payload, "entityIds", input.entityIds);
+  assignBooleanParam(payload, "includeExpiredContracts", input.includeExpiredContracts);
   assignBooleanParam(payload, "includeTenderFloatedOrNotRequired", input.includeTenderFloatedOrNotRequired);
   assignBooleanParam(payload, "loiAwarded", input.loiAwarded);
   assignStringArrayParam(payload, "natureOfWorkIds", input.natureOfWorkIds);
@@ -101,6 +108,7 @@ export function buildReportFilterPayload(input: {
   assignStringArrayParam(payload, "prReceiptMonths", input.prReceiptMonths);
   assignStringArrayParam(payload, "completionMonths", input.completionMonths);
   assignStatusParam(payload, input.includeStatus, input.status);
+  assignStringParam(payload, "trackStatus", input.trackStatus ?? "");
   assignAmountUnitParam(payload, input.amountUnit);
   return payload;
 }
@@ -218,6 +226,7 @@ export function applySavedView(
     setDepartmentIds: (v: string[]) => void;
     setExpiryHorizonDays: (v: string) => void;
     setEntityIds: (v: string[]) => void;
+    setIncludeExpiredContracts: (v: boolean) => void;
     setIncludeTenderFloatedOrNotRequired: (v: boolean) => void;
     setLoiAwarded: (v: "all" | "false" | "true") => void;
     setNatureOfWorkIds: (v: string[]) => void;
@@ -228,6 +237,7 @@ export function applySavedView(
     setStageCodes: (v: string[]) => void;
     setStatusFilter: (v: ReportStatusFilter) => void;
     setTenderTypeIds: (v: string[]) => void;
+    setTrackStatus: (v: "all" | "delayed" | "off_track" | "on_track") => void;
     setValueSlabs: (v: string[]) => void;
   },
 ) {
@@ -247,9 +257,11 @@ export function applySavedView(
   setters.setStatusFilter(toStatusFilter(typeof filters.status === "string" ? filters.status : "all"));
   setters.setDelayStatus(filters.delayStatus === "delayed" || filters.delayStatus === "on_time" ? filters.delayStatus : "all");
   setters.setDeletedOnly(filters.deletedOnly === true);
+  setters.setTrackStatus(toTrackStatus(filters.trackStatus, filters.delayStatus));
   setters.setExpiryHorizonDays(
-    typeof filters.days === "number" ? String(filters.days) : "365",
+    typeof filters.days === "number" ? String(filters.days) : "",
   );
+  setters.setIncludeExpiredContracts(filters.includeExpiredContracts === true);
   setters.setIncludeTenderFloatedOrNotRequired(filters.includeTenderFloatedOrNotRequired === true);
   setters.setLoiAwarded(typeof filters.loiAwarded === "boolean" ? String(filters.loiAwarded) as "false" | "true" : "all");
   setters.setCpcInvolved(typeof filters.cpcInvolved === "boolean" ? String(filters.cpcInvolved) as "false" | "true" : "any");
@@ -257,4 +269,20 @@ export function applySavedView(
   if (isAmountUnit(filters.amountUnit)) {
     setters.setAmountUnit(filters.amountUnit);
   }
+}
+
+function toTrackStatus(
+  trackStatus: unknown,
+  legacyDelayStatus: unknown,
+): "all" | "delayed" | "off_track" | "on_track" {
+  if (
+    trackStatus === "delayed" ||
+    trackStatus === "off_track" ||
+    trackStatus === "on_track"
+  ) {
+    return trackStatus;
+  }
+  if (legacyDelayStatus === "delayed") return "delayed";
+  if (legacyDelayStatus === "on_time") return "on_track";
+  return "all";
 }

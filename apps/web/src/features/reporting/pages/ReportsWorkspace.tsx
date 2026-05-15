@@ -365,12 +365,17 @@ export function ReportsWorkspace() {
   ]);
 
   const includeCompletionFilters = reportCode !== "running" && reportCode !== "rc_po_expiry";
+  const includeTrackStatusFilter =
+    reportCode !== "completed" &&
+    reportCode !== "rc_po_expiry" &&
+    reportCode !== "vendor_awards";
   const useBusinessFilterSet =
     reportCode === "completed" || reportCode === "vendor_awards";
   const activeFilterCount = countActiveReportFilters(
     filters,
     statusFilterApplies,
     includeCompletionFilters,
+    includeTrackStatusFilter,
     reportCode === "rc_po_expiry",
     useBusinessFilterSet,
   );
@@ -381,6 +386,7 @@ export function ReportsWorkspace() {
     entityOptions,
     budgetTypeOptions,
     includeCompletionFilters,
+    includeTrackStatusFilter,
     isRcPoExpiry: reportCode === "rc_po_expiry",
     useBusinessFilterSet,
     natureOfWorkOptions,
@@ -1104,6 +1110,11 @@ export function ReportsWorkspace() {
         render: (row) => row.departmentName ?? "-",
       },
       {
+        key: "natureOfWork",
+        header: "Nature of Work",
+        render: (row) => row.natureOfWorkName || "-",
+      },
+      {
         key: "amount",
         header: `RC/PO Amount (${amountUnitLabel(filters.amountUnit)}) [All Inclusive]`,
         render: (row) => formatAmount(row.rcPoAmount, filters.amountUnit),
@@ -1269,6 +1280,7 @@ export function ReportsWorkspace() {
       setDepartmentIds: filters.setSelectedDepartmentIds,
       setExpiryHorizonDays: filters.setExpiryHorizonDays,
       setEntityIds: filters.setSelectedEntityIds,
+      setIncludeExpiredContracts: filters.setIncludeExpiredContracts,
       setIncludeTenderFloatedOrNotRequired:
         filters.setIncludeTenderFloatedOrNotRequired,
       setLoiAwarded: filters.setLoiAwarded,
@@ -1280,6 +1292,7 @@ export function ReportsWorkspace() {
       setStageCodes: filters.setSelectedStageCodes,
       setStatusFilter: filters.setStatusFilter,
       setTenderTypeIds: filters.setSelectedTenderTypeIds,
+      setTrackStatus: filters.setTrackStatus,
       setValueSlabs: filters.setSelectedValueSlabs,
     });
     notify({ message: `Applied view: ${view.name}`, tone: "success" });
@@ -1965,7 +1978,7 @@ function ReportAnalyticsDashboard({
             <ReportChartHeader
               eyebrow="Running Workload"
               subtitle={`${metrics?.runningCases ?? 0} running cases`}
-              title="Track status"
+              title="Delay indicator"
             />
             <ReportDonutChart
               rows={statusRows}
@@ -2121,6 +2134,13 @@ function formatValueSlabLabel(value: string) {
   if (value === "100l_200l") return "Rs. 100 - <200 Lakhs";
   if (value === "gte_200l") return ">= Rs. 200 Lakhs";
   return value;
+}
+
+function trackStatusLabel(value: "all" | "delayed" | "off_track" | "on_track") {
+  if (value === "delayed") return "Delayed";
+  if (value === "off_track") return "Off Track";
+  if (value === "on_track") return "On Track";
+  return "All";
 }
 
 function formatSavingsPercent(
@@ -3146,6 +3166,8 @@ function ReportFilterPanel({
   const showCompletionFilters = reportCode !== "running";
   const useBusinessFilterSet =
     reportCode === "completed" || reportCode === "vendor_awards";
+  const showTrackStatusFilter =
+    reportCode !== "completed" && reportCode !== "vendor_awards";
   if (reportCode === "rc_po_expiry") {
     return (
       <RcPoReportFilterPanel
@@ -3279,23 +3301,25 @@ function ReportFilterPanel({
             options={valueSlabOptions}
             value={filters.selectedValueSlabs}
           />
-          {!useBusinessFilterSet ? (
-            <FormField label="Delay Status">
+          {showTrackStatusFilter ? (
+            <FormField label="Delay Indicator">
               <Select
                 onChange={(event) =>
-                  filters.setDelayStatus(
+                  filters.setTrackStatus(
                     (event.target.value || "all") as
                       | "all"
                       | "delayed"
-                      | "on_time",
+                      | "off_track"
+                      | "on_track",
                   )
                 }
                 options={[
                   { label: "Delayed", value: "delayed" },
-                  { label: "On Time", value: "on_time" },
+                  { label: "Off Track", value: "off_track" },
+                  { label: "On Track", value: "on_track" },
                 ]}
                 placeholder="All"
-                value={filters.delayStatus === "all" ? "" : filters.delayStatus}
+                value={filters.trackStatus === "all" ? "" : filters.trackStatus}
               />
             </FormField>
           ) : null}
@@ -3545,6 +3569,16 @@ function RcPoReportFilterPanel({
               type="checkbox"
             />
             <span>Show deleted cases only</span>
+          </label>
+          <label className="report-inline-check">
+            <input
+              checked={filters.includeExpiredContracts}
+              onChange={(event) =>
+                filters.setIncludeExpiredContracts(event.target.checked)
+              }
+              type="checkbox"
+            />
+            <span>Include already Expired Contracts</span>
           </label>
           <label className="report-inline-check">
             <input
@@ -3798,6 +3832,7 @@ function countActiveReportFilters(
   filters: ReturnType<typeof useReportFilters>,
   statusFilterApplies: boolean,
   includeCompletionFilters: boolean,
+  includeTrackStatusFilter: boolean,
   isRcPoExpiry: boolean,
   useBusinessFilterSet: boolean,
 ): number {
@@ -3805,11 +3840,10 @@ function countActiveReportFilters(
     return [
       filters.searchTerm,
       filters.deletedOnly ? "deleted" : "",
+      filters.includeExpiredContracts ? "include-expired" : "",
       filters.includeTenderFloatedOrNotRequired ? "include-floated" : "",
       filters.amountUnit !== "lakh" ? filters.amountUnit : "",
-      filters.expiryHorizonDays && filters.expiryHorizonDays !== "365"
-        ? filters.expiryHorizonDays
-        : "",
+      filters.expiryHorizonDays ? filters.expiryHorizonDays : "",
       ...filters.selectedEntityIds,
       ...filters.selectedDepartmentIds,
       ...filters.selectedOwnerUserIds,
@@ -3823,7 +3857,7 @@ function countActiveReportFilters(
     statusFilterApplies && filters.statusFilter !== "all"
       ? filters.statusFilter
       : "",
-    !useBusinessFilterSet && filters.delayStatus !== "all" ? filters.delayStatus : "",
+    includeTrackStatusFilter && filters.trackStatus !== "all" ? filters.trackStatus : "",
     filters.deletedOnly ? "deleted" : "",
     filters.loiAwarded !== "all" ? filters.loiAwarded : "",
     filters.cpcInvolved !== "any" ? filters.cpcInvolved : "",
@@ -3851,6 +3885,7 @@ function buildActiveReportFilterChips(
     entityOptions: ReportOption[];
     budgetTypeOptions: ReportOption[];
     includeCompletionFilters: boolean;
+    includeTrackStatusFilter: boolean;
     isRcPoExpiry: boolean;
     useBusinessFilterSet: boolean;
     natureOfWorkOptions: ReportOption[];
@@ -3866,13 +3901,14 @@ function buildActiveReportFilterChips(
     return [
       filters.searchTerm ? `Search: ${filters.searchTerm}` : "",
       filters.deletedOnly ? "Deletion Flag: deleted only" : "",
+      filters.includeExpiredContracts ? "Include expired contracts" : "",
       filters.includeTenderFloatedOrNotRequired
         ? "Includes floated/not-required"
         : "",
       filters.amountUnit !== "lakh"
         ? `Currency: ${amountUnitLabel(filters.amountUnit)}`
         : "",
-      filters.expiryHorizonDays && filters.expiryHorizonDays !== "365"
+      filters.expiryHorizonDays
         ? `Horizon: ${filters.expiryHorizonDays} days`
         : "",
       ...labelsForSelection(
@@ -3912,8 +3948,8 @@ function buildActiveReportFilterChips(
     options.statusFilterApplies && filters.statusFilter !== "all"
       ? `Status: ${filters.statusFilter}`
       : "",
-    !options.useBusinessFilterSet && filters.delayStatus !== "all"
-      ? `Delay: ${filters.delayStatus === "delayed" ? "Delayed" : "On Time"}`
+    options.includeTrackStatusFilter && filters.trackStatus !== "all"
+      ? `Delay Indicator: ${trackStatusLabel(filters.trackStatus)}`
       : "",
     filters.deletedOnly ? "Deletion Flag: deleted only" : "",
     filters.loiAwarded !== "all"

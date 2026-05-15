@@ -476,6 +476,7 @@ create table procurement.rc_po_plans (
   department_id uuid references org.departments(id) on delete restrict,
   owner_user_id uuid references iam.users(id) on delete restrict,
   source_case_id uuid references procurement.cases(id) on delete set null,
+  nature_of_work_id uuid references catalog.reference_values(id) on delete restrict,
   tender_description text,
   awarded_vendors text,
   rc_po_amount numeric(18,2),
@@ -505,6 +506,10 @@ create index rc_po_plans_expiry_idx
 create index rc_po_plans_owner_idx
   on procurement.rc_po_plans (tenant_id, owner_user_id)
   where deleted_at is null;
+
+create index rc_po_plans_nature_of_work_idx
+  on procurement.rc_po_plans (tenant_id, nature_of_work_id)
+  where deleted_at is null and nature_of_work_id is not null;
 
 create table procurement.tender_plan_cases (
   id uuid primary key default gen_random_uuid(),

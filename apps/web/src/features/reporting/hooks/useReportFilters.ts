@@ -17,6 +17,7 @@ export type ReportFiltersState = {
   deletedOnly: boolean;
   exportFilters: Record<string, unknown>;
   expiryHorizonDays: string;
+  includeExpiredContracts: boolean;
   includeTenderFloatedOrNotRequired: boolean;
   loiAwarded: "all" | "false" | "true";
   priorityCase: boolean;
@@ -35,11 +36,13 @@ export type ReportFiltersState = {
   selectedTenderTypeIds: string[];
   selectedValueSlabs: string[];
   statusFilter: ReportStatusFilter;
+  trackStatus: "all" | "delayed" | "off_track" | "on_track";
   setAmountUnit: (v: AmountUnit) => void;
   setCpcInvolved: (v: "any" | "false" | "true") => void;
   setDelayStatus: (v: "all" | "delayed" | "on_time") => void;
   setDeletedOnly: (v: boolean) => void;
   setExpiryHorizonDays: (v: string) => void;
+  setIncludeExpiredContracts: (v: boolean) => void;
   setIncludeTenderFloatedOrNotRequired: (v: boolean) => void;
   setLoiAwarded: (v: "all" | "false" | "true") => void;
   setPriorityCase: (v: boolean) => void;
@@ -56,6 +59,7 @@ export type ReportFiltersState = {
   setSelectedTenderTypeIds: (v: string[]) => void;
   setSelectedValueSlabs: (v: string[]) => void;
   setStatusFilter: (v: ReportStatusFilter) => void;
+  setTrackStatus: (v: "all" | "delayed" | "off_track" | "on_track") => void;
   clearFilters: () => void;
 };
 
@@ -64,7 +68,8 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
   const [cpcInvolved, setCpcInvolved] = useState<"any" | "false" | "true">("any");
   const [delayStatus, setDelayStatus] = useState<"all" | "delayed" | "on_time">("all");
   const [deletedOnly, setDeletedOnly] = useState(false);
-  const [expiryHorizonDays, setExpiryHorizonDays] = useState("365");
+  const [expiryHorizonDays, setExpiryHorizonDays] = useState("");
+  const [includeExpiredContracts, setIncludeExpiredContracts] = useState(false);
   const [includeTenderFloatedOrNotRequired, setIncludeTenderFloatedOrNotRequired] = useState(false);
   const [loiAwarded, setLoiAwarded] = useState<"all" | "false" | "true">("all");
   const [priorityCase, setPriorityCase] = useState(false);
@@ -81,6 +86,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
   const [selectedTenderTypeIds, setSelectedTenderTypeIds] = useState<string[]>([]);
   const [selectedValueSlabs, setSelectedValueSlabs] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<ReportStatusFilter>("all");
+  const [trackStatus, setTrackStatus] = useState<"all" | "delayed" | "off_track" | "on_track">("all");
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 350);
 
   const includeStatus = reportCode === "tender_details" || reportCode === "stage_time";
@@ -103,14 +109,13 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
         includeCaseWorkflowFilters && cpcInvolved !== "any"
           ? cpcInvolved === "true"
           : undefined,
-      delayStatus:
-        includeWorkflowHealthFilters && delayStatus !== "all"
-          ? delayStatus
-          : undefined,
+      delayStatus: undefined,
       deletedOnly: deletedOnly ? true : undefined,
       departmentIds: selectedDepartmentIds,
       days: expiryHorizonDaysParam,
       entityIds: selectedEntityIds,
+      includeExpiredContracts:
+        isRcPoExpiry && includeExpiredContracts ? true : undefined,
       includeTenderFloatedOrNotRequired:
         isRcPoExpiry && includeTenderFloatedOrNotRequired ? true : undefined,
       includeStatus,
@@ -126,6 +131,10 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
       stageCodes: includeWorkflowHealthFilters ? selectedStageCodes : [],
       status: statusFilter,
       tenderTypeIds: includeCaseWorkflowFilters ? selectedTenderTypeIds : [],
+      trackStatus:
+        includeWorkflowHealthFilters && trackStatus !== "all"
+          ? trackStatus
+          : undefined,
       valueSlabs: selectedValueSlabs,
     }),
     [
@@ -133,6 +142,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
       delayStatus,
       deletedOnly,
       expiryHorizonDaysParam,
+      includeExpiredContracts,
       includeTenderFloatedOrNotRequired,
       includeCaseWorkflowFilters,
       includeWorkflowHealthFilters,
@@ -153,6 +163,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
       selectedTenderTypeIds,
       selectedValueSlabs,
       statusFilter,
+      trackStatus,
     ],
   );
 
@@ -179,7 +190,8 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
   function clearFilters() {
     setSearchTerm("");
     setAmountUnit("lakh");
-    setExpiryHorizonDays("365");
+    setExpiryHorizonDays("");
+    setIncludeExpiredContracts(false);
     setIncludeTenderFloatedOrNotRequired(false);
     setSelectedEntityIds([]);
     setSelectedOwnerUserIds([]);
@@ -198,6 +210,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
     setSelectedPrReceiptMonths([]);
     setSelectedCompletionMonths([]);
     setStatusFilter("all");
+    setTrackStatus("all");
   }
 
   return {
@@ -208,6 +221,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
     deletedOnly,
     exportFilters,
     expiryHorizonDays,
+    includeExpiredContracts,
     includeTenderFloatedOrNotRequired,
     loiAwarded,
     priorityCase,
@@ -226,11 +240,13 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
     selectedTenderTypeIds,
     selectedValueSlabs,
     statusFilter,
+    trackStatus,
     setAmountUnit,
     setCpcInvolved,
     setDelayStatus,
     setDeletedOnly,
     setExpiryHorizonDays,
+    setIncludeExpiredContracts,
     setIncludeTenderFloatedOrNotRequired,
     setLoiAwarded,
     setPriorityCase,
@@ -247,11 +263,13 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
     setSelectedTenderTypeIds,
     setSelectedValueSlabs,
     setStatusFilter,
+    setTrackStatus,
     clearFilters,
   };
 }
 
 function normalizeExpiryHorizonDays(value: string): number | undefined {
+  if (!value.trim()) return undefined;
   const parsed = Number(value);
   if (!Number.isInteger(parsed)) return undefined;
   return Math.min(Math.max(parsed, 0), 730);

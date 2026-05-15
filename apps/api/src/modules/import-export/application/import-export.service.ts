@@ -165,9 +165,9 @@ export class ImportExportService {
   }
 
   async downloadTenderCasesTemplate(actor: AuthenticatedUser) {
-    const tenantId = this.requireTenant(actor);
+    this.requireTenant(actor);
     this.requirePermission(actor, "import.manage");
-    const workbook = await this.buildTenderCasesTemplate(tenantId);
+    const workbook = await this.buildTenderCasesTemplate();
     const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
     return new StreamableFile(ReadableStream.from([buffer]), {
       disposition:
@@ -515,55 +515,28 @@ export class ImportExportService {
     });
   }
 
-  private async buildTenderCasesTemplate(
-    tenantId: string,
-  ): Promise<ExcelJS.Workbook> {
+  private async buildTenderCasesTemplate(): Promise<ExcelJS.Workbook> {
     const workbook = new ExcelJS.Workbook();
     workbook.creator = "ProcureDesk";
     workbook.created = new Date();
     const template = workbook.addWorksheet("Tender Import", {
-      views: [{ state: "frozen", xSplit: 0, ySplit: 8 }],
+      views: [{ state: "frozen", xSplit: 0, ySplit: 1 }],
     });
-    const lookups = workbook.addWorksheet("Master Lookups");
-    const metadata = workbook.addWorksheet("_metadata");
-    metadata.state = "veryHidden";
 
     const columns = tenderTemplateColumns();
-    template.getCell("A1").value = "Instructions to fill the table:";
-    template.getCell("A1").font = {
-      bold: true,
-      color: { argb: "FFFF0000" },
-      italic: true,
-    };
-    [
-      "All applicable fields need to be filled based on the current status of tender.",
-      "All Dates shall be in DD-MM-YYYY format.",
-      "Chronology of dates need to be checked as per tender milestones.",
-      "Values should be all-inclusive and in Rupees.",
-      "Use dropdown values from the generated Master Lookups sheet.",
-    ].forEach((line, index) => {
-      const cell = template.getCell(index + 2, 1);
-      cell.value = line;
-      cell.font = { color: { argb: "FFFF0000" } };
-    });
-
-    template.getRow(7).values = columns.map((column) => column.type);
-    template.getRow(8).values = columns.map((column) => column.label);
-    template.getRow(7).font = { bold: true, color: { argb: "FFFFB26B" } };
-    template.getRow(8).font = { bold: true, color: { argb: "FFFFFFFF" } };
-    template.getRow(8).fill = {
+    template.getRow(1).values = columns.map((column) => column.label);
+    template.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    template.getRow(1).fill = {
       fgColor: { argb: "FF0070C0" },
       pattern: "solid",
       type: "pattern",
     };
-    template.getRow(8).alignment = { vertical: "middle", wrapText: true };
+    template.getRow(1).alignment = { vertical: "middle", wrapText: true };
     template.autoFilter = {
-      from: "A8",
-      to: `${template.getColumn(columns.length).letter}8`,
+      from: "A1",
+      to: `${template.getColumn(columns.length).letter}1`,
     };
-    tenderTemplateSampleRows().forEach((row, index) => {
-      template.getRow(9 + index).values = row;
-    });
+    template.getRow(2).values = tenderTemplateSampleRow();
 
     columns.forEach((column, index) => {
       const worksheetColumn = template.getColumn(index + 1);
@@ -571,10 +544,6 @@ export class ImportExportService {
       if (column.type === "DD-MM-YYYY") worksheetColumn.numFmt = "dd-mm-yyyy";
     });
 
-    const lookupData = await this.loadTemplateLookups(tenantId);
-    this.populateLookupSheet(lookups, lookupData);
-    this.populateMetadataSheet(metadata, columns);
-    this.applyTemplateValidations(template, columns, lookupData);
     return workbook;
   }
 
@@ -742,6 +711,7 @@ export class ImportExportService {
     const rcPoLookupData = {
       ...lookupData,
       "Entity Code (required)": lookupData.Entity ?? [],
+      "Nature of Work": ["Supply", "Service", "Composite"],
     };
     this.populateLookupSheet(lookups, rcPoLookupData);
     this.populateMetadataSheet(metadata, columns, "ProcureDesk Bulk Upload - Old Contract", 1);
@@ -911,6 +881,7 @@ function oldContractTemplateColumns(): TenderTemplateColumn[] {
     { label: "Entity", type: "Dropdown", width: 18 },
     { label: "User Department", type: "Dropdown", width: 24 },
     { label: "Tender Owner", type: "Dropdown", width: 24 },
+    { label: "Nature of Work", type: "Dropdown", width: 20 },
     { label: "Tender Description", type: "Text", width: 38 },
     { label: "Awarded Vendors (comma separated)", type: "Text", width: 36 },
     { label: "RC/PO Amount (Rs.) [All Inclusive]", type: "Number", width: 26 },
@@ -923,6 +894,7 @@ function rcPoPlanTemplateColumns(): TenderTemplateColumn[] {
   return [
     { label: "Entity", type: "Dropdown", width: 18 },
     { label: "User Department", type: "Dropdown", width: 24 },
+    { label: "Nature of Work", type: "Dropdown", width: 20 },
     { label: "Tender Description", type: "Text", width: 32 },
     { label: "Awarded Vendors (comma separated)", type: "Text", width: 36 },
     { label: "RC/PO Amount (Rs.) [All Inclusive]", type: "Number", width: 26 },
@@ -960,6 +932,7 @@ function rcPoPlanTemplateSampleRow(): ExcelJS.CellValue[] {
   return [
     "CPDL",
     "IT",
+    "Service",
     "CPDL-IT-Tender Description Test 1",
     "Vendor 1, Vendor 2",
     1_000_000,
@@ -968,9 +941,8 @@ function rcPoPlanTemplateSampleRow(): ExcelJS.CellValue[] {
   ];
 }
 
-function tenderTemplateSampleRows(): ExcelJS.CellValue[][] {
+function tenderTemplateSampleRow(): ExcelJS.CellValue[] {
   return [
-    [
       "CESC-RAJ",
       "Email",
       "jashodipta.sengupta@rpsg.in",
@@ -1002,40 +974,6 @@ function tenderTemplateSampleRows(): ExcelJS.CellValue[][] {
       "20-03-2026",
       "22-03-2026",
       "22-03-2027",
-    ],
-    [
-      "CPDL",
-      "Email",
-      "narinderpal.singh@rpsg.in",
-      "",
-      "16-02-2026",
-      "PR Description Bulk 4",
-      25_000_000,
-      "No",
-      "Service",
-      "Automation",
-      "Open",
-      "No",
-      "Sample regular procurement",
-      "Tender Name bulk 4",
-      "Tender Number bulk 4",
-      "23-02-2026",
-      "26-02-2026",
-      "01-03-2026",
-      "11-03-2026",
-      9,
-      "18-03-2026",
-      "20-03-2026",
-      7,
-      27_500_000,
-      "30-03-2026",
-      "02-04-2026",
-      26_000_000,
-      "No",
-      "",
-      "",
-      "",
-    ],
   ];
 }
 

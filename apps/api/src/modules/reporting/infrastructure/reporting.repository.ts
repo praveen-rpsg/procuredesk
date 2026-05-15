@@ -30,6 +30,7 @@ export type ReportFilters = {
   departmentIds?: string[];
   days?: number;
   entityIds?: string[];
+  includeExpiredContracts?: boolean;
   includeTenderFloatedOrNotRequired?: boolean;
   limit?: number;
   loiAwarded?: boolean;
@@ -93,7 +94,13 @@ export class ReportingRepository {
           c.status,
           c.stage_code,
           c.desired_stage_code,
-          c.is_delayed,
+          case
+            when c.status = 'running'
+              and c.tentative_completion_date is not null
+              and c.tentative_completion_date < current_date
+            then true
+            else false
+          end,
           c.priority_case,
           c.cpc_involved,
           c.pr_receipt_date,
@@ -244,7 +251,7 @@ export class ReportingRepository {
             p.department_id,
             coalesce(p.owner_user_id, c.owner_user_id),
             c.budget_type_id,
-            c.nature_of_work_id,
+            coalesce(p.nature_of_work_id, c.nature_of_work_id),
             p.tender_description,
             p.awarded_vendors,
             p.rc_po_amount,
@@ -755,36 +762,52 @@ export class ReportingRepository {
     const result = await this.db.query<QueryResultRow & ContractExpiryRow>(
       `
         select
-          case
-            when e.source_type = 'case_award' and e.case_award_id is not null then e.case_award_id
-            when e.source_type = 'manual_plan' and e.rc_po_plan_id is not null then e.rc_po_plan_id
-            else e.id
-          end as source_id,
-          e.source_type,
-          e.case_id as source_case_id,
-          e.entity_id,
-          ent.code as entity_code,
-          ent.name as entity_name,
-          e.department_id,
-          dep.name as department_name,
-          e.owner_user_id,
-          owner.full_name as owner_full_name,
-          e.budget_type_id,
-          e.nature_of_work_id,
-          e.tender_description,
-          e.awarded_vendors,
-          e.rc_po_amount,
-          e.rc_po_award_date,
-          e.rc_po_validity_date,
-          e.tentative_tendering_date,
-          e.tender_floated_or_not_required,
-          (e.rc_po_validity_date - current_date)::integer as days_to_expiry
-        from reporting.contract_expiry_facts e
-        left join org.entities ent on ent.id = e.entity_id and ent.tenant_id = e.tenant_id
-        left join org.departments dep on dep.id = e.department_id and dep.tenant_id = e.tenant_id
-        left join iam.users owner on owner.id = e.owner_user_id and owner.tenant_id = e.tenant_id
-        where ${where.join(" and ")}
-        order by e.rc_po_validity_date asc
+          (array_agg(
+            coalesce(filtered.case_award_id, filtered.rc_po_plan_id, filtered.id)
+            order by filtered.rc_po_validity_date asc, filtered.id asc
+          ))[1] as source_id,
+          (array_agg(filtered.source_type order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as source_type,
+          (array_agg(filtered.case_id order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as source_case_id,
+          (array_agg(filtered.entity_id order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as entity_id,
+          (array_agg(filtered.entity_code order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as entity_code,
+          (array_agg(filtered.entity_name order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as entity_name,
+          (array_agg(filtered.department_id order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as department_id,
+          (array_agg(filtered.department_name order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as department_name,
+          (array_agg(filtered.owner_user_id order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as owner_user_id,
+          (array_agg(filtered.owner_full_name order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as owner_full_name,
+          (array_agg(filtered.budget_type_id order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as budget_type_id,
+          (array_agg(filtered.nature_of_work_id order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as nature_of_work_id,
+          (array_agg(filtered.nature_of_work_name order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as nature_of_work_name,
+          (array_agg(filtered.tender_description order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as tender_description,
+          string_agg(distinct nullif(filtered.awarded_vendors, ''), ', ') as awarded_vendors,
+          sum(filtered.rc_po_amount) as rc_po_amount,
+          min(filtered.rc_po_award_date) as rc_po_award_date,
+          min(filtered.rc_po_validity_date) as rc_po_validity_date,
+          min(filtered.tentative_tendering_date) as tentative_tendering_date,
+          bool_or(filtered.tender_floated_or_not_required) as tender_floated_or_not_required,
+          (min(filtered.rc_po_validity_date) - current_date)::integer as days_to_expiry
+        from (
+          select
+            e.*,
+            ent.code as entity_code,
+            ent.name as entity_name,
+            dep.name as department_name,
+            owner.full_name as owner_full_name,
+            rv_nature.label as nature_of_work_name,
+            case
+              when e.source_type = 'case_award' and e.case_id is not null then 'case:' || e.case_id::text
+              when e.source_type = 'manual_plan' and e.rc_po_plan_id is not null then 'plan:' || e.rc_po_plan_id::text
+              else 'fact:' || e.id::text
+            end as report_group_key
+          from reporting.contract_expiry_facts e
+          left join org.entities ent on ent.id = e.entity_id and ent.tenant_id = e.tenant_id
+          left join org.departments dep on dep.id = e.department_id and dep.tenant_id = e.tenant_id
+          left join iam.users owner on owner.id = e.owner_user_id and owner.tenant_id = e.tenant_id
+          left join catalog.reference_values rv_nature on rv_nature.id = e.nature_of_work_id and rv_nature.tenant_id = e.tenant_id
+          where ${where.join(" and ")}
+        ) filtered
+        group by filtered.report_group_key
+        order by min(filtered.rc_po_validity_date) asc
         limit $${limitPosition}
       `,
       values,
@@ -988,7 +1011,7 @@ export class ReportingRepository {
           p.department_id,
           coalesce(p.owner_user_id, c.owner_user_id),
           c.budget_type_id,
-          c.nature_of_work_id,
+          coalesce(p.nature_of_work_id, c.nature_of_work_id),
           p.tender_description,
           p.awarded_vendors,
           p.rc_po_amount,
@@ -1035,6 +1058,7 @@ export class ReportingRepository {
           owner.full_name as owner_full_name,
           e.budget_type_id,
           e.nature_of_work_id,
+          rv_nature.label as nature_of_work_name,
           e.tender_description,
           e.awarded_vendors,
           e.rc_po_amount,
@@ -1047,6 +1071,7 @@ export class ReportingRepository {
         left join org.entities ent on ent.id = e.entity_id and ent.tenant_id = e.tenant_id
         left join org.departments dep on dep.id = e.department_id and dep.tenant_id = e.tenant_id
         left join iam.users owner on owner.id = e.owner_user_id and owner.tenant_id = e.tenant_id
+        left join catalog.reference_values rv_nature on rv_nature.id = e.nature_of_work_id and rv_nature.tenant_id = e.tenant_id
         where e.tenant_id = $1
           and e.source_type = $2
           and (
@@ -1450,11 +1475,13 @@ export class ReportingRepository {
     this.applyUuidArrayFilter(where, values, filters.natureOfWorkIds, "e.nature_of_work_id");
     this.applyValueSlabFilter(where, filters.valueSlabs, "e.rc_po_amount");
 
-    values.push(filters.days ?? 365);
-    where.push(`
-      e.rc_po_validity_date >= current_date
-      and e.rc_po_validity_date <= current_date + ($${values.length}::integer * interval '1 day')
-    `);
+    if (!filters.includeExpiredContracts) {
+      where.push("e.rc_po_validity_date >= current_date");
+    }
+    if (filters.days != null) {
+      values.push(filters.days);
+      where.push(`e.rc_po_validity_date <= current_date + ($${values.length}::integer * interval '1 day')`);
+    }
 
     where.push(filters.deletedOnly ? "e.source_deleted_at is not null" : "e.source_deleted_at is null");
 
@@ -1596,6 +1623,7 @@ export class ReportingRepository {
       ownerFullName: row.owner_full_name,
       ownerUserId: row.owner_user_id,
       natureOfWorkId: row.nature_of_work_id,
+      natureOfWorkName: row.nature_of_work_name ?? "Unspecified",
       rcPoAwardDate: this.dateOnly(row.rc_po_award_date),
       rcPoAmount: this.numberOrNull(row.rc_po_amount),
       rcPoValidityDate: this.dateOnly(row.rc_po_validity_date) ?? "",
@@ -1898,6 +1926,7 @@ type ContractExpiryRow = {
   owner_full_name: string | null;
   owner_user_id: string | null;
   nature_of_work_id: string | null;
+  nature_of_work_name: string | null;
   rc_po_award_date: Date | null;
   rc_po_amount: string | null;
   rc_po_validity_date: Date;

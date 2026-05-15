@@ -235,8 +235,8 @@ describe("CsvImportParser (rc_po_plan)", () => {
 
   it("maps the business-facing Bulk Upload - Old Contract template labels", async () => {
     const csv = [
-      "Entity,User Department,Tender Description,Awarded Vendors (comma separated),RC/PO Amount (Rs.),RC/PO Award Date,RC/PO Validity Date",
-      "CESC,Mechanical,Sample tender,\"Vendor A, Vendor B\",100000,31-01-2026,30-01-2027",
+      "Entity,User Department,Nature of Work,Tender Description,Awarded Vendors (comma separated),RC/PO Amount (Rs.),RC/PO Award Date,RC/PO Validity Date",
+      "CESC,Mechanical,Supply,Sample tender,\"Vendor A, Vendor B\",100000,31-01-2026,30-01-2027",
     ].join("\n");
 
     const rows = await registry.rc_po_plan.parse({
@@ -250,6 +250,7 @@ describe("CsvImportParser (rc_po_plan)", () => {
       awardedVendors: "Vendor A, Vendor B",
       departmentName: "Mechanical",
       entityCode: "CESC",
+      natureOfWork: "Supply",
       rcPoAmount: "100000",
       rcPoAwardDate: "31-01-2026",
       rcPoValidityDate: "30-01-2027",
@@ -264,6 +265,7 @@ describe("CsvImportParser (rc_po_plan)", () => {
       ,
       "Entity",
       "User Department",
+      "Nature of Work",
       "Tender Description",
       "Awarded Vendors (comma separated)",
       "RC/PO Amount (Rs.)",
@@ -274,6 +276,7 @@ describe("CsvImportParser (rc_po_plan)", () => {
       ,
       "CESC",
       "Mechanical",
+      "Service",
       "Sample tender",
       "Vendor A, Vendor B",
       100000,
@@ -342,8 +345,8 @@ describe("CsvImportParser (enterprise mapping templates)", () => {
 
   it("maps Bulk Upload - Old Contract labels", async () => {
     const csv = [
-      "Entity,User Department,Tender Owner,Tender Description,Awarded Vendors (comma separated),RC/PO Amount (Rs.),RC/PO Award Date,RC/PO Validity Date",
-      "LOCAL,Stores,tenant.admin,Legacy AMC,\"Vendor A, Vendor B\",120000,01-04-2026,31-03-2027",
+      "Entity,User Department,Tender Owner,Nature of Work,Tender Description,Awarded Vendors (comma separated),RC/PO Amount (Rs.),RC/PO Award Date,RC/PO Validity Date",
+      "LOCAL,Stores,tenant.admin,Composite,Legacy AMC,\"Vendor A, Vendor B\",120000,01-04-2026,31-03-2027",
     ].join("\n");
 
     const rows = await registry.old_contracts.parse({
@@ -357,6 +360,7 @@ describe("CsvImportParser (enterprise mapping templates)", () => {
       awardedVendors: "Vendor A, Vendor B",
       departmentName: "Stores",
       entityCode: "LOCAL",
+      natureOfWork: "Composite",
       ownerUsername: "tenant.admin",
       rcPoAmount: "120000",
       rcPoAwardDate: "01-04-2026",

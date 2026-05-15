@@ -235,7 +235,7 @@ function CasesWorkspaceList() {
       dateTo: dateTo || undefined,
       departmentIds: departmentIds.length ? departmentIds : undefined,
       entityIds: entityIds.length ? entityIds : undefined,
-      isDelayed: booleanFilter(isDelayed),
+      isDelayed: undefined,
       limit: 25,
       loiAwarded: booleanFilter(loiAwarded),
       natureOfWorkIds: natureOfWorkIds.length ? natureOfWorkIds : undefined,
@@ -258,7 +258,6 @@ function CasesWorkspaceList() {
       debouncedQ,
       departmentIds,
       entityIds,
-      isDelayed,
       loiAwarded,
       natureOfWorkIds,
       ownerUserId,
@@ -282,7 +281,6 @@ function CasesWorkspaceList() {
     debouncedQ,
     departmentIds,
     entityIds,
-    isDelayed,
     loiAwarded,
     natureOfWorkIds,
     ownerUserId,
@@ -327,7 +325,7 @@ function CasesWorkspaceList() {
     setStatusValues(nextStatus ? [nextStatus as StatusFilter] : []);
     setIsDelayed(nextIsDelayed);
     setPriorityCase(nextPriorityCase);
-    setTrackStatus(nextTrackStatus);
+    setTrackStatus(nextTrackStatus || trackStatusFromLegacyDelay(nextIsDelayed));
     setPageCursors([""]);
   }, [location.search]);
 
@@ -387,7 +385,6 @@ function CasesWorkspaceList() {
     dateTo,
     ...departmentIds,
     ...entityIds,
-    isDelayed,
     loiAwarded,
     ...natureOfWorkIds,
     ownerUserId,
@@ -421,9 +418,8 @@ function CasesWorkspaceList() {
     if (natureOfWorkIds.length) {
       chips.push({ key: "nature", label: `Nature: ${labelSelected(natureOfWorkIds, natureOfWork.map((n) => ({ label: n.label, value: n.id })))}`, onClear: () => setNatureOfWorkIds([]) });
     }
-    if (trackStatus) chips.push({ key: "trackStatus", label: `Track: ${formatTrackStatus(trackStatus)}`, onClear: () => setTrackStatus("") });
+    if (trackStatus) chips.push({ key: "trackStatus", label: `Delay Indicator: ${formatTrackStatus(trackStatus)}`, onClear: () => setTrackStatus("") });
     if (priorityCase) chips.push({ key: "priority", label: priorityCase === "true" ? "Priority" : "Not Priority", onClear: () => setPriorityCase("") });
-    if (isDelayed) chips.push({ key: "delayed", label: isDelayed === "true" ? "Delayed" : "On Track", onClear: () => setIsDelayed("") });
     if (cpcInvolved) chips.push({ key: "cpc", label: cpcInvolved === "true" ? "CPC: Yes" : "CPC: No", onClear: () => setCpcInvolved("") });
     if (loiAwarded) chips.push({ key: "loi", label: loiAwarded === "true" ? "LOI Awarded" : "LOI Not Awarded", onClear: () => setLoiAwarded("") });
     if (dateFrom) chips.push({ key: "dateFrom", label: `From: ${dateFrom}`, onClear: () => setDateFrom("") });
@@ -432,7 +428,7 @@ function CasesWorkspaceList() {
     if (completionFys.length) chips.push({ key: "completionFy", label: `Comp. FY: ${completionFys.join(", ")}`, onClear: () => setCompletionFys([]) });
     if (valueSlabs.length) chips.push({ key: "valueSlab", label: `Value: ${labelSelected(valueSlabs, valueSlabOptions.filter((o) => o.value) as Array<{ label: string; value: string }> )}`, onClear: () => setValueSlabs([]) });
     return chips;
-  }, [budgetTypeIds, budgetTypes, catalog.data, completionFys, cpcInvolved, dateFrom, dateTo, departmentIds, departments.data, entityIds, entities.data, isDelayed, loiAwarded, natureOfWork, natureOfWorkIds, ownerUserId, ownerOptions, prReceiptMonths, priorityCase, statusValues, tenderTypeIds, trackStatus, valueSlabs]);
+  }, [budgetTypeIds, budgetTypes, catalog.data, completionFys, cpcInvolved, dateFrom, dateTo, departmentIds, departments.data, entityIds, entities.data, loiAwarded, natureOfWork, natureOfWorkIds, ownerUserId, ownerOptions, prReceiptMonths, priorityCase, statusValues, tenderTypeIds, trackStatus, valueSlabs]);
   const caseRows = cases.data ?? [];
   const entityFilterOptions = useMemo(
     () => uniqueFilterOptions(caseRows, (row) => entityNameById.get(row.entityId) ?? row.entityId),
@@ -695,12 +691,16 @@ function CasesWorkspaceList() {
                 <Checkbox checked={statusValues.includes("completed")} label="Completed" onChange={(event) => setStatusValues(toggleArrayValue(statusValues, "completed", event.target.checked))} />
               </div>
             </FormField>
-            <FormField label="Delay Status">
+            <FormField label="Delay Indicator">
               <Select
-                onChange={(event) => setIsDelayed(toBooleanFilter(event.target.value))}
-                options={[{ label: "Delayed", value: "true" }, { label: "On Time", value: "false" }]}
+                onChange={(event) => setTrackStatus(toTrackStatusFilter(event.target.value))}
+                options={[
+                  { label: "Delayed", value: "delayed" },
+                  { label: "Off Track", value: "off_track" },
+                  { label: "On Track", value: "on_track" },
+                ]}
                 placeholder="All"
-                value={isDelayed}
+                value={trackStatus}
               />
             </FormField>
             <FormField label="Routed Through CPC">
@@ -962,7 +962,7 @@ function CasesWorkspaceList() {
     setQ(view.state.q);
     setStatusValues(view.state.statusValues ?? []);
     setTenderTypeIds(view.state.tenderTypeIds ?? []);
-    setTrackStatus(view.state.trackStatus ?? "");
+    setTrackStatus(view.state.trackStatus ?? trackStatusFromLegacyDelay(view.state.isDelayed));
     setValueSlabs(view.state.valueSlabs ?? []);
     setVisibleColumnKeys(normalizeColumnKeys(view.state.visibleColumnKeys));
   }
@@ -1091,6 +1091,12 @@ function toTrackStatusFilter(value: string): TrackStatusFilter {
   return value === "delayed" || value === "off_track" || value === "on_track"
     ? value
     : "";
+}
+
+function trackStatusFromLegacyDelay(value: BooleanFilter): TrackStatusFilter {
+  if (value === "true") return "delayed";
+  if (value === "false") return "on_track";
+  return "";
 }
 
 function formatTrackStatus(value: TrackStatusFilter): string {

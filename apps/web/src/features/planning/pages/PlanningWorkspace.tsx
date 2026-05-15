@@ -347,7 +347,7 @@ export function PlanningWorkspace() {
             <option value="">All</option>
             {activeEntities.map((entity) => (
               <option key={entity.id} value={entity.id}>
-                {entity.code} - {entity.name}
+                {entity.code}
               </option>
             ))}
           </select>
@@ -507,7 +507,7 @@ export function PlanningWorkspace() {
             >
               {activeEntities.map((entity) => (
                 <option key={entity.id} value={entity.id}>
-                  {entity.code} - {entity.name}
+                  {entity.code}
                 </option>
               ))}
             </select>

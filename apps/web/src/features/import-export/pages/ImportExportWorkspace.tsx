@@ -156,6 +156,7 @@ const rowColumns: DataTableColumn<ImportJobRow>[] = [
   { key: "action", header: "Impact", render: (row) => String(row.normalizedPayload?.importAction ?? "-") },
   { key: "record", header: "Record", render: (row) => previewRecordLabel(row.normalizedPayload) },
   { key: "entity", header: "Entity", render: (row) => String(row.normalizedPayload?.entityCode ?? "-") },
+  { key: "natureOfWork", header: "Nature of Work", render: (row) => String(row.normalizedPayload?.natureOfWork ?? "-") },
   {
     key: "errors",
     header: "Issues",

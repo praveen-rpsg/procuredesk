@@ -7,7 +7,11 @@ import {
 } from "@nestjs/common";
 
 import { RedisCacheService } from "../../../common/cache/redis-cache.service.js";
-import { effectiveCaseReadScope, hasExpandedPermission } from "../../../common/auth/permission-utils.js";
+import {
+  effectiveCaseReadScope,
+  effectivePlanningScope,
+  hasExpandedPermission,
+} from "../../../common/auth/permission-utils.js";
 import { PrivateFileStorageService } from "../../../common/storage/private-file-storage.service.js";
 import { DatabaseService } from "../../../database/database.service.js";
 import { AuditWriterService } from "../../audit/application/audit-writer.service.js";
@@ -78,7 +82,7 @@ export class ReportingService {
     this.requirePermission(actor, "report.read");
     return this.repository.rcPoExpiry({
       filters: this.limitFilters(filters),
-      scope: this.scope(actor),
+      scope: this.planningScope(actor),
       tenantId,
     });
   }
@@ -294,6 +298,10 @@ export class ReportingService {
 
   private scope(actor: AuthenticatedUser) {
     return effectiveCaseReadScope(actor);
+  }
+
+  private planningScope(actor: AuthenticatedUser) {
+    return effectivePlanningScope(actor);
   }
 
   private filterMetadataCacheKey(tenantId: string, scope: ReportScope): string {

@@ -27,6 +27,7 @@ type ReportFilters = {
   departmentIds: string[];
   days?: number | undefined;
   entityIds: string[];
+  includeExpiredContracts?: boolean | undefined;
   includeTenderFloatedOrNotRequired?: boolean | undefined;
   limit: number;
   loiAwarded?: boolean | undefined;
@@ -38,6 +39,7 @@ type ReportFilters = {
   stageCodes: number[];
   status?: "completed" | "running" | undefined;
   tenderTypeIds: string[];
+  trackStatus?: "delayed" | "off_track" | "on_track" | undefined;
   valueSlabs: string[];
 };
 type ExportScope = {
@@ -94,6 +96,7 @@ export async function processExportJob(
       scope: await getExportScope(
         payload.tenantId,
         job.created_by,
+        job.report_code,
         dependencies.pool,
       ),
       tenantId: payload.tenantId,
@@ -658,29 +661,42 @@ async function queryRcPoExpiryExport(input: {
   const result = await input.pool.query<ExportRow>(
     `
       select
-        case
-          when e.source_type = 'case_award' and e.case_award_id is not null then e.case_award_id
-          when e.source_type = 'manual_plan' and e.rc_po_plan_id is not null then e.rc_po_plan_id
-          else e.id
-        end as source_id,
-        e.source_type,
-        coalesce(ent.code, ent.name) as entity,
-        dep.name as department,
-        owner.full_name as tender_owner,
-        e.tender_description,
-        e.awarded_vendors,
-        e.rc_po_amount,
-        e.rc_po_award_date,
-        e.rc_po_validity_date,
-        e.tentative_tendering_date,
-        e.tender_floated_or_not_required,
-        (e.rc_po_validity_date - current_date)::integer as days_to_expiry
-      from reporting.contract_expiry_facts e
-      left join org.entities ent on ent.id = e.entity_id and ent.tenant_id = e.tenant_id
-      left join org.departments dep on dep.id = e.department_id and dep.tenant_id = e.tenant_id
-      left join iam.users owner on owner.id = e.owner_user_id and owner.tenant_id = e.tenant_id
-      where ${where.join(" and ")}
-      order by e.rc_po_validity_date asc
+        (array_agg(
+          coalesce(filtered.case_award_id, filtered.rc_po_plan_id, filtered.id)
+          order by filtered.rc_po_validity_date asc, filtered.id asc
+        ))[1] as source_id,
+        (array_agg(filtered.source_type order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as source_type,
+        (array_agg(coalesce(filtered.entity_code, filtered.entity_name) order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as entity,
+        (array_agg(filtered.department_name order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as department,
+        (array_agg(filtered.owner_full_name order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as tender_owner,
+        (array_agg(filtered.tender_description order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as tender_description,
+        string_agg(distinct nullif(filtered.awarded_vendors, ''), ', ') as awarded_vendors,
+        sum(filtered.rc_po_amount) as rc_po_amount,
+        min(filtered.rc_po_award_date) as rc_po_award_date,
+        min(filtered.rc_po_validity_date) as rc_po_validity_date,
+        min(filtered.tentative_tendering_date) as tentative_tendering_date,
+        bool_or(filtered.tender_floated_or_not_required) as tender_floated_or_not_required,
+        (min(filtered.rc_po_validity_date) - current_date)::integer as days_to_expiry
+      from (
+        select
+          e.*,
+          ent.code as entity_code,
+          ent.name as entity_name,
+          dep.name as department_name,
+          owner.full_name as owner_full_name,
+          case
+            when e.source_type = 'case_award' and e.case_id is not null then 'case:' || e.case_id::text
+            when e.source_type = 'manual_plan' and e.rc_po_plan_id is not null then 'plan:' || e.rc_po_plan_id::text
+            else 'fact:' || e.id::text
+          end as report_group_key
+        from reporting.contract_expiry_facts e
+        left join org.entities ent on ent.id = e.entity_id and ent.tenant_id = e.tenant_id
+        left join org.departments dep on dep.id = e.department_id and dep.tenant_id = e.tenant_id
+        left join iam.users owner on owner.id = e.owner_user_id and owner.tenant_id = e.tenant_id
+        where ${where.join(" and ")}
+      ) filtered
+      group by filtered.report_group_key
+      order by min(filtered.rc_po_validity_date) asc
       limit $${limitPosition}
     `,
     values,
@@ -713,6 +729,7 @@ async function queryRcPoExpiryExport(input: {
 async function getExportScope(
   tenantId: string,
   userId: string,
+  reportCode: ReportCode,
   pool: Pool,
 ): Promise<ExportScope> {
   const result = await pool.query<{
@@ -761,6 +778,33 @@ async function getExportScope(
   }
   const permissions = expandPermissions(actor.permissions ?? []);
   const canViewDelay = false;
+  if (reportCode === "rc_po_expiry") {
+    if (actor.access_level === "GROUP") {
+      return {
+        actorUserId: userId,
+        assignedOnly: false,
+        canViewDelay,
+        entityIds: [],
+        tenantWide: true,
+      };
+    }
+    if (actor.access_level === "ENTITY") {
+      return {
+        actorUserId: userId,
+        assignedOnly: false,
+        canViewDelay,
+        entityIds: actor.entity_ids ?? [],
+        tenantWide: false,
+      };
+    }
+    return {
+      actorUserId: userId,
+      assignedOnly: true,
+      canViewDelay,
+      entityIds: [],
+      tenantWide: false,
+    };
+  }
   if (actor.access_level === "GROUP" && permissions.has("case.read.all")) {
     return {
       actorUserId: userId,
@@ -831,6 +875,7 @@ function normalizeFilters(value: unknown): ReportFilters {
     departmentIds: stringArray(record.departmentIds, 200),
     days: optionalInteger(record.days, 0, 730),
     entityIds: stringArray(record.entityIds, 200),
+    includeExpiredContracts: optionalBoolean(record.includeExpiredContracts),
     includeTenderFloatedOrNotRequired: optionalBoolean(
       record.includeTenderFloatedOrNotRequired,
     ),
@@ -849,6 +894,12 @@ function normalizeFilters(value: unknown): ReportFilters {
         ? record.status
         : undefined,
     tenderTypeIds: stringArray(record.tenderTypeIds, 100),
+    trackStatus:
+      record.trackStatus === "delayed" ||
+      record.trackStatus === "off_track" ||
+      record.trackStatus === "on_track"
+        ? record.trackStatus
+        : undefined,
     valueSlabs: stringArray(record.valueSlabs, 20),
   };
 }
@@ -930,6 +981,7 @@ function applyCaseFactFilters(
       filters.delayStatus === "delayed" ? "f.is_delayed" : "not f.is_delayed",
     );
   }
+  applyTrackStatusFilter(where, filters.trackStatus);
   if (filters.loiAwarded !== undefined) {
     where.push(
       filters.loiAwarded
@@ -948,6 +1000,38 @@ function applyCaseFactFilters(
   if (filters.q) {
     applyTextSearch(where, values, filters.q, searchColumns);
   }
+}
+
+function applyTrackStatusFilter(
+  where: string[],
+  trackStatus: ReportFilters["trackStatus"],
+) {
+  if (!trackStatus) return;
+
+  if (trackStatus === "delayed") {
+    where.push(`
+      f.status = 'running'
+      and c.tentative_completion_date is not null
+      and c.tentative_completion_date < current_date
+    `);
+    return;
+  }
+
+  if (trackStatus === "off_track") {
+    where.push(`
+      f.status = 'running'
+      and (c.tentative_completion_date is null or c.tentative_completion_date >= current_date)
+      and f.desired_stage_code is not null
+      and f.stage_code < f.desired_stage_code
+    `);
+    return;
+  }
+
+  where.push(`
+    f.status = 'running'
+    and (c.tentative_completion_date is null or c.tentative_completion_date >= current_date)
+    and (f.desired_stage_code is null or f.stage_code >= f.desired_stage_code)
+  `);
 }
 
 function applyRcPoExpiryFilters(
@@ -978,11 +1062,13 @@ function applyRcPoExpiryFilters(
   );
   applyValueSlabFilter(where, filters.valueSlabs, "e.rc_po_amount");
 
-  values.push(filters.days ?? 365);
-  where.push(`
-    e.rc_po_validity_date >= current_date
-    and e.rc_po_validity_date <= current_date + ($${values.length}::integer * interval '1 day')
-  `);
+  if (!filters.includeExpiredContracts) {
+    where.push("e.rc_po_validity_date >= current_date");
+  }
+  if (filters.days != null) {
+    values.push(filters.days);
+    where.push(`e.rc_po_validity_date <= current_date + ($${values.length}::integer * interval '1 day')`);
+  }
 
   where.push(
     filters.deletedOnly

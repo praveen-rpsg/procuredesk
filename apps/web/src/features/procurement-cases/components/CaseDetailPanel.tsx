@@ -255,7 +255,7 @@ export function CaseDetailPanel({
             <p className="eyebrow">Delay</p>
             <dl className="compact-detail-list">
               <CompactMetric
-                label="Track Status"
+                label="Delay Indicator"
                 value={trackStatus?.label ?? "-"}
               />
               <CompactMetric

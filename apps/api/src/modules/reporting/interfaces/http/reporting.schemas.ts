@@ -40,6 +40,7 @@ export const ReportQuerySchema = z.object({
   departmentIds: csvUuidList,
   days: z.coerce.number().int().min(0).max(730).optional(),
   entityIds: csvUuidList,
+  includeExpiredContracts: z.enum(["true", "false"]).optional().transform((value) => value === undefined ? undefined : value === "true"),
   includeTenderFloatedOrNotRequired: z.enum(["true", "false"]).optional().transform((value) => value === undefined ? undefined : value === "true"),
   limit: z.coerce.number().int().min(1).max(100).optional(),
   loiAwarded: z.enum(["true", "false"]).optional().transform((value) => value === undefined ? undefined : value === "true"),
