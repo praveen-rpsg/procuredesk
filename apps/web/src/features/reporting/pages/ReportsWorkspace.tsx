@@ -1917,7 +1917,7 @@ function ReportAnalyticsDashboard({
     },
     {
       label: "Avg Cycle Time (Days)",
-      meta: `Incl. uncontrollable delays${metrics?.completedCases != null ? ` · ${metrics.completedCases} completed case(s)` : ""}`,
+      meta: `Incl. delays${metrics?.completedCases != null ? ` · ${metrics.completedCases} completed` : ""}`,
       tone: delayedRatio > 0 ? "danger" : "success",
       value: formatNullableDecimal(metrics?.averageCycleTimeDays),
     },
@@ -1953,9 +1953,9 @@ function ReportAnalyticsDashboard({
           </div>
           <aside className="report-analytics-status-panel">
             <ReportChartHeader
-              eyebrow="Workload Mix"
-              subtitle={`${metrics?.runningCases ?? 0} running case(s)`}
-              title="Track matrix"
+              eyebrow="Running Workload"
+              subtitle={`${metrics?.runningCases ?? 0} running cases`}
+              title="Track status"
             />
             <ReportDonutChart
               rows={statusRows}
@@ -1981,15 +1981,6 @@ function ReportAnalyticsDashboard({
 
       <section className="state-panel report-analytics-card">
         <ReportChartHeader
-          eyebrow="Where work sits"
-          subtitle={`${entityRows.length} reporting groups`}
-          title="Cases by entity"
-        />
-        <ReportPremiumBarChart rows={entityRows} amountUnit={amountUnit} />
-      </section>
-
-      <section className="state-panel report-analytics-card">
-        <ReportChartHeader
           eyebrow="PR value mix"
           subtitle={`${entityPrRows.length} reporting groups`}
           title="Entity-wise PR value distribution"
@@ -2001,6 +1992,15 @@ function ReportAnalyticsDashboard({
         />
       </section>
 
+      <section className="state-panel report-analytics-card">
+        <ReportChartHeader
+          eyebrow="Where work sits"
+          subtitle={`${entityRows.length} reporting groups`}
+          title="Cases by entity"
+        />
+        <ReportEntityRankedList rows={entityRows} amountUnit={amountUnit} />
+      </section>
+
       <section className="state-panel report-analytics-card report-analytics-wide">
         <ReportChartHeader
           eyebrow="Department workload"
@@ -2010,7 +2010,7 @@ function ReportAnalyticsDashboard({
         <ReportDepartmentNatureStackedBar rows={departmentNatureRows} />
       </section>
 
-      <section className="state-panel report-analytics-card">
+      <section className="state-panel report-analytics-card report-analytics-wide report-analytics-tender-type-card">
         <ReportChartHeader
           eyebrow="Type breakdown"
           subtitle={`${tenderTypeRows.length} tender types`}
@@ -2244,6 +2244,62 @@ function ReportPremiumBarChart({
           </div>
         </article>
       ))}
+    </div>
+  );
+}
+
+function ReportEntityRankedList({
+  amountUnit,
+  rows,
+}: {
+  amountUnit: AmountUnit;
+  rows: Array<{
+    amount: number;
+    label: string;
+    secondaryValue: number;
+    tertiaryValue?: number;
+    value: number;
+  }>;
+}) {
+  const max = Math.max(1, ...rows.map((row) => row.value));
+
+  if (rows.length === 0) {
+    return <p className="hero-copy">No entity data for the current filters.</p>;
+  }
+
+  return (
+    <div className="report-entity-ranked-list">
+      {rows.map((row, index) => {
+        const delayed = row.secondaryValue;
+        const offTrack = row.tertiaryValue ?? 0;
+        const onTrack = Math.max(row.value - delayed - offTrack, 0);
+        return (
+          <article className="report-entity-ranked-row" key={row.label}>
+            <span className="report-entity-rank">#{index + 1}</span>
+            <div className="report-entity-ranked-main">
+              <div className="report-entity-ranked-title">
+                <strong>{row.label}</strong>
+                <span>{formatAmount(row.amount, amountUnit)} awarded</span>
+              </div>
+              <div className="report-entity-ranked-meter">
+                <span style={{ width: `${Math.max(6, (row.value / max) * 100)}%` }} />
+              </div>
+            </div>
+            <div className="report-entity-ranked-metrics">
+              <strong>{row.value}</strong>
+              <span className="report-status-pill report-status-pill-success">{onTrack}</span>
+              <span className="report-status-pill report-status-pill-warning">{offTrack}</span>
+              <span className="report-status-pill report-status-pill-danger">{delayed}</span>
+            </div>
+          </article>
+        );
+      })}
+      <div className="report-entity-ranked-legend">
+        <span>Total</span>
+        <span>On-Track</span>
+        <span>Off-Track</span>
+        <span>Delayed</span>
+      </div>
     </div>
   );
 }
