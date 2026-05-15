@@ -1955,18 +1955,6 @@ function ReportAnalyticsDashboard({
       value: formatInteger(metrics?.totalCases ?? 0),
     },
     {
-      label: "Running Tender Count",
-      meta: "",
-      tone: "warning",
-      value: formatInteger(metrics?.runningCases ?? 0),
-    },
-    {
-      label: "Completed Tender Count",
-      meta: "",
-      tone: "success",
-      value: formatInteger(metrics?.completedCases ?? 0),
-    },
-    {
       label: `Tender Value (${amountUnitLabel(amountUnit)}) [All Inclusive]`,
       meta: "",
       tone: "brand",
@@ -2012,7 +2000,7 @@ function ReportAnalyticsDashboard({
       value: formatNullableDecimal(metrics?.averageCycleTimeDays),
     },
     {
-      label: "Avg Running Tender Cycle Time (Days)",
+      label: "Avg Running Tender Age",
       meta: metrics?.runningCases != null ? `${metrics.runningCases} running` : "",
       tone: "warning",
       value: formatNullableDecimal(metrics?.averageRunningCycleTimeDays),
