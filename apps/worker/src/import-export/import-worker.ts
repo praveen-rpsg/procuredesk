@@ -188,6 +188,11 @@ async function validateRows(
   const seenDepartments = new Set<string>();
   const seenContracts = new Set<string>();
   const bulkUploadTimestamp = formatBulkUploadTimestamp(new Date());
+  let bulkUploadSequence = 0;
+  const nextBulkUploadSequence = () => {
+    bulkUploadSequence += 1;
+    return bulkUploadSequence;
+  };
   return rows.map((row) =>
     validateImportRow({
       bulkUploadTimestamp,
@@ -198,6 +203,7 @@ async function validateRows(
       existingOldContracts,
       existingUsers,
       importType,
+      nextBulkUploadSequence,
       roles,
       row,
       seenContracts,
@@ -221,6 +227,7 @@ function validateImportRow(input: ValidateImportRowInput): ParsedImportRow {
     existingOldContracts,
     existingUsers,
     importType,
+    nextBulkUploadSequence,
     roles,
     row,
     seenContracts,
@@ -286,6 +293,7 @@ function validateImportRow(input: ValidateImportRowInput): ParsedImportRow {
     existingCases,
     seenPrIds,
     bulkUploadTimestamp,
+    nextBulkUploadSequence,
   );
   validateTenderIdentifiers(
     errors,
@@ -459,6 +467,7 @@ type ValidateImportRowInput = {
   >;
   existingUsers: Awaited<ReturnType<typeof loadExistingUserLookups>>;
   importType: ImportParserInput["importType"];
+  nextBulkUploadSequence: () => number;
   roles: Awaited<ReturnType<typeof loadRoleLookups>>;
   row: ParsedImportRow;
   seenContracts: Set<string>;
@@ -1196,6 +1205,7 @@ function assignTenderBulkPrId(
   existingCases: { prIds: Set<string> },
   seenPrIds: Set<string>,
   bulkUploadTimestamp: string,
+  nextBulkUploadSequence: () => number,
 ): void {
   const currentPrId = textValue(payload.prId);
   if (currentPrId) {
@@ -1205,13 +1215,13 @@ function assignTenderBulkPrId(
 
   const entityCode = sanitizeIdentifierPart(textValue(payload.entityCode));
   const prefix = `RPSG_${entityCode || "ENTITY"}_${bulkUploadTimestamp}`;
-  let sequence = 1;
+  let sequence = nextBulkUploadSequence();
   let generated = `${prefix}_bulk_${sequence}`;
   while (
     existingCases.prIds.has(generated.toLowerCase()) ||
     seenPrIds.has(generated.toLowerCase())
   ) {
-    sequence += 1;
+    sequence = nextBulkUploadSequence();
     generated = `${prefix}_bulk_${sequence}`;
   }
 
