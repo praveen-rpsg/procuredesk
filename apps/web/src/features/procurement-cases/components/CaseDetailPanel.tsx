@@ -133,6 +133,7 @@ export function CaseDetailPanel({
   const canEdit = canUpdateCase(user, kase);
   const canAward = canManageCaseAwards(user, kase);
   const canViewDelay = canViewCaseDelay(user, kase);
+  const trackStatus = caseTrackStatus(kase);
   return (
     <section className="case-preview-panel">
       <div className="case-preview-hero">
@@ -147,8 +148,8 @@ export function CaseDetailPanel({
             >
               {kase.status}
             </StatusBadge>
-            {kase.isDelayed ? (
-              <StatusBadge tone="danger">Delayed</StatusBadge>
+            {trackStatus ? (
+              <StatusBadge tone={trackStatus.tone}>{trackStatus.label}</StatusBadge>
             ) : null}
             {kase.priorityCase ? (
               <StatusBadge tone="warning">Priority</StatusBadge>
@@ -253,6 +254,10 @@ export function CaseDetailPanel({
           <section className="case-preview-section">
             <p className="eyebrow">Delay</p>
             <dl className="compact-detail-list">
+              <CompactMetric
+                label="Track Status"
+                value={trackStatus?.label ?? "-"}
+              />
               <CompactMetric
                 label="External Days"
                 value={String(kase.delay.delayExternalDays ?? 0)}
@@ -381,4 +386,18 @@ function activityTone(
   if (action.includes("restore") || action.includes("create")) return "success";
   if (action.includes("delay")) return "warning";
   return "neutral";
+}
+
+function caseTrackStatus(
+  kase: CaseDetail,
+): { label: "Delayed" | "Off Track" | "On Track"; tone: "danger" | "success" | "warning" } | null {
+  if (kase.status !== "running") return null;
+  if (kase.isDelayed) return { label: "Delayed", tone: "danger" };
+  if (
+    kase.desiredStageCode != null &&
+    kase.stageCode < kase.desiredStageCode
+  ) {
+    return { label: "Off Track", tone: "warning" };
+  }
+  return { label: "On Track", tone: "success" };
 }

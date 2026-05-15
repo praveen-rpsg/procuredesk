@@ -187,8 +187,10 @@ async function validateRows(
   const seenPhones = new Set<string>();
   const seenDepartments = new Set<string>();
   const seenContracts = new Set<string>();
+  const bulkUploadTimestamp = formatBulkUploadTimestamp(new Date());
   return rows.map((row) =>
     validateImportRow({
+      bulkUploadTimestamp,
       catalog,
       departments,
       entityScope,
@@ -211,6 +213,7 @@ async function validateRows(
 
 function validateImportRow(input: ValidateImportRowInput): ParsedImportRow {
   const {
+    bulkUploadTimestamp,
     catalog,
     departments,
     entityScope,
@@ -277,6 +280,12 @@ function validateImportRow(input: ValidateImportRowInput): ParsedImportRow {
     normalizedPayload.departmentName,
     entity?.id,
     departments,
+  );
+  assignTenderBulkPrId(
+    normalizedPayload,
+    existingCases,
+    seenPrIds,
+    bulkUploadTimestamp,
   );
   validateTenderIdentifiers(
     errors,
@@ -440,6 +449,7 @@ function validateSpecializedImportRow(input: {
 }
 
 type ValidateImportRowInput = {
+  bulkUploadTimestamp: string;
   catalog: Awaited<ReturnType<typeof loadCatalogLookups>>;
   departments: Awaited<ReturnType<typeof loadDepartmentLookups>>;
   entityScope: Awaited<ReturnType<typeof loadEntityScope>>;
@@ -1179,6 +1189,54 @@ function validateTenderIdentifiers(
       errors.push("Tender No. already exists against another PR/Scheme No.");
     }
   }
+}
+
+function assignTenderBulkPrId(
+  payload: Record<string, unknown>,
+  existingCases: { prIds: Set<string> },
+  seenPrIds: Set<string>,
+  bulkUploadTimestamp: string,
+): void {
+  const currentPrId = textValue(payload.prId);
+  if (currentPrId) {
+    if (!textValue(payload.prSchemeNo)) payload.prSchemeNo = currentPrId;
+    return;
+  }
+
+  const entityCode = sanitizeIdentifierPart(textValue(payload.entityCode));
+  const prefix = `RPSG_${entityCode || "ENTITY"}_${bulkUploadTimestamp}`;
+  let sequence = 1;
+  let generated = `${prefix}_bulk_${sequence}`;
+  while (
+    existingCases.prIds.has(generated.toLowerCase()) ||
+    seenPrIds.has(generated.toLowerCase())
+  ) {
+    sequence += 1;
+    generated = `${prefix}_bulk_${sequence}`;
+  }
+
+  payload.prId = generated;
+  payload.prSchemeNo = generated;
+}
+
+function formatBulkUploadTimestamp(value: Date): string {
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return [
+    value.getFullYear(),
+    pad(value.getMonth() + 1),
+    pad(value.getDate()),
+    pad(value.getHours()),
+    pad(value.getMinutes()),
+    pad(value.getSeconds()),
+  ].join("");
+}
+
+function sanitizeIdentifierPart(value: string): string {
+  return value
+    .trim()
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase();
 }
 
 function validateChronology(

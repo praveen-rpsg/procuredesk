@@ -1114,6 +1114,134 @@ export class ImportExportRepository {
       [input.tenantId, input.importJobId],
       client,
     );
+
+    await this.refreshTenderCaseFactsForImport(input, client);
+  }
+
+  private async refreshTenderCaseFactsForImport(
+    input: { importJobId: string; tenantId: string },
+    client: PoolClient,
+  ): Promise<void> {
+    await this.db.query(
+      `
+        insert into reporting.case_facts (
+          case_id, tenant_id, entity_id, department_id, owner_user_id,
+          tender_type_id, status, stage_code, desired_stage_code, is_delayed,
+          priority_case, cpc_involved, pr_receipt_date, rc_po_award_date,
+          completion_fy, value_slab, rc_po_value_slab, running_age_days,
+          completed_age_days, current_stage_aging_days, pr_value,
+          estimate_benchmark, approved_amount, total_awarded_amount,
+          savings_wrt_pr, savings_wrt_estimate, updated_at
+        )
+        select
+          c.id,
+          c.tenant_id,
+          c.entity_id,
+          c.department_id,
+          c.owner_user_id,
+          c.tender_type_id,
+          c.status,
+          c.stage_code,
+          c.desired_stage_code,
+          c.is_delayed,
+          c.priority_case,
+          c.cpc_involved,
+          c.pr_receipt_date,
+          m.rc_po_award_date,
+          case
+            when m.rc_po_award_date is null then null
+            when extract(month from m.rc_po_award_date) >= 4
+              then extract(year from m.rc_po_award_date)::int || '-' || (extract(year from m.rc_po_award_date)::int + 1)
+            else (extract(year from m.rc_po_award_date)::int - 1) || '-' || extract(year from m.rc_po_award_date)::int
+          end,
+          case
+            when (case when c.status = 'completed' then f.approved_amount else f.pr_value end) is null then null
+            when (case when c.status = 'completed' then f.approved_amount else f.pr_value end) < 200000 then 'lt_2l'
+            when (case when c.status = 'completed' then f.approved_amount else f.pr_value end) < 500000 then '2l_5l'
+            when (case when c.status = 'completed' then f.approved_amount else f.pr_value end) < 1000000 then '5l_10l'
+            when (case when c.status = 'completed' then f.approved_amount else f.pr_value end) < 2500000 then '10l_25l'
+            when (case when c.status = 'completed' then f.approved_amount else f.pr_value end) < 5000000 then '25l_50l'
+            when (case when c.status = 'completed' then f.approved_amount else f.pr_value end) < 10000000 then '50l_100l'
+            when (case when c.status = 'completed' then f.approved_amount else f.pr_value end) < 20000000 then '100l_200l'
+            else 'gte_200l'
+          end,
+          case
+            when f.total_awarded_amount is null then null
+            when f.total_awarded_amount < 200000 then 'lt_2l'
+            when f.total_awarded_amount < 500000 then '2l_5l'
+            when f.total_awarded_amount < 1000000 then '5l_10l'
+            when f.total_awarded_amount < 2500000 then '10l_25l'
+            when f.total_awarded_amount < 5000000 then '25l_50l'
+            when f.total_awarded_amount < 10000000 then '50l_100l'
+            when f.total_awarded_amount < 20000000 then '100l_200l'
+            else 'gte_200l'
+          end,
+          case
+            when c.status = 'running' and c.pr_receipt_date is not null
+              then current_date - c.pr_receipt_date
+            else null
+          end,
+          case
+            when c.status = 'completed' and c.pr_receipt_date is not null and m.rc_po_award_date is not null
+              then m.rc_po_award_date - c.pr_receipt_date
+            else null
+          end,
+          case
+            when c.pr_receipt_date is not null then current_date - c.pr_receipt_date
+            else null
+          end,
+          f.pr_value,
+          f.estimate_benchmark,
+          f.approved_amount,
+          f.total_awarded_amount,
+          case
+            when f.pr_value is null or f.approved_amount is null then null
+            else f.pr_value - f.approved_amount
+          end,
+          case
+            when f.estimate_benchmark is null or f.approved_amount is null then null
+            else f.estimate_benchmark - f.approved_amount
+          end,
+          now()
+        from ops.import_job_rows r
+        join procurement.cases c
+          on c.tenant_id = $1
+         and c.pr_id = r.normalized_payload->>'prId'
+         and c.deleted_at is null
+        left join procurement.case_financials f on f.case_id = c.id
+        left join procurement.case_milestones m on m.case_id = c.id
+        where r.import_job_id = $2
+          and r.status = 'accepted'
+        on conflict (case_id) do update
+        set entity_id = excluded.entity_id,
+            department_id = excluded.department_id,
+            owner_user_id = excluded.owner_user_id,
+            tender_type_id = excluded.tender_type_id,
+            status = excluded.status,
+            stage_code = excluded.stage_code,
+            desired_stage_code = excluded.desired_stage_code,
+            is_delayed = excluded.is_delayed,
+            priority_case = excluded.priority_case,
+            cpc_involved = excluded.cpc_involved,
+            pr_receipt_date = excluded.pr_receipt_date,
+            rc_po_award_date = excluded.rc_po_award_date,
+            completion_fy = excluded.completion_fy,
+            value_slab = excluded.value_slab,
+            rc_po_value_slab = excluded.rc_po_value_slab,
+            running_age_days = excluded.running_age_days,
+            completed_age_days = excluded.completed_age_days,
+            current_stage_aging_days = excluded.current_stage_aging_days,
+            pr_value = excluded.pr_value,
+            estimate_benchmark = excluded.estimate_benchmark,
+            approved_amount = excluded.approved_amount,
+            total_awarded_amount = excluded.total_awarded_amount,
+            savings_wrt_pr = excluded.savings_wrt_pr,
+            savings_wrt_estimate = excluded.savings_wrt_estimate,
+            updated_at = now()
+      `,
+      [input.tenantId, input.importJobId],
+      client,
+    );
   }
 
   private async insertImportRow(

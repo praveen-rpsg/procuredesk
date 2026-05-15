@@ -17,7 +17,6 @@ import {
   TrendingDown,
   TrendingUp,
   Trash2,
-  TriangleAlert,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -40,7 +39,6 @@ import {
   dateOnlyToLocalDate,
   formatDateOnly,
   parseDateOnlyParts,
-  todayDateOnlyString,
   toDateOnlyInputValue,
 } from "../../../shared/utils/dateOnly";
 import { ActivityFeed } from "../../../shared/ui/activity-feed/ActivityFeed";
@@ -219,11 +217,11 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
 
   const kase = detail.data;
   const caseTitle = kase.tenderName || kase.prDescription || `Case #${kase.prId}`;
-  const overdue = isOverdue(kase);
   const age = runningAgeDays(kase.prReceiptDate);
   const elapsed = timeElapsedPct(kase.prReceiptDate, kase.tentativeCompletionDate);
   const fy = completionFY(kase.tentativeCompletionDate);
   const showHeaderFinancials = activeTab !== "overview";
+  const trackStatus = caseTrackStatus(kase);
 
   return (
     <div className="case-page">
@@ -247,13 +245,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
           <StatusBadge tone={kase.status === "completed" ? "success" : "warning"}>
             {kase.status}
           </StatusBadge>
-          {overdue && (
-            <StatusBadge tone="danger">
-              <TriangleAlert size={11} />
-              Overdue
-            </StatusBadge>
-          )}
-          {kase.isDelayed && !overdue && <StatusBadge tone="danger">Delayed</StatusBadge>}
+          {trackStatus ? <StatusBadge tone={trackStatus.tone}>{trackStatus.label}</StatusBadge> : null}
           {kase.priorityCase && <StatusBadge tone="warning">Priority</StatusBadge>}
           {kase.cpcInvolved && <StatusBadge>CPC</StatusBadge>}
         </div>
@@ -300,7 +292,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
               icon={kase.status === "completed" ? CalendarCheck2 : CalendarClock}
               label={kase.status === "completed" ? "Completed" : "Target Date"}
               value={formatDate(kase.tentativeCompletionDate)}
-              tone={overdue ? "danger" : "neutral"}
+              tone={trackStatus?.label === "Delayed" ? "danger" : "neutral"}
             />
           </div>
         </div>
@@ -476,17 +468,13 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
               <SectionCard
                 title="Delay Tracking"
                 badge={
-                  kase.isDelayed ? (
-                    <StatusBadge tone="danger">
-                      <TriangleAlert size={11} />
-                      {kase.delay.delayExternalDays ? `${kase.delay.delayExternalDays}d delay` : "Delayed"}
-                    </StatusBadge>
-                  ) : (
-                    <StatusBadge tone="success">On Track</StatusBadge>
-                  )
+                  trackStatus ? (
+                    <StatusBadge tone={trackStatus.tone}>{trackStatus.label}</StatusBadge>
+                  ) : null
                 }
               >
                 <div className="case-info-list">
+                  <InfoRow label="Track Status" value={trackStatus?.label ?? "—"} />
                   <InfoRow label="External Delay Days" value={String(kase.delay.delayExternalDays ?? 0)} />
                   <InfoRow label="Delay Reason" value={kase.delay.delayReason ?? "—"} />
                 </div>
@@ -767,11 +755,16 @@ function caseDetailTabFromSearch(search: string): CaseDetailTabKey | null {
     : null;
 }
 
-function isOverdue(kase: CaseDetail) {
-  const targetDate = toDateOnlyInputValue(kase.tentativeCompletionDate);
-  return Boolean(
-    kase.status === "running" &&
-      targetDate &&
-      targetDate < todayDateOnlyString(),
-  );
+function caseTrackStatus(
+  kase: CaseDetail,
+): { label: "Delayed" | "Off Track" | "On Track"; tone: "danger" | "success" | "warning" } | null {
+  if (kase.status !== "running") return null;
+  if (kase.isDelayed) return { label: "Delayed", tone: "danger" };
+  if (
+    kase.desiredStageCode != null &&
+    kase.stageCode < kase.desiredStageCode
+  ) {
+    return { label: "Off Track", tone: "warning" };
+  }
+  return { label: "On Track", tone: "success" };
 }

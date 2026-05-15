@@ -74,6 +74,9 @@ type DashboardPageProps = {
 
 type FocusCaseMode = "delayed" | "priority";
 
+const DASHBOARD_TABLE_FETCH_LIMIT = 100;
+const DASHBOARD_TABLE_PAGE_SIZE = 10;
+
 const expiryColumns: DataTableColumn<RcPoExpiryRow>[] = [
   {
     key: "entity",
@@ -186,6 +189,19 @@ function isCaseOffTrack(
   );
 }
 
+function isCaseOnTrack(
+  row: Pick<
+    CaseListItem,
+    "desiredStageCode" | "isDelayed" | "stageCode" | "status"
+  >,
+) {
+  return Boolean(
+    row.status === "running" &&
+      !row.isDelayed &&
+      (row.desiredStageCode == null || row.stageCode >= row.desiredStageCode),
+  );
+}
+
 function getGreeting(hour: number): string {
   if (hour < 12) return "Good morning";
   if (hour < 17) return "Good afternoon";
@@ -200,6 +216,7 @@ function percentage(value: number, total: number): number {
 function caseFlagLabel(row: CaseListItem): string {
   if (row.isDelayed) return "Delayed";
   if (isCaseOffTrack(row)) return "Off Track";
+  if (isCaseOnTrack(row)) return "On Track";
   if (row.priorityCase) return "Priority";
   return "Normal";
 }
@@ -261,8 +278,12 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     queryFn: () =>
       listCases(
         focusCaseMode === "delayed"
-          ? { limit: 5, trackStatus: "delayed" }
-          : { limit: 5, priorityCase: true, status: "running" },
+          ? { limit: DASHBOARD_TABLE_FETCH_LIMIT, trackStatus: "delayed" }
+          : {
+              limit: DASHBOARD_TABLE_FETCH_LIMIT,
+              priorityCase: true,
+              status: "running",
+            },
       ),
     queryKey: [
       focusCaseMode === "delayed"
@@ -277,7 +298,8 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   });
   const expiryRows = useQuery({
     enabled: hasCaseAccess && hasPlanningManageAccess,
-    queryFn: () => listRcPoExpiry({ days: 90, limit: 25 }),
+    queryFn: () =>
+      listRcPoExpiry({ days: 90, limit: DASHBOARD_TABLE_FETCH_LIMIT }),
     queryKey: ["dashboard-rc-po-expiry"],
   });
 
@@ -402,10 +424,13 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           {isCaseOffTrack(row) ? (
             <StatusBadge tone="warning">Off Track</StatusBadge>
           ) : null}
+          {isCaseOnTrack(row) ? (
+            <StatusBadge tone="success">On Track</StatusBadge>
+          ) : null}
           {row.priorityCase ? (
             <StatusBadge tone="warning">Priority</StatusBadge>
           ) : null}
-          {!isCaseOffTrack(row) && !row.isDelayed && !row.priorityCase ? (
+          {!isCaseOffTrack(row) && !isCaseOnTrack(row) && !row.isDelayed && !row.priorityCase ? (
             <StatusBadge>Normal</StatusBadge>
           ) : null}
         </div>
@@ -716,6 +741,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
               }
               getRowKey={(row) => row.id}
               onRowClick={(row) => setStageAgingCaseId(row.id)}
+              pagination={{
+                pageSize: DASHBOARD_TABLE_PAGE_SIZE,
+                pageSizeOptions: [10, 25, 50],
+              }}
               rows={focusedCases.data ?? []}
             />
           )}
@@ -748,6 +777,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
               columns={expiryColumns}
               emptyMessage="No RC/PO expiry risks in the selected horizon."
               getRowKey={(row) => row.sourceId}
+              pagination={{
+                pageSize: DASHBOARD_TABLE_PAGE_SIZE,
+                pageSizeOptions: [10, 25, 50],
+              }}
               rows={expiryRows.data ?? []}
             />
           )}

@@ -561,6 +561,9 @@ export class ImportExportService {
       from: "A8",
       to: `${template.getColumn(columns.length).letter}8`,
     };
+    tenderTemplateSampleRows().forEach((row, index) => {
+      template.getRow(9 + index).values = row;
+    });
 
     columns.forEach((column, index) => {
       const worksheetColumn = template.getColumn(index + 1);
@@ -808,7 +811,7 @@ export class ImportExportService {
       "LOI Awarded?": ["Yes", "No"],
       "Nature of Work": byCategory("nature_of_work"),
       "PR Receiving Medium": byCategory("pr_receiving_medium"),
-      "Priority?": ["Low", "Medium", "High", "Critical"],
+      "Priority?": ["Yes", "No"],
       "Tender Owner": users.rows.map((row) => row.key),
       "Tender Type": tenderTypes.rows.map((row) => row.name),
       "User Department": departments.rows.map((row) => row.key),
@@ -962,6 +965,77 @@ function rcPoPlanTemplateSampleRow(): ExcelJS.CellValue[] {
     1_000_000,
     "15-05-2025",
     "11-11-2025",
+  ];
+}
+
+function tenderTemplateSampleRows(): ExcelJS.CellValue[][] {
+  return [
+    [
+      "CESC-RAJ",
+      "Email",
+      "jashodipta.sengupta@rpsg.in",
+      "",
+      "01-02-2026",
+      "PR Description Bulk 3",
+      15_000_000,
+      "Yes",
+      "Supply",
+      "Civil",
+      "Open",
+      "Yes",
+      "Sample priority procurement",
+      "Tender Name bulk 3",
+      "Tender Number bulk 3",
+      "08-02-2026",
+      "11-02-2026",
+      "14-02-2026",
+      "24-02-2026",
+      8,
+      "03-03-2026",
+      "05-03-2026",
+      8,
+      16_500_000,
+      "15-03-2026",
+      "18-03-2026",
+      16_000_000,
+      "Yes",
+      "20-03-2026",
+      "22-03-2026",
+      "22-03-2027",
+    ],
+    [
+      "CPDL",
+      "Email",
+      "narinderpal.singh@rpsg.in",
+      "",
+      "16-02-2026",
+      "PR Description Bulk 4",
+      25_000_000,
+      "No",
+      "Service",
+      "Automation",
+      "Open",
+      "No",
+      "Sample regular procurement",
+      "Tender Name bulk 4",
+      "Tender Number bulk 4",
+      "23-02-2026",
+      "26-02-2026",
+      "01-03-2026",
+      "11-03-2026",
+      9,
+      "18-03-2026",
+      "20-03-2026",
+      7,
+      27_500_000,
+      "30-03-2026",
+      "02-04-2026",
+      26_000_000,
+      "No",
+      "",
+      "",
+      "",
+    ],
   ];
 }
 

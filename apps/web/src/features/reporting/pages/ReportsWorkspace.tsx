@@ -151,7 +151,8 @@ export function ReportsWorkspace() {
     mutationFn: refreshReportProjections,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["report"] });
-      notify({ message: "Report projections refreshed.", tone: "success" });
+      await queryClient.invalidateQueries({ queryKey: ["case-summary"] });
+      notify({ message: "Report data refreshed.", tone: "success" });
     },
   });
   const updateRcPoExpiryMutation = useMutation({
@@ -364,11 +365,14 @@ export function ReportsWorkspace() {
   ]);
 
   const includeCompletionFilters = reportCode !== "running" && reportCode !== "rc_po_expiry";
+  const useBusinessFilterSet =
+    reportCode === "completed" || reportCode === "vendor_awards";
   const activeFilterCount = countActiveReportFilters(
     filters,
     statusFilterApplies,
     includeCompletionFilters,
     reportCode === "rc_po_expiry",
+    useBusinessFilterSet,
   );
   const activeFilterChips = buildActiveReportFilterChips(filters, {
     completionFyOptions,
@@ -378,6 +382,7 @@ export function ReportsWorkspace() {
     budgetTypeOptions,
     includeCompletionFilters,
     isRcPoExpiry: reportCode === "rc_po_expiry",
+    useBusinessFilterSet,
     natureOfWorkOptions,
     ownerOptions,
     prReceiptMonthOptions,
@@ -1294,14 +1299,6 @@ export function ReportsWorkspace() {
         actions={
           <>
             <Button
-              disabled={refreshMutation.isPending}
-              onClick={() => refreshMutation.mutate()}
-              variant="secondary"
-            >
-              <RefreshCw size={18} />
-              Refresh
-            </Button>
-            <Button
               disabled
               title="Scheduled report delivery is coming soon."
               variant="ghost"
@@ -1397,6 +1394,14 @@ export function ReportsWorkspace() {
               {activeFilterCount ? (
                 <span className="button-count-badge">{activeFilterCount}</span>
               ) : null}
+            </Button>
+            <Button
+              disabled={refreshMutation.isPending}
+              onClick={() => refreshMutation.mutate()}
+              variant="secondary"
+            >
+              <RefreshCw size={17} />
+              {refreshMutation.isPending ? "Refreshing..." : "Refresh Report Data"}
             </Button>
             <Button
               onClick={() => setIsSavedViewsOpen((value) => !value)}
@@ -1922,7 +1927,7 @@ function ReportAnalyticsDashboard({
     },
     {
       label: "Avg Cycle Time (Days)",
-      meta: `Incl. delays${metrics?.completedCases != null ? ` · ${metrics.completedCases} completed` : ""}`,
+      meta: metrics?.completedCases != null ? `${metrics.completedCases} completed` : "",
       tone: delayedRatio > 0 ? "danger" : "success",
       value: formatNullableDecimal(metrics?.averageCycleTimeDays),
     },
@@ -3139,6 +3144,8 @@ function ReportFilterPanel({
   valueSlabOptions: ReportOption[];
 }) {
   const showCompletionFilters = reportCode !== "running";
+  const useBusinessFilterSet =
+    reportCode === "completed" || reportCode === "vendor_awards";
   if (reportCode === "rc_po_expiry") {
     return (
       <RcPoReportFilterPanel
@@ -3174,6 +3181,24 @@ function ReportFilterPanel({
       </div>
       <div className="report-filter-panel-body">
         <section className="report-filter-matrix report-filter-matrix-compact">
+          {showCompletionFilters ? (
+            <ReportMultiSelectFilter
+              disabled={dataIsLoading}
+              label="Completion FY"
+              onChange={filters.setSelectedCompletionFys}
+              options={completionFyOptions}
+              value={filters.selectedCompletionFys}
+            />
+          ) : null}
+          {showCompletionFilters ? (
+            <ReportMultiSelectFilter
+              disabled={dataIsLoading}
+              label="Completion Month"
+              onChange={filters.setSelectedCompletionMonths}
+              options={completionMonthOptions}
+              value={filters.selectedCompletionMonths}
+            />
+          ) : null}
           <ReportMultiSelectFilter
             disabled={dataIsLoading}
             label="Entity"
@@ -3190,6 +3215,22 @@ function ReportFilterPanel({
           />
           <ReportMultiSelectFilter
             disabled={dataIsLoading}
+            label="Tender Type"
+            onChange={filters.setSelectedTenderTypeIds}
+            options={tenderTypeOptions}
+            value={filters.selectedTenderTypeIds}
+          />
+          {!useBusinessFilterSet ? (
+            <ReportMultiSelectFilter
+              disabled={dataIsLoading}
+              label="Tender Stage"
+              onChange={filters.setSelectedStageCodes}
+              options={stageOptions}
+              value={filters.selectedStageCodes}
+            />
+          ) : null}
+          <ReportMultiSelectFilter
+            disabled={dataIsLoading}
             label="Tender Owner"
             onChange={filters.setSelectedOwnerUserIds}
             options={ownerOptions}
@@ -3197,18 +3238,26 @@ function ReportFilterPanel({
           />
           <ReportMultiSelectFilter
             disabled={dataIsLoading}
-            label="Tender Type"
-            onChange={filters.setSelectedTenderTypeIds}
-            options={tenderTypeOptions}
-            value={filters.selectedTenderTypeIds}
+            label="PR Receipt Month"
+            onChange={filters.setSelectedPrReceiptMonths}
+            options={prReceiptMonthOptions}
+            value={filters.selectedPrReceiptMonths}
           />
-          <ReportMultiSelectFilter
-            disabled={dataIsLoading}
-            label="Tender Stage"
-            onChange={filters.setSelectedStageCodes}
-            options={stageOptions}
-            value={filters.selectedStageCodes}
-          />
+          <FormField label="LOI Awarded?">
+            <Select
+              onChange={(event) =>
+                filters.setLoiAwarded(
+                  event.target.value as "all" | "false" | "true",
+                )
+              }
+              options={[
+                { label: "Yes", value: "true" },
+                { label: "No", value: "false" },
+              ]}
+              placeholder="All"
+              value={filters.loiAwarded === "all" ? "" : filters.loiAwarded}
+            />
+          </FormField>
           <ReportMultiSelectFilter
             disabled={dataIsLoading}
             label="Nature of Work"
@@ -3230,64 +3279,26 @@ function ReportFilterPanel({
             options={valueSlabOptions}
             value={filters.selectedValueSlabs}
           />
-          {showCompletionFilters ? (
-            <ReportMultiSelectFilter
-              disabled={dataIsLoading}
-              label="Completion FY"
-              onChange={filters.setSelectedCompletionFys}
-              options={completionFyOptions}
-              value={filters.selectedCompletionFys}
-            />
+          {!useBusinessFilterSet ? (
+            <FormField label="Delay Status">
+              <Select
+                onChange={(event) =>
+                  filters.setDelayStatus(
+                    (event.target.value || "all") as
+                      | "all"
+                      | "delayed"
+                      | "on_time",
+                  )
+                }
+                options={[
+                  { label: "Delayed", value: "delayed" },
+                  { label: "On Time", value: "on_time" },
+                ]}
+                placeholder="All"
+                value={filters.delayStatus === "all" ? "" : filters.delayStatus}
+              />
+            </FormField>
           ) : null}
-          <ReportMultiSelectFilter
-            disabled={dataIsLoading}
-            label="PR Receipt Month"
-            onChange={filters.setSelectedPrReceiptMonths}
-            options={prReceiptMonthOptions}
-            value={filters.selectedPrReceiptMonths}
-          />
-          {showCompletionFilters ? (
-            <ReportMultiSelectFilter
-              disabled={dataIsLoading}
-              label="Completion Month"
-              onChange={filters.setSelectedCompletionMonths}
-              options={completionMonthOptions}
-              value={filters.selectedCompletionMonths}
-            />
-          ) : null}
-          <FormField label="LOI Awarded?">
-            <Select
-              onChange={(event) =>
-                filters.setLoiAwarded(
-                  event.target.value as "all" | "false" | "true",
-                )
-              }
-              options={[
-                { label: "Yes", value: "true" },
-                { label: "No", value: "false" },
-              ]}
-              placeholder="All"
-              value={filters.loiAwarded === "all" ? "" : filters.loiAwarded}
-            />
-          </FormField>
-          <FormField label="Delay Status">
-            <Select
-              onChange={(event) =>
-                filters.setDelayStatus(
-                  (event.target.value || "all") as
-                    | "all"
-                    | "delayed"
-                    | "on_time",
-                )
-              }
-              options={[
-                { label: "Delayed", value: "delayed" },
-                { label: "On Time", value: "on_time" },
-              ]}
-              placeholder="All"
-              value={filters.delayStatus === "all" ? "" : filters.delayStatus}
-            />
-          </FormField>
           <FormField label="Routed Through CPC">
             <Select
               onChange={(event) =>
@@ -3299,20 +3310,22 @@ function ReportFilterPanel({
                 { label: "Yes", value: "true" },
                 { label: "No", value: "false" },
               ]}
-              placeholder="Any"
+              placeholder="All"
               value={filters.cpcInvolved === "any" ? "" : filters.cpcInvolved}
             />
           </FormField>
-          <label className="report-inline-check">
-            <input
-              checked={filters.priorityCase}
-              onChange={(event) =>
-                filters.setPriorityCase(event.target.checked)
-              }
-              type="checkbox"
-            />
-            <span>Priority cases only</span>
-          </label>
+          {!useBusinessFilterSet ? (
+            <label className="report-inline-check">
+              <input
+                checked={filters.priorityCase}
+                onChange={(event) =>
+                  filters.setPriorityCase(event.target.checked)
+                }
+                type="checkbox"
+              />
+              <span>Priority cases only</span>
+            </label>
+          ) : null}
           <label className="report-inline-check report-deletion-flag">
             <input
               checked={filters.deletedOnly}
@@ -3321,26 +3334,53 @@ function ReportFilterPanel({
             />
             <span>Show deleted cases only</span>
           </label>
+          {useBusinessFilterSet ? (
+            <FormField label="Currency Unit">
+              <div
+                aria-label="Currency unit"
+                className="segmented-control"
+                role="group"
+              >
+                {([
+                  ["rupees", "Rupees"],
+                  ["lakh", "Rs. Lakhs"],
+                ] as const).map(([unit, label]) => (
+                  <button
+                    className={
+                      filters.amountUnit === unit ? "segmented-control-active" : ""
+                    }
+                    key={unit}
+                    onClick={() => filters.setAmountUnit(unit)}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </FormField>
+          ) : null}
         </section>
         <div className="report-actions-row report-drawer-actions">
-          <div
-            aria-label="Export format"
-            className="segmented-control"
-            role="group"
-          >
-            {(["xlsx", "csv"] as const).map((format) => (
-              <button
-                className={
-                  exportFormat === format ? "segmented-control-active" : ""
-                }
-                key={format}
-                onClick={() => setExportFormat(format)}
-                type="button"
-              >
-                {format.toUpperCase()}
-              </button>
-            ))}
-          </div>
+          {!useBusinessFilterSet ? (
+            <div
+              aria-label="Export format"
+              className="segmented-control"
+              role="group"
+            >
+              {(["xlsx", "csv"] as const).map((format) => (
+                <button
+                  className={
+                    exportFormat === format ? "segmented-control-active" : ""
+                  }
+                  key={format}
+                  onClick={() => setExportFormat(format)}
+                  type="button"
+                >
+                  {format.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <Button variant="ghost" onClick={filters.clearFilters}>
             <X size={18} />
             Clear
@@ -3759,6 +3799,7 @@ function countActiveReportFilters(
   statusFilterApplies: boolean,
   includeCompletionFilters: boolean,
   isRcPoExpiry: boolean,
+  useBusinessFilterSet: boolean,
 ): number {
   if (isRcPoExpiry) {
     return [
@@ -3782,11 +3823,11 @@ function countActiveReportFilters(
     statusFilterApplies && filters.statusFilter !== "all"
       ? filters.statusFilter
       : "",
-    filters.delayStatus !== "all" ? filters.delayStatus : "",
+    !useBusinessFilterSet && filters.delayStatus !== "all" ? filters.delayStatus : "",
     filters.deletedOnly ? "deleted" : "",
     filters.loiAwarded !== "all" ? filters.loiAwarded : "",
     filters.cpcInvolved !== "any" ? filters.cpcInvolved : "",
-    filters.priorityCase ? "priority" : "",
+    !useBusinessFilterSet && filters.priorityCase ? "priority" : "",
     ...filters.selectedEntityIds,
     ...filters.selectedDepartmentIds,
     ...filters.selectedOwnerUserIds,
@@ -3794,7 +3835,7 @@ function countActiveReportFilters(
     ...filters.selectedNatureOfWorkIds,
     ...filters.selectedBudgetTypeIds,
     ...filters.selectedValueSlabs,
-    ...filters.selectedStageCodes,
+    ...(!useBusinessFilterSet ? filters.selectedStageCodes : []),
     ...(includeCompletionFilters ? filters.selectedCompletionFys : []),
     ...filters.selectedPrReceiptMonths,
     ...(includeCompletionFilters ? filters.selectedCompletionMonths : []),
@@ -3811,6 +3852,7 @@ function buildActiveReportFilterChips(
     budgetTypeOptions: ReportOption[];
     includeCompletionFilters: boolean;
     isRcPoExpiry: boolean;
+    useBusinessFilterSet: boolean;
     natureOfWorkOptions: ReportOption[];
     ownerOptions: ReportOption[];
     prReceiptMonthOptions: ReportOption[];
@@ -3870,7 +3912,7 @@ function buildActiveReportFilterChips(
     options.statusFilterApplies && filters.statusFilter !== "all"
       ? `Status: ${filters.statusFilter}`
       : "",
-    filters.delayStatus !== "all"
+    !options.useBusinessFilterSet && filters.delayStatus !== "all"
       ? `Delay: ${filters.delayStatus === "delayed" ? "Delayed" : "On Time"}`
       : "",
     filters.deletedOnly ? "Deletion Flag: deleted only" : "",
@@ -3880,7 +3922,7 @@ function buildActiveReportFilterChips(
     filters.cpcInvolved !== "any"
       ? `CPC: ${filters.cpcInvolved === "true" ? "Yes" : "No"}`
       : "",
-    filters.priorityCase ? "Priority cases" : "",
+    !options.useBusinessFilterSet && filters.priorityCase ? "Priority cases" : "",
     ...labelsForSelection(
       "Entity",
       filters.selectedEntityIds,
@@ -3916,11 +3958,13 @@ function buildActiveReportFilterChips(
       filters.selectedValueSlabs,
       options.valueSlabOptions,
     ),
-    ...labelsForSelection(
-      "Stage",
-      filters.selectedStageCodes,
-      options.stageOptions,
-    ),
+    ...(!options.useBusinessFilterSet
+      ? labelsForSelection(
+          "Stage",
+          filters.selectedStageCodes,
+          options.stageOptions,
+        )
+      : []),
     ...(options.includeCompletionFilters
       ? labelsForSelection(
           "FY",

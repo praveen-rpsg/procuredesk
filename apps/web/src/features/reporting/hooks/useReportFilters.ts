@@ -87,6 +87,10 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
   const includeCompletionFilters = reportCode !== "running" && reportCode !== "rc_po_expiry";
   const isRcPoExpiry = reportCode === "rc_po_expiry";
   const includeCaseWorkflowFilters = !isRcPoExpiry;
+  const includeWorkflowHealthFilters =
+    includeCaseWorkflowFilters &&
+    reportCode !== "completed" &&
+    reportCode !== "vendor_awards";
   const expiryHorizonDaysParam = isRcPoExpiry
     ? normalizeExpiryHorizonDays(expiryHorizonDays)
     : undefined;
@@ -100,7 +104,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
           ? cpcInvolved === "true"
           : undefined,
       delayStatus:
-        includeCaseWorkflowFilters && delayStatus !== "all"
+        includeWorkflowHealthFilters && delayStatus !== "all"
           ? delayStatus
           : undefined,
       deletedOnly: deletedOnly ? true : undefined,
@@ -117,9 +121,9 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
       natureOfWorkIds: selectedNatureOfWorkIds,
       ownerUserIds: selectedOwnerUserIds,
       prReceiptMonths: includeCaseWorkflowFilters ? selectedPrReceiptMonths : [],
-      priorityCase: includeCaseWorkflowFilters && priorityCase ? true : undefined,
+      priorityCase: includeWorkflowHealthFilters && priorityCase ? true : undefined,
       budgetTypeIds: selectedBudgetTypeIds,
-      stageCodes: includeCaseWorkflowFilters ? selectedStageCodes : [],
+      stageCodes: includeWorkflowHealthFilters ? selectedStageCodes : [],
       status: statusFilter,
       tenderTypeIds: includeCaseWorkflowFilters ? selectedTenderTypeIds : [],
       valueSlabs: selectedValueSlabs,
@@ -131,6 +135,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
       expiryHorizonDaysParam,
       includeTenderFloatedOrNotRequired,
       includeCaseWorkflowFilters,
+      includeWorkflowHealthFilters,
       isRcPoExpiry,
       loiAwarded,
       priorityCase,

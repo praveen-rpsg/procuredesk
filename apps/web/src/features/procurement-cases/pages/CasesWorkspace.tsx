@@ -479,7 +479,7 @@ function CasesWorkspaceList() {
       { key: "normativeStage", filterOptions: normativeStageFilterOptions, filterValue: (row) => row.desiredStageCode == null ? "-" : formatCaseStage(row.desiredStageCode), header: "Normative Stage", render: (row) => row.desiredStageCode == null ? "-" : formatCaseStage(row.desiredStageCode) },
       { key: "percentTimeElapsed", header: "% Time Elapsed", render: (row) => row.status === "completed" ? "-" : formatPercent(row.percentTimeElapsed) },
       { key: "runAge", header: "Run Age", render: (row) => formatDays(row.runningAgeDays) },
-      { key: "cycleTime", header: "Cycle Time", render: (row) => formatDays(row.cycleTimeDays) },
+      { key: "cycleTime", header: "Cycle Time", render: (row) => row.status === "completed" ? formatDays(row.cycleTimeDays) : "-" },
       {
         key: "status",
         filterOptions: [
