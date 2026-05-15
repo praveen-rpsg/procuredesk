@@ -1,5 +1,5 @@
 export const PERMISSION_IMPLICATIONS: Record<string, string[]> = {
-  "case.delay.manage.all": ["case.delay.manage.entity"],
+  "case.delay.manage.all": ["case.delay.read.all"],
   "case.read.all": ["case.read.entity", "case.read.assigned"],
   "case.read.entity": ["case.read.assigned"],
   "case.update.all": [

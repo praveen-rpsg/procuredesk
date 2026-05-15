@@ -118,6 +118,7 @@ export function createAdminUser(payload: {
   fullName: string;
   password?: string;
   roleIds?: string[];
+  sendSetupEmail?: boolean;
   status?: "active" | "inactive" | "pending_password_setup";
   username: string;
 }) {
@@ -151,6 +152,20 @@ export function updateAdminUserAccessLevel(userId: string, accessLevel: AdminUse
   return apiRequest<void>(`/admin/users/${userId}/access-level`, {
     body: JSON.stringify({ accessLevel }),
     method: "PATCH",
+  });
+}
+
+export function replaceAdminUserAccessAssignment(
+  userId: string,
+  payload: {
+    accessLevel: AdminUser["accessLevel"];
+    entityIds: string[];
+    roleIds: string[];
+  },
+) {
+  return apiRequest<void>(`/admin/users/${userId}/access-assignment`, {
+    body: JSON.stringify(payload),
+    method: "PUT",
   });
 }
 

@@ -3,10 +3,14 @@ import {
   ForbiddenException,
   Injectable,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { createHash, randomBytes } from "node:crypto";
 
 import { hasExpandedPermission } from "../../../common/auth/permission-utils.js";
+import type { EnvConfig } from "../../../config/env.schema.js";
 import { DatabaseService } from "../../../database/database.service.js";
 import { AuditWriterService } from "../../audit/application/audit-writer.service.js";
+import { OutboxWriterService } from "../../outbox/application/outbox-writer.service.js";
 import type { AuthenticatedUser } from "../domain/authenticated-user.js";
 import { PasswordPolicyRepository } from "../infrastructure/password-policy.repository.js";
 import { RoleRepository } from "../infrastructure/role.repository.js";
@@ -33,6 +37,7 @@ const GROUP_ACCESS_ROLE_CODES = [
 const TENANT_WIDE_PERMISSION_CODES = [
   "admin.console.access",
   "case.delay.manage.all",
+  "case.delay.read.all",
   "case.read.all",
   "case.update.all",
   "role.manage",
@@ -58,6 +63,8 @@ export class AdminUsersService {
     private readonly users: UserRepository,
     private readonly roles: RoleRepository,
     private readonly audit: AuditWriterService,
+    private readonly config: ConfigService<EnvConfig, true>,
+    private readonly outbox: OutboxWriterService,
   ) {}
 
   async listUsers(actor: AuthenticatedUser): Promise<UserListItem[]> {
@@ -108,6 +115,7 @@ export class AdminUsersService {
       fullName: string;
       password?: string | undefined;
       roleIds?: string[] | undefined;
+      sendSetupEmail?: boolean | undefined;
       status?: "active" | "inactive" | "pending_password_setup" | undefined;
       username: string;
       accessLevel: "ENTITY" | "GROUP" | "USER";
@@ -212,7 +220,105 @@ export class AdminUsersService {
       targetType: "User",
       tenantId,
     });
+    if (input.sendSetupEmail !== false && requestedStatus === "pending_password_setup") {
+      await this.sendWelcomeSetupEmail({
+        actorUserId: actor.id,
+        email: input.email,
+        fullName: input.fullName,
+        tenantId,
+        userId: id,
+      });
+    }
     return { id };
+  }
+
+  private async sendWelcomeSetupEmail(input: {
+    actorUserId: string;
+    email: string;
+    fullName: string;
+    tenantId: string;
+    userId: string;
+  }): Promise<void> {
+    const token = randomBytes(32).toString("base64url");
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const setupUrl = new URL(
+      "/reset-password",
+      this.config.get("APP_URL", { infer: true }) ?? "http://localhost:5175",
+    );
+    setupUrl.searchParams.set("token", token);
+
+    await this.db.transaction(async (client) => {
+      await this.users.createPasswordResetToken(
+        {
+          expiresAt,
+          requestedEmail: input.email,
+          tenantId: input.tenantId,
+          tokenHash: this.hashResetToken(token),
+          userId: input.userId,
+        },
+        client,
+      );
+      const notification = await this.createNotificationJob(
+        {
+          notificationType: "user_welcome",
+          recipientEmail: input.email,
+          subject: "Set up your ProcureDesk account",
+          tenantId: input.tenantId,
+          textBody: [
+            `Hello ${input.fullName},`,
+            "",
+            "An administrator created a ProcureDesk account for you.",
+            "Set your password using the secure link below:",
+            setupUrl.toString(),
+            "",
+            "This setup link expires in 24 hours. If you were not expecting this account, contact your administrator.",
+          ].join("\n"),
+        },
+      );
+      await this.outbox.write({
+        aggregateId: notification.id,
+        aggregateType: "notification_job",
+        eventType: "notification_job.created",
+        payload: {
+          actorUserId: input.actorUserId,
+          notificationType: "user_welcome",
+        },
+        tenantId: input.tenantId,
+      });
+    });
+  }
+
+  private async createNotificationJob(
+    input: {
+      notificationType: string;
+      recipientEmail: string;
+      subject: string;
+      tenantId: string;
+      textBody: string;
+    },
+  ): Promise<{ id: string }> {
+    const row = await this.db.one<{ id: string }>(
+      `
+        insert into ops.notification_jobs (
+          tenant_id, notification_type, recipient_email, subject, text_body
+        )
+        values ($1, $2, $3, $4, $5)
+        returning id
+      `,
+      [
+        input.tenantId,
+        input.notificationType,
+        input.recipientEmail,
+        input.subject,
+        input.textBody,
+      ],
+    );
+    if (!row) throw new Error("Failed to create welcome notification.");
+    return { id: row.id };
+  }
+
+  private hashResetToken(token: string): string {
+    return createHash("sha256").update(token).digest("hex");
   }
 
   async updateProfile(
@@ -342,6 +448,87 @@ export class AdminUsersService {
         roleIds: input.roleIds,
       },
       summary: `${actor.username} updated user roles`,
+      targetId: input.userId,
+      targetType: "User",
+      tenantId,
+    });
+  }
+
+  async replaceAccessAssignment(
+    actor: AuthenticatedUser,
+    input: {
+      accessLevel: "ENTITY" | "GROUP" | "USER";
+      entityIds: string[];
+      roleIds: string[];
+      userId: string;
+    },
+  ): Promise<void> {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "user.manage");
+    this.requirePermission(actor, "role.manage");
+    const before = await this.users.findTenantUserAccess({
+      tenantId,
+      userId: input.userId,
+    });
+    const entityIds = input.accessLevel === "GROUP" ? [] : input.entityIds;
+    this.assertAccessLevelAllowed(input.accessLevel, entityIds);
+    await this.assertRoleAssignmentAllowed(
+      tenantId,
+      input.roleIds,
+      entityIds,
+      input.accessLevel,
+    );
+    await this.assertNotRemovingLastTenantAdminByRoles(
+      tenantId,
+      input.userId,
+      input.roleIds,
+    );
+    await this.db.transaction(async (client) => {
+      await this.users.replaceEntityScopes(
+        {
+          tenantId,
+          userId: input.userId,
+          entityIds,
+          assignedBy: actor.id,
+        },
+        client,
+      );
+      await this.users.updateUserAccessLevel(
+        {
+          tenantId,
+          userId: input.userId,
+          accessLevel: input.accessLevel,
+          updatedBy: actor.id,
+        },
+        client,
+      );
+      await this.roles.replaceUserRoles(
+        {
+          tenantId,
+          userId: input.userId,
+          roleIds: input.roleIds,
+          assignedBy: actor.id,
+        },
+        client,
+      );
+    });
+    const afterCodes = await this.roles.listRoleCodesByIds({
+      roleIds: input.roleIds,
+      tenantId,
+    });
+    await this.audit.write({
+      action: "user.access_assignment.replace",
+      actorUserId: actor.id,
+      details: {
+        afterAccessLevel: input.accessLevel,
+        afterEntityIds: entityIds,
+        afterRoleCodes: afterCodes,
+        beforeAccessLevel: before?.accessLevel ?? null,
+        beforeEntityIds: before?.entityIds ?? [],
+        beforeRoleCodes: before?.roleCodes ?? [],
+        roleIds: input.roleIds,
+      },
+      summary: `${actor.username} updated user access assignment`,
       targetId: input.userId,
       targetType: "User",
       tenantId,
@@ -536,7 +723,7 @@ function requiredAccessLevelForRole(role: {
   if (GROUP_ACCESS_ROLE_CODES.includes(role.code)) {
     return "GROUP";
   }
-  if (role.code === "entity_manager") {
+  if (role.code === "entity_manager" || role.code === "entity_viewer") {
     return "ENTITY";
   }
   if (role.code === "tender_owner") {

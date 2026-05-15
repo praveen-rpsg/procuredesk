@@ -10,6 +10,7 @@ export const CreateUserRequestSchema = z.object({
   entityIds: z.array(z.string().uuid()).default([]),
   password: z.string().min(1).max(1024).optional(),
   roleIds: z.array(z.string().uuid()).default([]),
+  sendSetupEmail: z.boolean().optional(),
   status: z.enum(["active", "inactive", "pending_password_setup"]).optional(),
 });
 
@@ -39,6 +40,12 @@ export const ReplaceUserEntityScopesRequestSchema = z.object({
   entityIds: z.array(z.string().uuid()).default([]),
 });
 
+export const ReplaceUserAccessAssignmentRequestSchema = z.object({
+  accessLevel: UserAccessLevelSchema,
+  entityIds: z.array(z.string().uuid()).default([]),
+  roleIds: z.array(z.string().uuid()).default([]),
+});
+
 export type CreateUserRequest = z.infer<typeof CreateUserRequestSchema>;
 export type UpdateUserProfileRequest = z.infer<typeof UpdateUserProfileRequestSchema>;
 export type AssignableOwnersQuery = z.infer<typeof AssignableOwnersQuerySchema>;
@@ -47,4 +54,7 @@ export type UpdateUserStatusRequest = z.infer<typeof UpdateUserStatusRequestSche
 export type ReplaceUserRolesRequest = z.infer<typeof ReplaceUserRolesRequestSchema>;
 export type ReplaceUserEntityScopesRequest = z.infer<
   typeof ReplaceUserEntityScopesRequestSchema
+>;
+export type ReplaceUserAccessAssignmentRequest = z.infer<
+  typeof ReplaceUserAccessAssignmentRequestSchema
 >;

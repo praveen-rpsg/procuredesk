@@ -3,7 +3,6 @@ import {
   BarChart3,
   Building2,
   FileText,
-  LayoutDashboard,
   LogOut,
   Menu,
   PanelLeftClose,
@@ -62,6 +61,8 @@ type DashboardTarget =
   | "delayed-cases"
   | "imports"
   | "new-case"
+  | "off-track-cases"
+  | "on-track-cases"
   | "planning"
   | "priority-cases"
   | "reports"
@@ -69,12 +70,6 @@ type DashboardTarget =
   | "update-case";
 
 const navigation = [
-  {
-    key: "dashboard",
-    label: "Dashboard",
-    icon: LayoutDashboard,
-    path: "/dashboard",
-  },
   { key: "cases", label: "Cases", icon: FileText, path: "/cases" },
   { key: "planning", label: "Planning", icon: Activity, path: "/planning" },
   { key: "reports", label: "Reports", icon: BarChart3, path: "/reports" },
@@ -165,7 +160,9 @@ export function AuthenticatedShell() {
     canAccessWorkspace(user, item.key),
   );
   const hasVisibleNavigation = visibleNavigation.length > 0;
-  const defaultNavigationPath = visibleNavigation[0]?.path ?? "/dashboard";
+  const defaultNavigationPath = canAccessWorkspace(user, "dashboard")
+    ? "/dashboard"
+    : (visibleNavigation[0]?.path ?? "/dashboard");
   const canUseActiveWorkspace =
     activeWorkspace !== "not-found" &&
     canAccessWorkspace(user, activeWorkspace);
@@ -231,7 +228,17 @@ export function AuthenticatedShell() {
       return;
     }
     if (target === "delayed-cases") {
-      navigateToAppPath("/cases?status=running&isDelayed=true");
+      navigateToAppPath("/cases?trackStatus=delayed");
+      setIsMobileNavOpen(false);
+      return;
+    }
+    if (target === "off-track-cases") {
+      navigateToAppPath("/cases?trackStatus=off_track");
+      setIsMobileNavOpen(false);
+      return;
+    }
+    if (target === "on-track-cases") {
+      navigateToAppPath("/cases?trackStatus=on_track");
       setIsMobileNavOpen(false);
       return;
     }

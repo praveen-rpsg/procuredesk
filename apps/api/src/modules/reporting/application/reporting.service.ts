@@ -13,7 +13,7 @@ import { DatabaseService } from "../../../database/database.service.js";
 import { AuditWriterService } from "../../audit/application/audit-writer.service.js";
 import type { AuthenticatedUser } from "../../identity-access/domain/authenticated-user.js";
 import { OutboxWriterService } from "../../outbox/application/outbox-writer.service.js";
-import type { ReportCode } from "../domain/report-read-models.js";
+import type { ReportCaseRow, ReportCode } from "../domain/report-read-models.js";
 import {
   ReportingRepository,
   type ReportFilters,
@@ -119,6 +119,37 @@ export class ReportingService {
       tenantId,
     });
     return row;
+  }
+
+  async deleteRcPoExpiryRow(
+    actor: AuthenticatedUser,
+    sourceType: "case_award" | "manual_plan",
+    sourceId: string,
+  ) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "planning.manage");
+    if (sourceType !== "manual_plan") {
+      throw new BadRequestException("TenderDB RC/PO rows cannot be deleted from this report.");
+    }
+    const target = await this.repository.rcPoExpiryEditTarget(tenantId, sourceType, sourceId);
+    if (!target) throw new NotFoundException("RC/PO expiry row not found.");
+    this.assertRcPoEditAllowed(actor, target.entityId);
+    const deleted = await this.repository.deleteRcPoExpiryManualPlan({
+      actorUserId: actor.id,
+      planId: sourceId,
+      tenantId,
+    });
+    if (!deleted) throw new NotFoundException("RC/PO expiry row not found.");
+    await this.audit.write({
+      action: "report.rc_po_expiry.delete",
+      actorUserId: actor.id,
+      details: { sourceType },
+      summary: "Deleted bulk-upload RC/PO expiry row",
+      targetId: sourceId,
+      targetType: sourceType,
+      tenantId,
+    });
+    return { deleted: true };
   }
 
   async filterMetadata(actor: AuthenticatedUser) {
@@ -243,19 +274,22 @@ export class ReportingService {
     });
   }
 
-  private caseReport(
+  private async caseReport(
     actor: AuthenticatedUser,
     filters: ReportFilters,
     status?: "completed" | "running",
   ) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "report.read");
-    return this.repository.caseReport({
+    const rows = await this.repository.caseReport({
       filters: this.limitFilters(filters),
+      includeDelayFields: this.canViewDelay(actor),
       scope: this.scope(actor),
       tenantId,
       ...(status ? { status } : {}),
     });
+    if (this.canViewDelay(actor)) return rows;
+    return rows.map((row) => this.redactDelay(row));
   }
 
   private scope(actor: AuthenticatedUser) {
@@ -263,9 +297,9 @@ export class ReportingService {
   }
 
   private filterMetadataCacheKey(tenantId: string, scope: ReportScope): string {
-    if (scope.tenantWide) return `report:filter-metadata:v2:${tenantId}:tenant-wide`;
-    if (scope.assignedOnly) return `report:filter-metadata:v2:${tenantId}:assigned:${scope.actorUserId}`;
-    return `report:filter-metadata:v2:${tenantId}:entities:${[...scope.entityIds].sort().join(",")}`;
+    if (scope.tenantWide) return `report:filter-metadata:v3:${tenantId}:tenant-wide`;
+    if (scope.assignedOnly) return `report:filter-metadata:v3:${tenantId}:assigned:${scope.actorUserId}`;
+    return `report:filter-metadata:v3:${tenantId}:entities:${[...scope.entityIds].sort().join(",")}`;
   }
 
   private limitFilters(filters: ReportFilters): ReportFilters {
@@ -279,6 +313,18 @@ export class ReportingService {
     if (!hasExpandedPermission(actor, permission)) {
       throw new ForbiddenException("Missing required permission.");
     }
+  }
+
+  private canViewDelay(actor: AuthenticatedUser) {
+    return actor.isPlatformSuperAdmin;
+  }
+
+  private redactDelay(row: ReportCaseRow): ReportCaseRow {
+    return {
+      ...row,
+      delayReason: null,
+      uncontrollableDelayDays: null,
+    };
   }
 
   private assertRcPoEditAllowed(actor: AuthenticatedUser, entityId: string) {

@@ -23,10 +23,8 @@ import {
   listAdminEntities,
   listAdminRoles,
   listAdminUsers,
-  replaceAdminUserEntityScopes,
-  replaceAdminUserRoles,
+  replaceAdminUserAccessAssignment,
   setAdminUserPassword,
-  updateAdminUserAccessLevel,
   updateAdminUserProfile,
   updateAdminUserStatus,
   updatePasswordPolicy,
@@ -65,6 +63,7 @@ type EditUserForm = {
   isActive: boolean;
   password: string;
   primaryRoleId: string;
+  sendSetupEmail: boolean;
   accessLevel: AccessLevel;
   username: string;
 };
@@ -206,6 +205,7 @@ export function AdminUsersPage() {
   const [newUser, setNewUser] = useState<EditUserForm>({
     ...emptyEditUserForm,
     isActive: true,
+    sendSetupEmail: true,
   });
   const [editUser, setEditUser] = useState<EditUserForm>(emptyEditUserForm);
   const [policy, setPolicy] =
@@ -256,12 +256,13 @@ export function AdminUsersPage() {
         fullName: newUser.fullName,
         password: newUser.password,
         roleIds: buildRoleIds(roles.data ?? [], newUser),
-        status: newUser.isActive ? "active" : "inactive",
+        sendSetupEmail: newUser.sendSetupEmail,
+        status: newUser.sendSetupEmail ? "pending_password_setup" : newUser.isActive ? "active" : "inactive",
         username: newUser.username,
       }),
     onSuccess: async () => {
       setIsCreateOpen(false);
-      setNewUser({ ...emptyEditUserForm, isActive: true });
+      setNewUser({ ...emptyEditUserForm, isActive: true, sendSetupEmail: true });
       await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       notify({ message: "User created.", tone: "success" });
     },
@@ -284,17 +285,11 @@ export function AdminUsersPage() {
         fullName: editUser.fullName,
         username: editUser.username,
       });
-      if (editUser.accessLevel === "GROUP") {
-        await updateAdminUserAccessLevel(userToEdit.id, editUser.accessLevel);
-        await replaceAdminUserEntityScopes(userToEdit.id, []);
-      } else {
-        await replaceAdminUserEntityScopes(userToEdit.id, editUser.entityIds);
-        await updateAdminUserAccessLevel(userToEdit.id, editUser.accessLevel);
-      }
-      await replaceAdminUserRoles(
-        userToEdit.id,
-        buildRoleIds(roles.data ?? [], editUser),
-      );
+      await replaceAdminUserAccessAssignment(userToEdit.id, {
+        accessLevel: editUser.accessLevel,
+        entityIds: editUser.accessLevel === "GROUP" ? [] : editUser.entityIds,
+        roleIds: buildRoleIds(roles.data ?? [], editUser),
+      });
       if (editUser.password.trim()) {
         await setAdminUserPassword(userToEdit.id, editUser.password);
       }
@@ -349,6 +344,7 @@ export function AdminUsersPage() {
       isActive: user.status === "active",
       password: "",
       primaryRoleId,
+      sendSetupEmail: false,
       accessLevel: isAdmin ? "GROUP" : user.accessLevel,
       username: user.username,
     });
@@ -653,6 +649,7 @@ const emptyEditUserForm: EditUserForm = {
   isActive: false,
   password: "",
   primaryRoleId: "",
+  sendSetupEmail: true,
   username: "",
 };
 
@@ -781,7 +778,11 @@ function UserAccessForm({
         </FormField>
         <FormField
           helperText={
-            isNewUser ? undefined : "Leave blank to keep current password."
+            isNewUser
+              ? value.sendSetupEmail
+                ? "Recommended: send a secure setup link instead of sharing a password."
+                : undefined
+              : "Leave blank to keep current password."
           }
           label="Password"
         >
@@ -793,15 +794,33 @@ function UserAccessForm({
               }))
             }
             placeholder={isNewUser ? "" : "Leave blank to keep current"}
-            required={isNewUser}
+            disabled={isNewUser && value.sendSetupEmail}
+            required={isNewUser && !value.sendSetupEmail}
             type="password"
             value={value.password}
           />
         </FormField>
         <div className="user-edit-checks">
+          {isNewUser ? (
+            <label className="checkbox-row">
+              <input
+                checked={value.sendSetupEmail}
+                onChange={(event) =>
+                  onChange((currentValue) => ({
+                    ...currentValue,
+                    password: event.target.checked ? "" : currentValue.password,
+                    sendSetupEmail: event.target.checked,
+                  }))
+                }
+                type="checkbox"
+              />
+              Send setup email
+            </label>
+          ) : null}
           <label className="checkbox-row">
             <input
               checked={value.isActive}
+              disabled={isNewUser && value.sendSetupEmail}
               onChange={(event) =>
                 onChange((currentValue) => ({
                   ...currentValue,
@@ -989,7 +1008,8 @@ function resolveBaseRole(
 function formatRoleName(role: Pick<AdminRole, "code" | "name">) {
   if (role.code === "platform_super_admin") return "Super Admin";
   if (role.code === "tenant_admin") return "Administration Manager";
-  if (role.code === "group_viewer") return "Group Manager";
+  if (role.code === "group_viewer") return "Group Viewer";
+  if (role.code === "entity_viewer") return "Entity Viewer";
   return role.name;
 }
 
@@ -1018,22 +1038,23 @@ function requiredAccessLevelForRole(
 ): AccessLevel | null {
   if (
     [
-      "administration_manager",
-      "group_manager",
-      "group_viewer",
+        "administration_manager",
+        "group_manager",
+        "group_viewer",
       "platform_super_admin",
       "report_viewer",
       "tenant_admin",
     ].includes(role.code)
   )
     return "GROUP";
-  if (role.code === "entity_manager") return "ENTITY";
+  if (role.code === "entity_manager" || role.code === "entity_viewer") return "ENTITY";
   if (role.code === "tender_owner") return "USER";
   if (
     role.permissionCodes.some((permission) =>
       [
         "admin.console.access",
         "case.delay.manage.all",
+        "case.delay.read.all",
         "case.read.all",
         "case.update.all",
         "role.manage",

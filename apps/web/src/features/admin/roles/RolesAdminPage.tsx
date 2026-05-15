@@ -563,6 +563,7 @@ function toRolePayload(value: RoleDraft) {
 function formatRoleName(role: Pick<AdminRole, "code" | "name">) {
   if (role.code === "platform_super_admin") return "Super Admin";
   if (role.code === "tenant_admin") return "Administration Manager";
-  if (role.code === "group_viewer") return "Group Manager";
+  if (role.code === "group_viewer") return "Group Viewer";
+  if (role.code === "entity_viewer") return "Entity Viewer";
   return role.name;
 }

@@ -221,7 +221,7 @@ export class UserRepository {
     tokenHash: string;
     userAgent?: string | null;
     userId: string;
-  }): Promise<void> {
+  }, client?: PoolClient): Promise<void> {
     await this.db.query(
       `
         insert into iam.password_reset_tokens (
@@ -238,6 +238,7 @@ export class UserRepository {
         input.requestIp ?? null,
         input.userAgent ?? null,
       ],
+      client,
     );
   }
 

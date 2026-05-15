@@ -34,6 +34,8 @@ export type ProcurementCaseAggregate = {
   tenantId: string;
   prId: string;
   entityId: string;
+  entityCode: string | null;
+  entityName: string | null;
   departmentId: string | null;
   departmentName: string | null;
   ownerUserId: string | null;

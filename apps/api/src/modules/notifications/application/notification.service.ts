@@ -24,7 +24,13 @@ export class NotificationService {
 
   preview(
     actor: AuthenticatedUser,
-    type: "entity_monthly_digest" | "rc_po_expiry" | "stale_tender",
+    type:
+      | "delayed_case_alert"
+      | "entity_monthly_digest"
+      | "manager_daily_snapshot"
+      | "off_track_case_alert"
+      | "rc_po_expiry"
+      | "stale_tender",
   ) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "notification.manage");
@@ -32,7 +38,31 @@ export class NotificationService {
       return this.repository.staleTenderPreview(tenantId);
     if (type === "entity_monthly_digest")
       return this.repository.monthlyDigestPreview(tenantId);
+    if (type === "manager_daily_snapshot")
+      return this.repository.managerDailySnapshotPreview(tenantId);
+    if (type === "delayed_case_alert")
+      return this.repository.delayedCasePreview(tenantId);
+    if (type === "off_track_case_alert")
+      return this.repository.offTrackCasePreview(tenantId);
     return this.repository.rcPoExpiryPreview(tenantId);
+  }
+
+  listJobs(
+    actor: AuthenticatedUser,
+    input: {
+      limit?: number | undefined;
+      notificationType?: string | undefined;
+      status?: string | undefined;
+    },
+  ) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "notification.manage");
+    return this.repository.listJobs({
+      limit: input.limit ?? 50,
+      notificationType: input.notificationType,
+      status: input.status,
+      tenantId,
+    });
   }
 
   listRules(actor: AuthenticatedUser) {
@@ -57,7 +87,10 @@ export class NotificationService {
       cadence: "daily" | "manual" | "monthly" | "weekly";
       isEnabled: boolean;
       notificationType:
+        | "delayed_case_alert"
         | "entity_monthly_digest"
+        | "manager_daily_snapshot"
+        | "off_track_case_alert"
         | "rc_po_expiry"
         | "stale_tender";
       recipientMode: "entity_admin" | "explicit" | "owner" | "owner_or_entity";
@@ -98,6 +131,7 @@ export class NotificationService {
       notificationType: string;
       recipientEmail: string;
       subject: string;
+      textBody?: string | undefined;
     },
   ) {
     const tenantId = this.requireTenant(actor);
@@ -106,6 +140,9 @@ export class NotificationService {
     return this.db.transaction(async () => {
       const result = await this.repository.createNotificationJob({
         ...input,
+        textBody:
+          input.textBody ??
+          `${input.subject}\n\nNotification type: ${input.notificationType}`,
         tenantId,
       });
       await this.outbox.write({
@@ -128,6 +165,58 @@ export class NotificationService {
       });
       return result;
     });
+  }
+
+  async retryJob(actor: AuthenticatedUser, jobId: string) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "notification.manage");
+    this.graph.assertConfigured();
+    return this.db.transaction(async () => {
+      const result = await this.repository.markJobQueuedForRetry({
+        jobId,
+        tenantId,
+      });
+      if (!result) {
+        throw new BadRequestException("Only failed or cancelled notification jobs can be retried.");
+      }
+      await this.outbox.write({
+        aggregateId: result.id,
+        aggregateType: "notification_job",
+        eventType: "notification_job.created",
+        payload: {
+          actorUserId: actor.id,
+          retry: true,
+        },
+        tenantId,
+      });
+      await this.audit.write({
+        action: "notification_job.retry",
+        actorUserId: actor.id,
+        summary: "Retried notification job",
+        targetId: result.id,
+        targetType: "notification_job",
+        tenantId,
+      });
+      return result;
+    });
+  }
+
+  async cancelJob(actor: AuthenticatedUser, jobId: string) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "notification.manage");
+    const result = await this.repository.cancelQueuedJob({ jobId, tenantId });
+    if (!result) {
+      throw new BadRequestException("Only queued or failed notification jobs can be cancelled.");
+    }
+    await this.audit.write({
+      action: "notification_job.cancel",
+      actorUserId: actor.id,
+      summary: "Cancelled notification job",
+      targetId: result.id,
+      targetType: "notification_job",
+      tenantId,
+    });
+    return result;
   }
 
   private requirePermission(actor: AuthenticatedUser, permission: string) {

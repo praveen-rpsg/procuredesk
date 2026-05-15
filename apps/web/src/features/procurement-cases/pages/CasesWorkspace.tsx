@@ -73,6 +73,7 @@ type CaseColumnKey =
   | "updated";
 type ValueSlabFilter = "" | "100l_200l" | "10l_25l" | "25l_50l" | "2l_5l" | "50l_100l" | "5l_10l" | "gte_200l" | "lt_2l";
 type StatusFilter = "completed" | "running";
+type TrackStatusFilter = "" | "delayed" | "off_track" | "on_track";
 type ValueSlabOption = Exclude<ValueSlabFilter, "">;
 type CasesSectionKey = "active" | "recovery";
 
@@ -108,6 +109,7 @@ type CaseViewState = {
   q: string;
   statusValues: StatusFilter[];
   tenderTypeIds: string[];
+  trackStatus: TrackStatusFilter;
   valueSlabs: ValueSlabOption[];
   visibleColumnKeys: CaseColumnKey[];
 };
@@ -200,6 +202,7 @@ function CasesWorkspaceList() {
   const [savedViews, setSavedViews] = useState<SavedCaseView[]>(readSavedCaseViews);
   const [statusValues, setStatusValues] = useState<StatusFilter[]>([]);
   const [tenderTypeIds, setTenderTypeIds] = useState<string[]>([]);
+  const [trackStatus, setTrackStatus] = useState<TrackStatusFilter>("");
   const [valueSlabs, setValueSlabs] = useState<ValueSlabOption[]>([]);
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<CaseColumnKey[]>(defaultVisibleColumnKeys);
   const debouncedQ = useDebouncedValue(q, 350);
@@ -242,6 +245,7 @@ function CasesWorkspaceList() {
       q: debouncedQ || undefined,
       status: selectedStatus || undefined,
       tenderTypeIds: tenderTypeIds.length ? tenderTypeIds : undefined,
+      trackStatus: trackStatus || undefined,
       valueSlabs: valueSlabs.length ? valueSlabs : undefined,
     }),
     [
@@ -262,6 +266,7 @@ function CasesWorkspaceList() {
       prReceiptMonths,
       selectedStatus,
       tenderTypeIds,
+      trackStatus,
       valueSlabs,
     ],
   );
@@ -285,6 +290,7 @@ function CasesWorkspaceList() {
     prReceiptMonths,
     selectedStatus,
     tenderTypeIds,
+    trackStatus,
     valueSlabs,
   ]);
 
@@ -314,12 +320,14 @@ function CasesWorkspaceList() {
     const nextStatus = toStatusFilter(params.get("status"));
     const nextIsDelayed = toBooleanFilter(params.get("isDelayed") ?? "");
     const nextPriorityCase = toBooleanFilter(params.get("priorityCase") ?? "");
+    const nextTrackStatus = toTrackStatusFilter(params.get("trackStatus") ?? "");
 
-    if (!params.has("status") && !params.has("isDelayed") && !params.has("priorityCase")) return;
+    if (!params.has("status") && !params.has("isDelayed") && !params.has("priorityCase") && !params.has("trackStatus")) return;
 
     setStatusValues(nextStatus ? [nextStatus as StatusFilter] : []);
     setIsDelayed(nextIsDelayed);
     setPriorityCase(nextPriorityCase);
+    setTrackStatus(nextTrackStatus);
     setPageCursors([""]);
   }, [location.search]);
 
@@ -387,6 +395,7 @@ function CasesWorkspaceList() {
     ...prReceiptMonths,
     ...statusValues,
     ...tenderTypeIds,
+    trackStatus,
     ...valueSlabs,
   ]);
 
@@ -412,6 +421,7 @@ function CasesWorkspaceList() {
     if (natureOfWorkIds.length) {
       chips.push({ key: "nature", label: `Nature: ${labelSelected(natureOfWorkIds, natureOfWork.map((n) => ({ label: n.label, value: n.id })))}`, onClear: () => setNatureOfWorkIds([]) });
     }
+    if (trackStatus) chips.push({ key: "trackStatus", label: `Track: ${formatTrackStatus(trackStatus)}`, onClear: () => setTrackStatus("") });
     if (priorityCase) chips.push({ key: "priority", label: priorityCase === "true" ? "Priority" : "Not Priority", onClear: () => setPriorityCase("") });
     if (isDelayed) chips.push({ key: "delayed", label: isDelayed === "true" ? "Delayed" : "On Track", onClear: () => setIsDelayed("") });
     if (cpcInvolved) chips.push({ key: "cpc", label: cpcInvolved === "true" ? "CPC: Yes" : "CPC: No", onClear: () => setCpcInvolved("") });
@@ -422,7 +432,7 @@ function CasesWorkspaceList() {
     if (completionFys.length) chips.push({ key: "completionFy", label: `Comp. FY: ${completionFys.join(", ")}`, onClear: () => setCompletionFys([]) });
     if (valueSlabs.length) chips.push({ key: "valueSlab", label: `Value: ${labelSelected(valueSlabs, valueSlabOptions.filter((o) => o.value) as Array<{ label: string; value: string }> )}`, onClear: () => setValueSlabs([]) });
     return chips;
-  }, [budgetTypeIds, budgetTypes, catalog.data, completionFys, cpcInvolved, dateFrom, dateTo, departmentIds, departments.data, entityIds, entities.data, isDelayed, loiAwarded, natureOfWork, natureOfWorkIds, ownerUserId, ownerOptions, prReceiptMonths, priorityCase, statusValues, tenderTypeIds, valueSlabs]);
+  }, [budgetTypeIds, budgetTypes, catalog.data, completionFys, cpcInvolved, dateFrom, dateTo, departmentIds, departments.data, entityIds, entities.data, isDelayed, loiAwarded, natureOfWork, natureOfWorkIds, ownerUserId, ownerOptions, prReceiptMonths, priorityCase, statusValues, tenderTypeIds, trackStatus, valueSlabs]);
   const caseRows = cases.data ?? [];
   const entityFilterOptions = useMemo(
     () => uniqueFilterOptions(caseRows, (row) => entityNameById.get(row.entityId) ?? row.entityId),
@@ -571,7 +581,12 @@ function CasesWorkspaceList() {
           />
         </div>
         <div className="case-toolbar-actions">
-          <Button onClick={() => setIsFilterOpen((open) => !open)} variant="secondary">
+          <Button
+            aria-expanded={isFilterOpen}
+            className={isFilterOpen ? "button-secondary-active" : ""}
+            onClick={() => setIsFilterOpen((open) => !open)}
+            variant="secondary"
+          >
             <SlidersHorizontal size={16} />
             Filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
             {isFilterOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
@@ -757,7 +772,7 @@ function CasesWorkspaceList() {
         </div>
       </Drawer>
 
-      <Modal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} title="Create Case">
+      <Modal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} size="wide" title="Create Case">
         <CreateCaseForm
           onCreated={(caseId) => {
             setIsCreateOpen(false);
@@ -892,6 +907,7 @@ function CasesWorkspaceList() {
     setQ("");
     setStatusValues([]);
     setTenderTypeIds([]);
+    setTrackStatus("");
     setValueSlabs([]);
   }
 
@@ -913,6 +929,7 @@ function CasesWorkspaceList() {
       q,
       statusValues,
       tenderTypeIds,
+      trackStatus,
       valueSlabs,
       visibleColumnKeys,
     };
@@ -945,6 +962,7 @@ function CasesWorkspaceList() {
     setQ(view.state.q);
     setStatusValues(view.state.statusValues ?? []);
     setTenderTypeIds(view.state.tenderTypeIds ?? []);
+    setTrackStatus(view.state.trackStatus ?? "");
     setValueSlabs(view.state.valueSlabs ?? []);
     setVisibleColumnKeys(normalizeColumnKeys(view.state.visibleColumnKeys));
   }
@@ -1067,6 +1085,19 @@ function toBooleanFilter(value: string): BooleanFilter {
 
 function toStatusFilter(value: string | null): string {
   return value === "running" || value === "completed" ? value : "";
+}
+
+function toTrackStatusFilter(value: string): TrackStatusFilter {
+  return value === "delayed" || value === "off_track" || value === "on_track"
+    ? value
+    : "";
+}
+
+function formatTrackStatus(value: TrackStatusFilter): string {
+  if (value === "delayed") return "Delayed";
+  if (value === "off_track") return "Off Track";
+  if (value === "on_track") return "On Track";
+  return "All";
 }
 
 function countActiveFilters(values: string[]) {

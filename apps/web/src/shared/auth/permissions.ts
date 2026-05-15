@@ -7,6 +7,7 @@ export type Permission =
   | "case.create"
   | "case.delay.manage.all"
   | "case.delay.manage.entity"
+  | "case.delay.read.all"
   | "case.delete"
   | "case.read.all"
   | "case.read.assigned"
@@ -49,7 +50,7 @@ type CaseScope = {
 };
 
 const permissionImplications: Partial<Record<Permission, Permission[]>> = {
-  "case.delay.manage.all": ["case.delay.manage.entity"],
+  "case.delay.manage.all": ["case.delay.read.all"],
   "case.read.all": ["case.read.entity", "case.read.assigned"],
   "case.read.entity": ["case.read.assigned"],
   "case.update.all": [
@@ -240,17 +241,22 @@ export function canEditEntityManagedCaseFields(
 
 export function canManageCaseDelay(
   user: CurrentUser | null | undefined,
-  kase: CaseScope,
+  _kase: CaseScope,
 ): boolean {
-  if (!user) return false;
-  if (user.isPlatformSuperAdmin) return true;
-  if (user.accessLevel === "GROUP" && hasPermission(user, "case.update.all"))
-    return true;
-  return (
-    user.accessLevel === "ENTITY" &&
-    hasPermission(user, "case.delay.manage.entity") &&
-    isInUserEntityScope(user, kase.entityId)
-  );
+  return Boolean(user?.isPlatformSuperAdmin);
+}
+
+export function canViewCaseDelay(
+  user: CurrentUser | null | undefined,
+  _kase: CaseScope,
+): boolean {
+  return canViewDelayFields(user);
+}
+
+export function canViewDelayFields(
+  user: CurrentUser | null | undefined,
+): boolean {
+  return Boolean(user?.isPlatformSuperAdmin);
 }
 
 export function canDeleteCase(user: CurrentUser | null | undefined): boolean {

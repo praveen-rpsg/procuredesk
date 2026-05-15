@@ -18,7 +18,9 @@ export type ReportQueryParams = {
   delayStatus?: "delayed" | "on_time";
   deletedOnly?: boolean;
   departmentIds?: string[];
+  days?: number;
   entityIds?: string[];
+  includeTenderFloatedOrNotRequired?: boolean;
   limit?: number;
   loiAwarded?: boolean;
   natureOfWorkIds?: string[];
@@ -29,6 +31,7 @@ export type ReportQueryParams = {
   stageCodes?: number[];
   status?: "completed" | "running";
   tenderTypeIds?: string[];
+  trackStatus?: "delayed" | "off_track" | "on_track";
   valueSlabs?: string[];
 };
 
@@ -37,23 +40,35 @@ export type ReportingAnalytics = {
   averageCycleTimeDays: number | null;
   averageQualifiedBidders: number | null;
   bidderCaseCount: number;
+  byDepartmentNatureOfWork: Array<{
+    caseCount: number;
+    departmentId: string | null;
+    departmentName: string;
+    natureOfWorkId: string | null;
+    natureOfWorkName: string;
+  }>;
   byEntity: Array<{
     caseCount: number;
     delayedCount: number;
+    offTrackCount: number;
     entityCode: string | null;
     entityId: string;
     entityName: string | null;
     totalAwardedAmount: number;
+    totalPrValue: number;
   }>;
   byTenderType: Array<{
     caseCount: number;
     delayedCount: number;
+    offTrackCount: number;
     tenderTypeId: string | null;
     tenderTypeName: string;
     totalAwardedAmount: number;
   }>;
   completedCases: number;
   delayedCases: number;
+  offTrackCases: number;
+  onTrackCases: number;
   runningCases: number;
   savingsWrtEstimate: number;
   savingsWrtPr: number;
@@ -68,7 +83,7 @@ export type ReportFilterMetadata = {
   budgetTypes: Array<{ id: string; name: string }>;
   completionFys: string[];
   completionMonths: string[];
-  departments: Array<{ id: string; name: string }>;
+  departments: Array<{ entityId?: string | null; id: string; name: string }>;
   entities: Array<{
     code: string | null;
     id: string;
@@ -89,6 +104,22 @@ export type ReportFilterMetadata = {
     name: string;
   }>;
   valueSlabs: string[];
+  rcPoExpiry?: {
+    budgetTypes: Array<{ id: string; name: string }>;
+    departments: Array<{ entityId?: string | null; id: string; name: string }>;
+    entities: Array<{
+      code: string | null;
+      id: string;
+      name: string | null;
+    }>;
+    natureOfWorks: Array<{ id: string; name: string }>;
+    owners: Array<{
+      fullName: string | null;
+      id: string;
+      username: string | null;
+    }>;
+    valueSlabs: string[];
+  };
 };
 
 export type ReportCaseRow = {
@@ -177,12 +208,16 @@ export type StageTimeRow = {
 
 export type ContractExpiryReportRow = {
   awardedVendors: string | null;
+  budgetTypeId: string | null;
+  departmentId: string | null;
   departmentName: string | null;
   daysToExpiry: number;
   entityCode: string | null;
   entityId: string;
   entityName: string | null;
   ownerFullName: string | null;
+  ownerUserId: string | null;
+  natureOfWorkId: string | null;
   rcPoAwardDate: string | null;
   rcPoAmount: number | null;
   rcPoValidityDate: string;
@@ -268,6 +303,15 @@ export function updateRcPoExpiryReportRow(
   });
 }
 
+export function deleteRcPoExpiryReportRow(
+  sourceType: ContractExpiryReportRow["sourceType"],
+  sourceId: string,
+) {
+  return apiRequest<{ deleted: boolean }>(`/reports/rc-po-expiry/${sourceType}/${sourceId}`, {
+    method: "DELETE",
+  });
+}
+
 export function listSavedViews(params: { reportCode?: ReportCode } = {}) {
   const search = new URLSearchParams();
   if (params.reportCode) search.set("reportCode", params.reportCode);
@@ -320,7 +364,13 @@ function buildReportQuery(params: ReportQueryParams) {
   if (params.delayStatus) search.set("delayStatus", params.delayStatus);
   setBooleanParam(search, "deletedOnly", params.deletedOnly);
   setCsvParam(search, "departmentIds", params.departmentIds);
+  if (params.days != null) search.set("days", String(params.days));
   setCsvParam(search, "entityIds", params.entityIds);
+  setBooleanParam(
+    search,
+    "includeTenderFloatedOrNotRequired",
+    params.includeTenderFloatedOrNotRequired,
+  );
   if (params.limit != null) search.set("limit", String(params.limit));
   setBooleanParam(search, "loiAwarded", params.loiAwarded);
   setCsvParam(search, "natureOfWorkIds", params.natureOfWorkIds);
@@ -331,6 +381,7 @@ function buildReportQuery(params: ReportQueryParams) {
   setCsvParam(search, "stageCodes", params.stageCodes?.map(String));
   if (params.status) search.set("status", params.status);
   setCsvParam(search, "tenderTypeIds", params.tenderTypeIds);
+  if (params.trackStatus) search.set("trackStatus", params.trackStatus);
   setCsvParam(search, "valueSlabs", params.valueSlabs);
   const query = search.toString();
   return query ? `?${query}` : "";

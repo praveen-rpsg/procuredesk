@@ -3,11 +3,14 @@ import { apiRequest } from "../../../shared/api/client";
 export type CaseListItem = {
   approvedAmount: number | null;
   completionFy: string | null;
+  currentStageAgingDays: number | null;
   cycleTimeDays: number | null;
   cpcInvolved: boolean | null;
   departmentName: string | null;
   desiredStageCode: number | null;
+  entityCode: string | null;
   entityId: string;
+  entityName: string | null;
   estimateBenchmark: number | null;
   id: string;
   isDelayed: boolean;
@@ -38,10 +41,30 @@ export type DeletedCaseListItem = CaseListItem & {
 export type CaseSummary = {
   completed: number;
   delayed: number;
+  offTrack: number;
+  onTrack: number;
   priority: number;
   risk: number;
   running: number;
   total: number;
+};
+
+export type CaseMilestones = {
+  bidReceiptDate?: string | null;
+  biddersParticipated?: number | null;
+  commercialEvaluationDate?: string | null;
+  loiIssued?: boolean | null;
+  loiIssuedDate?: string | null;
+  nfaApprovalDate?: string | null;
+  nfaSubmissionDate?: string | null;
+  nitApprovalDate?: string | null;
+  nitInitiationDate?: string | null;
+  nitPublishDate?: string | null;
+  qualifiedBidders?: number | null;
+  rcPoAwardDate?: string | null;
+  rcPoValidity?: string | null;
+  technicalEvaluationDate?: string | null;
+  [key: string]: boolean | number | string | null | undefined;
 };
 
 export type CaseDetail = {
@@ -66,7 +89,7 @@ export type CaseDetail = {
   };
   id: string;
   isDelayed: boolean;
-  milestones: Record<string, unknown>;
+  milestones: CaseMilestones;
   natureOfWorkLabel?: string | null;
   ownerFullName?: string | null;
   ownerUserId?: string | null;
@@ -77,6 +100,8 @@ export type CaseDetail = {
   prReceiptDate?: string | null;
   prSchemeNo?: string | null;
   priorityCase: boolean;
+  entityCode?: string | null;
+  entityName?: string | null;
   stageCode: number;
   status: string;
   tenderName?: string | null;
@@ -110,6 +135,7 @@ export function listCases(params: {
   q?: string | undefined;
   status?: string | undefined;
   tenderTypeIds?: string[] | undefined;
+  trackStatus?: "delayed" | "off_track" | "on_track" | undefined;
   valueSlab?: string | undefined;
   valueSlabs?: string[] | undefined;
 }) {
@@ -140,6 +166,7 @@ function setCaseListSearchParams(
   setStringParam(search, "q", params.q);
   setStringParam(search, "status", params.status);
   setArrayParam(search, "tenderTypeIds", params.tenderTypeIds);
+  setStringParam(search, "trackStatus", params.trackStatus);
   setStringParam(search, "valueSlab", params.valueSlab);
   setArrayParam(search, "valueSlabs", params.valueSlabs);
 }

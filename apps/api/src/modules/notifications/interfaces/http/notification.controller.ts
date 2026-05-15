@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Post,
   Put,
   Query,
@@ -19,12 +20,15 @@ import type { AuthenticatedUser } from "../../../identity-access/domain/authenti
 import { NotificationService } from "../../application/notification.service.js";
 import {
   CreateNotificationJobRequestSchema,
+  NotificationJobsQuerySchema,
   NotificationPreviewQuerySchema,
+  NotificationRuleTypeSchema,
   NotificationTypeSchema,
   UpdateNotificationRuleRequestSchema,
   type CreateNotificationJobRequest,
+  type NotificationJobsQuery,
   type NotificationPreviewQuery,
-  type NotificationType,
+  type NotificationRuleType,
   type UpdateNotificationRuleRequest,
 } from "./notification.schemas.js";
 
@@ -50,8 +54,8 @@ export class NotificationController {
   @RequirePermissions("notification.manage")
   updateRule(
     @CurrentUser() user: AuthenticatedUser,
-    @Param("notificationType", new ZodValidationPipe(NotificationTypeSchema))
-    notificationType: NotificationType,
+    @Param("notificationType", new ZodValidationPipe(NotificationRuleTypeSchema))
+    notificationType: NotificationRuleType,
     @Body(new ZodValidationPipe(UpdateNotificationRuleRequestSchema))
     body: UpdateNotificationRuleRequest,
   ) {
@@ -59,6 +63,16 @@ export class NotificationController {
       user,
       stripUndefined({ ...body, notificationType }),
     );
+  }
+
+  @Get("jobs")
+  @RequirePermissions("notification.manage")
+  listJobs(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query(new ZodValidationPipe(NotificationJobsQuerySchema))
+    query: NotificationJobsQuery,
+  ) {
+    return this.notifications.listJobs(user, stripUndefined(query));
   }
 
   @Get("preview")
@@ -79,5 +93,17 @@ export class NotificationController {
     body: CreateNotificationJobRequest,
   ) {
     return this.notifications.createJob(user, body);
+  }
+
+  @Post("jobs/:jobId/retry")
+  @RequirePermissions("notification.manage")
+  retryJob(@CurrentUser() user: AuthenticatedUser, @Param("jobId", ParseUUIDPipe) jobId: string) {
+    return this.notifications.retryJob(user, jobId);
+  }
+
+  @Post("jobs/:jobId/cancel")
+  @RequirePermissions("notification.manage")
+  cancelJob(@CurrentUser() user: AuthenticatedUser, @Param("jobId", ParseUUIDPipe) jobId: string) {
+    return this.notifications.cancelJob(user, jobId);
   }
 }

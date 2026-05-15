@@ -111,7 +111,7 @@ export class ProcurementCaseController {
   }
 
   @Patch("cases/:caseId/delay")
-  @RequirePermissions("case.delay.manage.entity")
+  @RequirePermissions("case.delay.manage.all")
   updateDelay(
     @CurrentUser() user: AuthenticatedUser,
     @Param("caseId", ParseUUIDPipe) caseId: string,

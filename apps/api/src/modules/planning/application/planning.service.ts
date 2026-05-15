@@ -94,6 +94,30 @@ export class PlanningService {
     });
   }
 
+  async deleteTenderPlan(actor: AuthenticatedUser, planId: string) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "planning.manage");
+    this.assertPlanningAccessLevel(actor);
+    await this.db.transaction(async () => {
+      await this.repository.deleteTenderPlan({
+        actorUserId: actor.id,
+        planId,
+        tenantId,
+      });
+      await this.audit.write({
+        action: "planning.tender_plan.delete",
+        actorUserId: actor.id,
+        summary: "Removed tender plan case",
+        targetId: planId,
+        targetType: "tender_plan_case",
+        tenantId,
+      });
+      await this.emitPlanningEvent(tenantId, planId, "tender_plan.deleted", {
+        actorUserId: actor.id,
+      });
+    });
+  }
+
   listRcPoPlans(actor: AuthenticatedUser, filters: ListPlanningFilters) {
     const tenantId = this.requireTenant(actor);
     this.assertPlanningAccessLevel(actor);

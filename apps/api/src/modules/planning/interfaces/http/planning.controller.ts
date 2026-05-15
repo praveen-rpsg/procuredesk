@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
 
 import { CurrentUser } from "../../../../common/auth/current-user.decorator.js";
 import { RequirePermissions } from "../../../../common/auth/permissions.decorator.js";
@@ -32,7 +43,8 @@ export class PlanningController {
   @RequirePermissions("planning.manage")
   listTenderPlans(
     @CurrentUser() user: AuthenticatedUser,
-    @Query(new ZodValidationPipe(PlanningListQuerySchema)) query: PlanningListQuery,
+    @Query(new ZodValidationPipe(PlanningListQuerySchema))
+    query: PlanningListQuery,
   ) {
     return this.planning.listTenderPlans(user, stripUndefined(query));
   }
@@ -41,7 +53,8 @@ export class PlanningController {
   @RequirePermissions("planning.manage")
   createTenderPlan(
     @CurrentUser() user: AuthenticatedUser,
-    @Body(new ZodValidationPipe(CreateTenderPlanRequestSchema)) body: CreateTenderPlanRequest,
+    @Body(new ZodValidationPipe(CreateTenderPlanRequestSchema))
+    body: CreateTenderPlanRequest,
   ) {
     return this.planning.createTenderPlan(user, stripUndefined(body));
   }
@@ -51,16 +64,30 @@ export class PlanningController {
   updateTenderPlan(
     @CurrentUser() user: AuthenticatedUser,
     @Param("planId", ParseUUIDPipe) planId: string,
-    @Body(new ZodValidationPipe(UpdateTenderPlanRequestSchema)) body: UpdateTenderPlanRequest,
+    @Body(new ZodValidationPipe(UpdateTenderPlanRequestSchema))
+    body: UpdateTenderPlanRequest,
   ) {
-    return this.planning.updateTenderPlan(user, stripUndefined({ ...body, planId }));
+    return this.planning.updateTenderPlan(
+      user,
+      stripUndefined({ ...body, planId }),
+    );
+  }
+
+  @Delete("tender-plans/:planId")
+  @RequirePermissions("planning.manage")
+  deleteTenderPlan(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("planId", ParseUUIDPipe) planId: string,
+  ) {
+    return this.planning.deleteTenderPlan(user, planId);
   }
 
   @Get("rc-po-plans")
   @RequirePermissions("planning.manage")
   listRcPoPlans(
     @CurrentUser() user: AuthenticatedUser,
-    @Query(new ZodValidationPipe(PlanningListQuerySchema)) query: PlanningListQuery,
+    @Query(new ZodValidationPipe(PlanningListQuerySchema))
+    query: PlanningListQuery,
   ) {
     return this.planning.listRcPoPlans(user, stripUndefined(query));
   }
@@ -69,7 +96,8 @@ export class PlanningController {
   @RequirePermissions("planning.manage")
   createRcPoPlan(
     @CurrentUser() user: AuthenticatedUser,
-    @Body(new ZodValidationPipe(CreateRcPoPlanRequestSchema)) body: CreateRcPoPlanRequest,
+    @Body(new ZodValidationPipe(CreateRcPoPlanRequestSchema))
+    body: CreateRcPoPlanRequest,
   ) {
     return this.planning.createRcPoPlan(user, stripUndefined(body));
   }
@@ -79,9 +107,13 @@ export class PlanningController {
   updateRcPoPlan(
     @CurrentUser() user: AuthenticatedUser,
     @Param("planId", ParseUUIDPipe) planId: string,
-    @Body(new ZodValidationPipe(UpdateRcPoPlanRequestSchema)) body: UpdateRcPoPlanRequest,
+    @Body(new ZodValidationPipe(UpdateRcPoPlanRequestSchema))
+    body: UpdateRcPoPlanRequest,
   ) {
-    return this.planning.updateRcPoPlan(user, stripUndefined({ ...body, planId }));
+    return this.planning.updateRcPoPlan(
+      user,
+      stripUndefined({ ...body, planId }),
+    );
   }
 
   @Get("rc-po-expiry")

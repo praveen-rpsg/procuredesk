@@ -5,28 +5,28 @@ import {
   Download,
   FilePlus2,
   Pencil,
-  Search,
-  SlidersHorizontal,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import {
-  createRcPoPlan,
+  archiveTenderPlan,
   createTenderPlan,
   listEntities,
-  listRcPoExpiry,
   listTenderPlans,
   updateTenderPlan,
-  updateRcPoPlan,
   type EntityOption,
-  type RcPoExpiryRow,
   type TenderPlanCase,
 } from "../api/planningApi";
-import { listAdminDepartments } from "../../admin/api/adminApi";
+import {
+  getCatalogSnapshot,
+  listAdminDepartments,
+} from "../../admin/api/adminApi";
+import {
+  CreateCaseForm,
+  type CreateCaseFormInitialValues,
+} from "../../procurement-cases/components/CreateCaseForm";
 import { Button } from "../../../shared/ui/button/Button";
-import { useDebouncedValue } from "../../../shared/hooks/useDebouncedValue";
 import { ErrorState } from "../../../shared/ui/error-state/ErrorState";
-import { Checkbox } from "../../../shared/ui/form/Checkbox";
 import { FormField, TextInput } from "../../../shared/ui/form/FormField";
 import { Modal } from "../../../shared/ui/modal/Modal";
 import { PageHeader } from "../../../shared/ui/page-header/PageHeader";
@@ -36,7 +36,6 @@ import {
 } from "../../../shared/routing/appLocation";
 import { SecondaryNav } from "../../../shared/ui/secondary-nav/SecondaryNav";
 import { Skeleton } from "../../../shared/ui/skeleton/Skeleton";
-import { StatusBadge } from "../../../shared/ui/status/StatusBadge";
 import {
   type VirtualTableColumn,
   VirtualTable,
@@ -50,23 +49,39 @@ import {
 
 const tenderColumns: VirtualTableColumn<TenderPlanCase>[] = [
   {
+    key: "entity",
+    header: "Entity",
+    render: (row) =>
+      [row.entityCode, row.entityName].filter(Boolean).join(" - ") || "-",
+  },
+  {
+    key: "department",
+    header: "User Department",
+    render: (row) => row.departmentName ?? "-",
+  },
+  {
+    key: "nature",
+    header: "Nature of Work",
+    render: (row) => row.natureOfWorkLabel ?? "-",
+  },
+  {
     key: "description",
-    header: "Tender",
+    header: "Tender Description",
     render: (row) => row.tenderDescription ?? "-",
   },
   {
     key: "value",
-    header: "Value [All Inclusive]",
+    header: "Value (Rs.) [All Inclusive]",
     render: (row) => (row.valueRs == null ? "-" : row.valueRs.toLocaleString()),
   },
   {
     key: "planned",
-    header: "Planned",
+    header: "Planned Date",
     render: (row) => formatDateOnly(row.plannedDate),
   },
   {
     key: "cpc",
-    header: "CPC",
+    header: "CPC Involved?",
     render: (row) => (row.cpcInvolved ? "Yes" : "No"),
   },
 ];
@@ -76,9 +91,9 @@ function activeEntityOptions(entities: EntityOption[] | undefined) {
 }
 
 type PlanningSectionKey = "expiry" | "tenders";
-type RcPoExpiryDraft = {
-  tenderFloatedOrNotRequired: boolean;
-  tentativeTenderingDate: string | null;
+type CreatingCaseFromPlan = {
+  initialValues: CreateCaseFormInitialValues;
+  plan: TenderPlanCase;
 };
 
 const planningSections = [
@@ -89,7 +104,7 @@ const planningSections = [
     label: "Tender Plans",
   },
   {
-    description: "RC/PO expiry queue and renewal action tracking.",
+    description: "Open the RC/PO expiry report.",
     icon: CircleAlert,
     key: "expiry",
     label: "RC/PO Expiry",
@@ -102,7 +117,7 @@ const planningSections = [
 }>;
 
 const planningSectionPaths: Record<PlanningSectionKey, string> = {
-  expiry: "/planning/rc-po-expiry",
+  expiry: "/reports/rc-po-expiry",
   tenders: "/planning/tender-plans",
 };
 
@@ -114,36 +129,29 @@ export function PlanningWorkspace() {
   const [selectedEntityId, setSelectedEntityId] = useState("");
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
   const [filterEntityId, setFilterEntityId] = useState("");
-  const [filterDepartmentId, setFilterDepartmentId] = useState("");
-  const [planSearch, setPlanSearch] = useState("");
-  const [expirySearch, setExpirySearch] = useState("");
-  const [expiryDays, setExpiryDays] = useState("");
+  const [filterNatureOfWorkId, setFilterNatureOfWorkId] = useState("");
+  const [filterCpcInvolved, setFilterCpcInvolved] = useState(false);
+  const [natureOfWorkId, setNatureOfWorkId] = useState("");
   const [tenderDescription, setTenderDescription] = useState("");
   const [tenderValue, setTenderValue] = useState("");
   const [plannedDate, setPlannedDate] = useState("");
   const [cpcInvolved, setCpcInvolved] = useState(false);
-  const [rcDescription, setRcDescription] = useState("");
-  const [awardedVendors, setAwardedVendors] = useState("");
-  const [rcAmount, setRcAmount] = useState("");
-  const [rcAwardDate, setRcAwardDate] = useState("");
-  const [rcValidityDate, setRcValidityDate] = useState("");
-  const [tentativeTenderingDate, setTentativeTenderingDate] = useState("");
-  const [rcPoExpiryDrafts, setRcPoExpiryDrafts] = useState<
-    Record<string, RcPoExpiryDraft>
-  >({});
-  const [createPlanModal, setCreatePlanModal] = useState<
-    "rc" | "tender" | null
-  >(null);
+  const [createPlanModal, setCreatePlanModal] = useState<"tender" | null>(null);
   const [editingTenderPlan, setEditingTenderPlan] =
     useState<TenderPlanCase | null>(null);
+  const [creatingCaseFromPlan, setCreatingCaseFromPlan] =
+    useState<CreatingCaseFromPlan | null>(null);
+  const [editNatureOfWorkId, setEditNatureOfWorkId] = useState("");
   const [editTenderDescription, setEditTenderDescription] = useState("");
   const [editTenderValue, setEditTenderValue] = useState("");
   const [editPlannedDate, setEditPlannedDate] = useState("");
   const [editCpcInvolved, setEditCpcInvolved] = useState(false);
-  const debouncedPlanSearch = useDebouncedValue(planSearch, 350);
-  const debouncedExpirySearch = useDebouncedValue(expirySearch, 350);
 
   useEffect(() => {
+    if (location.pathname === "/planning/rc-po-expiry") {
+      navigateToAppPath(planningSectionPaths.expiry, { replace: true });
+      return;
+    }
     if (
       location.pathname === "/planning" ||
       location.pathname === "/planning/create"
@@ -157,67 +165,39 @@ export function PlanningWorkspace() {
     () => activeEntityOptions(entities.data),
     [entities.data],
   );
-  const entityDisplayById = useMemo(
-    () =>
-      new Map(
-        activeEntities.map((entity) => [
-          entity.id,
-          entity.code ? `${entity.code} - ${entity.name}` : entity.name,
-        ]),
-      ),
-    [activeEntities],
-  );
   const entityId = selectedEntityId || activeEntities[0]?.id || "";
   const formDepartments = useQuery({
     enabled: Boolean(entityId),
     queryFn: () => listAdminDepartments(entityId),
     queryKey: ["planning-form-departments", entityId],
   });
-  const filterDepartments = useQuery({
-    enabled: Boolean(filterEntityId),
-    queryFn: () => listAdminDepartments(filterEntityId),
-    queryKey: ["planning-filter-departments", filterEntityId],
+  const catalog = useQuery({
+    queryFn: getCatalogSnapshot,
+    queryKey: ["catalog-snapshot"],
   });
-  const departmentDisplayById = useMemo(
+  const natureOfWorkOptions = useMemo(
     () =>
-      new Map(
-        [
-          ...(formDepartments.data ?? []),
-          ...(filterDepartments.data ?? []),
-        ].map((department) => [department.id, department.name]),
+      (catalog.data?.referenceValues ?? []).filter(
+        (value) => value.categoryCode === "nature_of_work" && value.isActive,
       ),
-    [filterDepartments.data, formDepartments.data],
+    [catalog.data?.referenceValues],
   );
   const tenderPlans = useQuery({
     queryFn: () =>
       listTenderPlans({
-        departmentIds: filterDepartmentId ? [filterDepartmentId] : undefined,
+        cpcInvolved: filterCpcInvolved ? true : undefined,
         entityIds: filterEntityId ? [filterEntityId] : undefined,
-        limit: 10,
-        q: debouncedPlanSearch || undefined,
+        limit: 100,
+        natureOfWorkIds: filterNatureOfWorkId
+          ? [filterNatureOfWorkId]
+          : undefined,
       }),
     queryKey: [
       "tender-plans",
-      { debouncedPlanSearch, filterDepartmentId, filterEntityId },
-    ],
-  });
-  const expiryRows = useQuery({
-    queryFn: () =>
-      listRcPoExpiry({
-        days: expiryDays ? Number(expiryDays) : undefined,
-        departmentIds: filterDepartmentId ? [filterDepartmentId] : undefined,
-        entityIds: filterEntityId ? [filterEntityId] : undefined,
-        includeCompleted: true,
-        limit: 25,
-        q: debouncedExpirySearch || undefined,
-      }),
-    queryKey: [
-      "rc-po-expiry",
       {
-        debouncedExpirySearch,
-        expiryDays,
-        filterDepartmentId,
+        filterCpcInvolved,
         filterEntityId,
+        filterNatureOfWorkId,
       },
     ],
   });
@@ -228,12 +208,14 @@ export function PlanningWorkspace() {
         cpcInvolved,
         departmentId: selectedDepartmentId || null,
         entityId,
+        natureOfWorkId: natureOfWorkId || null,
         plannedDate: plannedDate || null,
         tenderDescription: tenderDescription || null,
         valueRs: tenderValue || null,
       }),
     onSuccess: async () => {
       setTenderDescription("");
+      setNatureOfWorkId("");
       setTenderValue("");
       setPlannedDate("");
       setCpcInvolved(false);
@@ -243,49 +225,11 @@ export function PlanningWorkspace() {
     },
   });
 
-  const createRcMutation = useMutation({
-    mutationFn: () =>
-      createRcPoPlan({
-        awardedVendors: awardedVendors || null,
-        departmentId: selectedDepartmentId || null,
-        entityId,
-        rcPoAmount: rcAmount || null,
-        rcPoAwardDate: rcAwardDate || null,
-        rcPoValidityDate: rcValidityDate || null,
-        tenderDescription: rcDescription || null,
-        tentativeTenderingDate: tentativeTenderingDate || null,
-      }),
-    onSuccess: async () => {
-      setRcDescription("");
-      setAwardedVendors("");
-      setRcAmount("");
-      setRcAwardDate("");
-      setRcValidityDate("");
-      setTentativeTenderingDate("");
-      setCreatePlanModal(null);
-      await queryClient.invalidateQueries({ queryKey: ["rc-po-expiry"] });
-      notify({ message: "RC/PO plan added.", tone: "success" });
-    },
-  });
-
-  const updateRcMutation = useMutation({
-    mutationFn: ({
-      planId,
-      payload,
-    }: {
-      planId: string;
-      payload: Record<string, unknown>;
-    }) => updateRcPoPlan(planId, payload),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["rc-po-expiry"] });
-      setRcPoExpiryDrafts({});
-      notify({ message: "Expiry row updated.", tone: "success" });
-    },
-  });
   const updateTenderMutation = useMutation({
     mutationFn: () =>
       updateTenderPlan(editingTenderPlan?.id as string, {
         cpcInvolved: editCpcInvolved,
+        natureOfWorkId: editNatureOfWorkId || null,
         plannedDate: editPlannedDate || null,
         tenderDescription: editTenderDescription || null,
         valueRs: editTenderValue || null,
@@ -297,6 +241,13 @@ export function PlanningWorkspace() {
     },
   });
 
+  const archiveTenderMutation = useMutation({
+    mutationFn: archiveTenderPlan,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["tender-plans"] });
+    },
+  });
+
   const tenderPlanColumns = useMemo<VirtualTableColumn<TenderPlanCase>[]>(
     () => [
       ...tenderColumns,
@@ -304,189 +255,34 @@ export function PlanningWorkspace() {
         key: "actions",
         header: "Actions",
         render: (row) => (
-          <Button variant="secondary" onClick={() => openTenderEdit(row)}>
-            <Pencil size={18} />
-            Edit
-          </Button>
+          <div className="planning-row-actions">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => openCreateCaseFromPlan(row)}
+            >
+              <FilePlus2 size={16} />
+              Create Case
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => openTenderEdit(row)}
+            >
+              <Pencil size={16} />
+              Edit
+            </Button>
+          </div>
         ),
       },
     ],
     [],
   );
 
-  const expiryColumns = useMemo<VirtualTableColumn<RcPoExpiryRow>[]>(
-    () => [
-      {
-        key: "source",
-        header: "Source",
-        render: (row) => <RcPoSourceBadge row={row} />,
-      },
-      {
-        key: "tender",
-        header: "Tender Description",
-        render: (row) => row.tenderDescription ?? "-",
-      },
-      {
-        key: "entity",
-        header: "Entity",
-        render: (row) =>
-          row.entityCode ??
-          row.entityName ??
-          entityDisplayById.get(row.entityId) ??
-          row.entityId,
-      },
-      {
-        key: "department",
-        header: "Department",
-        render: (row) =>
-          row.departmentId == null
-            ? "-"
-            : (row.departmentName ??
-              departmentDisplayById.get(row.departmentId) ??
-              row.departmentId),
-      },
-      {
-        key: "amount",
-        header: "RC/PO Amount (Lakhs) [All Inclusive]",
-        render: (row) => formatLakhs(row.rcPoAmount),
-      },
-      {
-        key: "awardDate",
-        header: "Award Date",
-        render: (row) => formatDateCell(row.rcPoAwardDate),
-      },
-      {
-        key: "validity",
-        header: "Validity Date",
-        render: (row) => row.rcPoValidityDate,
-      },
-      {
-        key: "owner",
-        header: "Owner",
-        render: (row) => row.ownerFullName ?? row.ownerUserId ?? "-",
-      },
-      {
-        key: "vendors",
-        header: "Awarded Vendors",
-        render: (row) => row.awardedVendors ?? "-",
-      },
-      {
-        key: "tentativeTenderingDate",
-        header: "Tentative Tendering Date",
-        render: (row) => {
-          const draft =
-            rcPoExpiryDrafts[rcPoExpiryDraftKey(row)] ??
-            rcPoExpiryDraftFromRow(row);
-          return row.sourceType === "manual_plan" ? (
-            <TextInput
-              aria-label={`Tentative tendering date for ${row.tenderDescription ?? row.sourceId}`}
-              onChange={(event) =>
-                setRcPoExpiryDraft(row, {
-                  tentativeTenderingDate: event.target.value || null,
-                })
-              }
-              type="date"
-              value={draft.tentativeTenderingDate ?? ""}
-            />
-          ) : (
-            formatDateCell(row.tentativeTenderingDate)
-          );
-        },
-      },
-      {
-        key: "floated",
-        filterOptions: [
-          { label: "Yes", value: "Yes" },
-          { label: "No", value: "No" },
-        ],
-        filterValue: (row) => (row.tenderFloatedOrNotRequired ? "Yes" : "No"),
-        header: "Tender Floated? or Not Required",
-        render: (row) => {
-          const draft =
-            rcPoExpiryDrafts[rcPoExpiryDraftKey(row)] ??
-            rcPoExpiryDraftFromRow(row);
-          return row.sourceType === "manual_plan" ? (
-            <Checkbox
-              aria-label={`Tender floated or not required for ${row.tenderDescription ?? row.sourceId}`}
-              checked={draft.tenderFloatedOrNotRequired}
-              label=""
-              onChange={(event) =>
-                setRcPoExpiryDraft(row, {
-                  tenderFloatedOrNotRequired: event.target.checked,
-                })
-              }
-            />
-          ) : row.tenderFloatedOrNotRequired ? (
-            "Yes"
-          ) : (
-            "No"
-          );
-        },
-      },
-      {
-        key: "actions",
-        header: "Actions",
-        render: (row) => {
-          if (row.sourceType !== "manual_plan") return "-";
-          const key = rcPoExpiryDraftKey(row);
-          const draft = rcPoExpiryDrafts[key];
-          const isSaving =
-            updateRcMutation.isPending &&
-            updateRcMutation.variables?.planId === row.sourceId;
-          return (
-            <Button
-              disabled={!draft || isSaving}
-              onClick={() => {
-                if (!draft) return;
-                updateRcMutation.mutate({
-                  payload: draft,
-                  planId: row.sourceId,
-                });
-              }}
-              size="sm"
-              variant={draft ? "primary" : "secondary"}
-            >
-              {isSaving ? "Saving" : "Save"}
-            </Button>
-          );
-        },
-      },
-    ],
-    [
-      departmentDisplayById,
-      entityDisplayById,
-      rcPoExpiryDrafts,
-      updateRcMutation,
-    ],
-  );
-
-  function setRcPoExpiryDraft(
-    row: RcPoExpiryRow,
-    patch: Partial<RcPoExpiryDraft>,
-  ) {
-    setRcPoExpiryDrafts((current) => {
-      const key = rcPoExpiryDraftKey(row);
-      const currentDraft = current[key] ?? rcPoExpiryDraftFromRow(row);
-      const nextDraft = { ...currentDraft, ...patch };
-      if (isRcPoExpiryDraftUnchanged(row, nextDraft)) {
-        const next = { ...current };
-        delete next[key];
-        return next;
-      }
-      return { ...current, [key]: nextDraft };
-    });
-  }
-
   const onTenderSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!entityId) return;
     createTenderMutation.mutate();
-  };
-
-  const onRcSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!entityId || !rcValidityDate) return;
-    createRcMutation.mutate();
   };
 
   const onTenderEditSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -496,31 +292,43 @@ export function PlanningWorkspace() {
 
   function openTenderEdit(row: TenderPlanCase) {
     setEditingTenderPlan(row);
+    setEditNatureOfWorkId(row.natureOfWorkId ?? "");
     setEditTenderDescription(row.tenderDescription ?? "");
     setEditTenderValue(row.valueRs == null ? "" : String(row.valueRs));
     setEditPlannedDate(toDateOnlyInputValue(row.plannedDate));
     setEditCpcInvolved(Boolean(row.cpcInvolved));
   }
 
+  function openCreateCaseFromPlan(row: TenderPlanCase) {
+    setCreatingCaseFromPlan({
+      initialValues: {
+        cpcInvolved: Boolean(row.cpcInvolved),
+        departmentId: row.departmentId ?? "",
+        entityId: row.entityId,
+        natureOfWorkId: row.natureOfWorkId ?? "",
+        prDescription: row.tenderDescription ?? "",
+        prReceiptDate: toDateOnlyInputValue(row.plannedDate),
+        prValue: row.valueRs == null ? "" : String(row.valueRs),
+        tentativeCompletionDate: toDateOnlyInputValue(row.plannedDate),
+      },
+      plan: row,
+    });
+  }
+
   const clearPlanningFilters = () => {
     setFilterEntityId("");
-    setFilterDepartmentId("");
-    setPlanSearch("");
-    setExpirySearch("");
-    setExpiryDays("");
+    setFilterNatureOfWorkId("");
+    setFilterCpcInvolved(false);
   };
 
-  const renderPlanningFilters = (section: PlanningSectionKey) => (
+  const renderPlanningFilters = () => (
     <div className="planning-inline-filters">
-      <div
-        className={`planning-filter-grid ${section === "tenders" ? "planning-filter-grid-tenders" : ""}`}
-      >
+      <div className="planning-filter-grid planning-filter-grid-tenders">
         <FormField label="Entity">
           <select
             className="text-input"
             onChange={(event) => {
               setFilterEntityId(event.target.value);
-              setFilterDepartmentId("");
             }}
             value={filterEntityId}
           >
@@ -532,70 +340,33 @@ export function PlanningWorkspace() {
             ))}
           </select>
         </FormField>
-        <FormField label="Department">
+        <FormField label="Nature of Work">
           <select
             className="text-input"
-            disabled={!filterEntityId || filterDepartments.isLoading}
-            onChange={(event) => setFilterDepartmentId(event.target.value)}
-            value={filterDepartmentId}
+            disabled={catalog.isLoading}
+            onChange={(event) => setFilterNatureOfWorkId(event.target.value)}
+            value={filterNatureOfWorkId}
           >
             <option value="">All</option>
-            {(filterDepartments.data ?? [])
-              .filter((department) => department.isActive)
-              .map((department) => (
-                <option key={department.id} value={department.id}>
-                  {department.name}
-                </option>
-              ))}
+            {natureOfWorkOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </FormField>
-        {section === "tenders" ? (
-          <FormField label="Search">
-            <TextInput
-              onChange={(event) => setPlanSearch(event.target.value)}
-              placeholder="Description…"
-              value={planSearch}
+        <div className="planning-filter-toggle">
+          <label className="checkbox-row">
+            <input
+              checked={filterCpcInvolved}
+              onChange={(event) => setFilterCpcInvolved(event.target.checked)}
+              type="checkbox"
             />
-          </FormField>
-        ) : (
-          <>
-            <FormField label="Search">
-              <div className="planning-search-input">
-                <Search size={16} />
-                <TextInput
-                  onChange={(event) => setExpirySearch(event.target.value)}
-                  placeholder="Contract, vendor, source…"
-                  value={expirySearch}
-                />
-              </div>
-            </FormField>
-            <FormField label="Expiry Horizon">
-              <select
-                className="text-input"
-                onChange={(event) => setExpiryDays(event.target.value)}
-                value={expiryDays}
-              >
-                <option value="">All</option>
-                <option value="30">Next 30 days</option>
-                <option value="60">Next 60 days</option>
-                <option value="90">Next 90 days</option>
-                <option value="180">Next 180 days</option>
-                <option value="365">Next 12 months</option>
-              </select>
-            </FormField>
-          </>
-        )}
+            CPC Involved?
+          </label>
+        </div>
       </div>
       <div className="planning-inline-filter-actions">
-        {section === "expiry" ? (
-          <div
-            className="planning-filter-summary"
-            aria-label="Expiry filter summary"
-          >
-            <span>{expiryDays || "All"} days</span>
-            <span>Closed included</span>
-          </div>
-        ) : null}
         <Button size="sm" variant="ghost" onClick={clearPlanningFilters}>
           Clear
         </Button>
@@ -605,9 +376,8 @@ export function PlanningWorkspace() {
 
   return (
     <section className="workspace-section">
-      <PageHeader eyebrow="Planning" title="Tender Planning And RC/PO Expiry">
-        Plan upcoming tenders, track expiring RC/PO contracts, and close expiry
-        actions inline.
+      <PageHeader eyebrow="Planning" title="Tender Planning">
+        Plan upcoming tenders and export the tender planning pipeline.
       </PageHeader>
 
       <section className="module-subnav-shell">
@@ -671,7 +441,7 @@ export function PlanningWorkspace() {
                   </Button>
                 </div>
               </div>
-              {renderPlanningFilters("tenders")}
+              {renderPlanningFilters()}
               {tenderPlans.isLoading ? (
                 <div style={{ display: "grid", gap: "var(--space-3)" }}>
                   {[1, 2, 3, 4, 5].map((i) => (
@@ -701,74 +471,6 @@ export function PlanningWorkspace() {
                   rows={tenderPlans.data ?? []}
                 />
               )}
-            </section>
-          ) : null}
-
-          {activeSection === "expiry" ? (
-            <section className="state-panel planning-grid-wide">
-              <div className="detail-header">
-                <div>
-                  <p className="eyebrow">Expiry</p>
-                  <h2>RC/PO Expiry Queue</h2>
-                </div>
-                <div className="planning-expiry-actions">
-                  <span className="planning-expiry-chip">
-                    <SlidersHorizontal size={14} />
-                    {expiryRows.data?.length ?? 0} visible
-                  </span>
-                  <Button
-                    disabled={!entityId}
-                    size="sm"
-                    onClick={() => setCreatePlanModal("rc")}
-                  >
-                    <FilePlus2 size={16} />
-                    Add RC/PO Plan
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => exportRcPoExpiry(expiryRows.data ?? [])}
-                  >
-                    <Download size={16} />
-                    Export
-                  </Button>
-                </div>
-              </div>
-              {renderPlanningFilters("expiry")}
-              {expiryRows.isLoading ? (
-                <div style={{ display: "grid", gap: "var(--space-3)" }}>
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <div
-                      key={i}
-                      style={{
-                        display: "flex",
-                        gap: "var(--space-4)",
-                        alignItems: "center",
-                      }}
-                    >
-                      <Skeleton height={13} width="30%" />
-                      <Skeleton height={13} width="14%" />
-                      <Skeleton height={13} width="18%" />
-                      <Skeleton height={13} width="12%" />
-                      <Skeleton height={13} width="10%" />
-                    </div>
-                  ))}
-                </div>
-              ) : expiryRows.error ? (
-                <p className="inline-error">{expiryRows.error.message}</p>
-              ) : (
-                <VirtualTable
-                  columns={expiryColumns}
-                  emptyMessage="No expiring RC/PO rows found."
-                  getRowKey={(row) => `${row.sourceType}-${row.sourceId}`}
-                  maxHeight={520}
-                  rowHeight={48}
-                  rows={expiryRows.data ?? []}
-                />
-              )}
-              {updateRcMutation.error ? (
-                <p className="inline-error">{updateRcMutation.error.message}</p>
-              ) : null}
             </section>
           ) : null}
         </div>
@@ -811,6 +513,21 @@ export function PlanningWorkspace() {
                     {department.name}
                   </option>
                 ))}
+            </select>
+          </FormField>
+          <FormField label="Nature of Work">
+            <select
+              className="text-input"
+              disabled={catalog.isLoading}
+              onChange={(event) => setNatureOfWorkId(event.target.value)}
+              value={natureOfWorkId}
+            >
+              <option value="">Select nature of work</option>
+              {natureOfWorkOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </FormField>
           <FormField label="Tender Description">
@@ -857,111 +574,26 @@ export function PlanningWorkspace() {
       </Modal>
 
       <Modal
-        isOpen={createPlanModal === "rc"}
-        onClose={() => setCreatePlanModal(null)}
-        size="wide"
-        title="Add RC/PO Plan"
-      >
-        <form className="stack-form" onSubmit={onRcSubmit}>
-          <FormField label="Entity">
-            <select
-              className="text-input"
-              onChange={(event) => {
-                setSelectedEntityId(event.target.value);
-                setSelectedDepartmentId("");
-              }}
-              value={entityId}
-            >
-              {activeEntities.map((entity) => (
-                <option key={entity.id} value={entity.id}>
-                  {entity.code} - {entity.name}
-                </option>
-              ))}
-            </select>
-          </FormField>
-          <FormField label="Department">
-            <select
-              className="text-input"
-              disabled={!entityId || formDepartments.isLoading}
-              onChange={(event) => setSelectedDepartmentId(event.target.value)}
-              value={selectedDepartmentId}
-            >
-              <option value="">All</option>
-              {(formDepartments.data ?? [])
-                .filter((department) => department.isActive)
-                .map((department) => (
-                  <option key={department.id} value={department.id}>
-                    {department.name}
-                  </option>
-                ))}
-            </select>
-          </FormField>
-          <FormField label="Contract Description">
-            <TextInput
-              onChange={(event) => setRcDescription(event.target.value)}
-              value={rcDescription}
-            />
-          </FormField>
-          <FormField label="Awarded Vendors">
-            <TextInput
-              onChange={(event) => setAwardedVendors(event.target.value)}
-              value={awardedVendors}
-            />
-          </FormField>
-          <div className="two-column">
-            <FormField label="RC/PO Amount (Rs.) [All Inclusive]">
-              <TextInput
-                min="0"
-                onChange={(event) => setRcAmount(event.target.value)}
-                type="number"
-                value={rcAmount}
-              />
-            </FormField>
-            <FormField label="Validity Date">
-              <TextInput
-                onChange={(event) => setRcValidityDate(event.target.value)}
-                required
-                type="date"
-                value={rcValidityDate}
-              />
-            </FormField>
-          </div>
-          <div className="two-column">
-            <FormField label="Award Date">
-              <TextInput
-                onChange={(event) => setRcAwardDate(event.target.value)}
-                type="date"
-                value={rcAwardDate}
-              />
-            </FormField>
-            <FormField label="Tentative Tendering">
-              <TextInput
-                onChange={(event) =>
-                  setTentativeTenderingDate(event.target.value)
-                }
-                type="date"
-                value={tentativeTenderingDate}
-              />
-            </FormField>
-          </div>
-          {createRcMutation.error ? (
-            <p className="inline-error">{createRcMutation.error.message}</p>
-          ) : null}
-          <Button
-            disabled={createRcMutation.isPending || !entityId}
-            type="submit"
-          >
-            Add RC/PO Plan
-          </Button>
-        </form>
-      </Modal>
-
-      <Modal
         isOpen={Boolean(editingTenderPlan)}
         onClose={() => setEditingTenderPlan(null)}
         title="Edit Tender Plan"
       >
         <form className="stack-form" onSubmit={onTenderEditSubmit}>
+          <FormField label="Nature of Work">
+            <select
+              className="text-input"
+              disabled={catalog.isLoading}
+              onChange={(event) => setEditNatureOfWorkId(event.target.value)}
+              value={editNatureOfWorkId}
+            >
+              <option value="">Select nature of work</option>
+              {natureOfWorkOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </FormField>
           <FormField label="Tender Description">
             <TextInput
               maxLength={5000}
@@ -1002,6 +634,36 @@ export function PlanningWorkspace() {
           </Button>
         </form>
       </Modal>
+
+      <Modal
+        isOpen={Boolean(creatingCaseFromPlan)}
+        onClose={() => setCreatingCaseFromPlan(null)}
+        size="wide"
+        title="Create Case"
+      >
+        {creatingCaseFromPlan ? (
+          <CreateCaseForm
+            initialValues={creatingCaseFromPlan.initialValues}
+            onCreated={async (caseId) => {
+              try {
+                await archiveTenderMutation.mutateAsync(
+                  creatingCaseFromPlan.plan.id,
+                );
+              } catch (error) {
+                notify({
+                  message:
+                    error instanceof Error
+                      ? error.message
+                      : "Case created, but tender plan could not be removed.",
+                  tone: "warning",
+                });
+              }
+              setCreatingCaseFromPlan(null);
+              navigateToAppPath(`/cases/${caseId}`);
+            }}
+          />
+        ) : null}
+      </Modal>
     </section>
   );
 }
@@ -1009,89 +671,25 @@ export function PlanningWorkspace() {
 function exportTenderPlans(rows: TenderPlanCase[]) {
   downloadCsv(
     "procuredesk-tender-plans",
-    ["Tender", "Value", "Planned Date", "CPC"],
+    [
+      "Entity",
+      "User Department",
+      "Nature of Work",
+      "Tender Description",
+      "Value (Rs.) [All Inclusive]",
+      "Planned Date",
+      "CPC Involved?",
+    ],
     rows.map((row) => [
+      [row.entityCode, row.entityName].filter(Boolean).join(" - "),
+      row.departmentName ?? "",
+      row.natureOfWorkLabel ?? "",
       row.tenderDescription ?? "",
       row.valueRs == null ? "" : String(row.valueRs),
       row.plannedDate ?? "",
       row.cpcInvolved ? "Yes" : "No",
     ]),
   );
-}
-
-function exportRcPoExpiry(rows: RcPoExpiryRow[]) {
-  downloadCsv(
-    "procuredesk-rc-po-expiry",
-    [
-      "Contract",
-      "Source",
-      "Vendors",
-      "Validity Date",
-      "Days To Expiry",
-      "Urgency",
-      "Tentative Tendering",
-      "Floated",
-    ],
-    rows.map((row) => [
-      row.tenderDescription ?? "",
-      rcPoSourceLabel(row),
-      row.awardedVendors ?? "",
-      row.rcPoValidityDate,
-      row.daysToExpiry == null ? "" : String(row.daysToExpiry),
-      row.urgency,
-      row.tentativeTenderingDate ?? "",
-      row.tenderFloatedOrNotRequired ? "Yes" : "No",
-    ]),
-  );
-}
-
-function RcPoSourceBadge({ row }: { row: RcPoExpiryRow }) {
-  if (row.sourceOrigin === "bulk_upload") {
-    return <StatusBadge tone="warning">Bulk Upload</StatusBadge>;
-  }
-  if (row.sourceOrigin === "manual_entry") {
-    return <StatusBadge tone="info">Manual Entry</StatusBadge>;
-  }
-  return <StatusBadge>TenderDB</StatusBadge>;
-}
-
-function rcPoSourceLabel(row: RcPoExpiryRow) {
-  if (row.sourceOrigin === "bulk_upload") return "Bulk Upload";
-  if (row.sourceOrigin === "manual_entry") return "Manual Entry";
-  return "TenderDB";
-}
-
-function rcPoExpiryDraftKey(row: RcPoExpiryRow): string {
-  return `${row.sourceType}:${row.sourceId}`;
-}
-
-function rcPoExpiryDraftFromRow(row: RcPoExpiryRow): RcPoExpiryDraft {
-  return {
-    tenderFloatedOrNotRequired: row.tenderFloatedOrNotRequired,
-    tentativeTenderingDate:
-      toDateOnlyInputValue(row.tentativeTenderingDate) || null,
-  };
-}
-
-function isRcPoExpiryDraftUnchanged(
-  row: RcPoExpiryRow,
-  draft: RcPoExpiryDraft,
-): boolean {
-  const baseline = rcPoExpiryDraftFromRow(row);
-  return (
-    baseline.tenderFloatedOrNotRequired === draft.tenderFloatedOrNotRequired &&
-    baseline.tentativeTenderingDate === draft.tentativeTenderingDate
-  );
-}
-
-function formatDateCell(value: string | null | undefined) {
-  return value ?? "-";
-}
-
-function formatLakhs(value: number | null | undefined) {
-  if (value == null) return "-";
-  const normalizedValue = Math.abs(value) < 0.005 ? 0 : value;
-  return `${(normalizedValue / 100000).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 }
 
 function downloadCsv(

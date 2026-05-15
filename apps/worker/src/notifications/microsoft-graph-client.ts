@@ -6,6 +6,7 @@ export type MicrosoftGraphConfig = {
 };
 
 export type WorkerEmailMessage = {
+  htmlBody?: string | null;
   subject: string;
   textBody: string;
   to: string;
@@ -30,7 +31,10 @@ export class MicrosoftGraphClient {
         body: JSON.stringify({
           message: {
             subject: message.subject,
-            body: { contentType: "Text", content: message.textBody },
+            body: {
+              contentType: message.htmlBody ? "HTML" : "Text",
+              content: message.htmlBody ?? message.textBody,
+            },
             toRecipients: [{ emailAddress: { address: message.to } }],
           },
           saveToSentItems: false,

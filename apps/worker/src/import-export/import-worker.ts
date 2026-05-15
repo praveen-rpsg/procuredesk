@@ -1385,7 +1385,15 @@ function accessLevelForRole(role: { code: string; name: string } | undefined): "
   ) {
     return "GROUP";
   }
-  if (["entity_manager", "entity manager", "entity"].some((token) => value.includes(token))) {
+  if (
+    [
+      "entity_manager",
+      "entity manager",
+      "entity_viewer",
+      "entity viewer",
+      "entity",
+    ].some((token) => value.includes(token))
+  ) {
     return "ENTITY";
   }
   return "USER";

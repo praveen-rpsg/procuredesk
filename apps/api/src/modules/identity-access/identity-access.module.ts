@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 
 import { DatabaseModule } from "../../database/database.module.js";
 import { AuditModule } from "../audit/audit.module.js";
+import { OutboxModule } from "../outbox/outbox.module.js";
 import { AdminRolesService } from "./application/admin-roles.service.js";
 import { AdminSecurityService } from "./application/admin-security.service.js";
 import { AdminUsersService } from "./application/admin-users.service.js";
@@ -12,7 +13,7 @@ import { AdminUsersController } from "./interfaces/http/admin-users.controller.j
 import { AuthController } from "./interfaces/http/auth.controller.js";
 
 @Module({
-  imports: [DatabaseModule, IdentityAccessCoreModule, AuditModule],
+  imports: [DatabaseModule, IdentityAccessCoreModule, AuditModule, OutboxModule],
   controllers: [AuthController, AdminUsersController, AdminRolesController, AdminSecurityController],
   providers: [AdminUsersService, AdminRolesService, AdminSecurityService],
   exports: [IdentityAccessCoreModule],

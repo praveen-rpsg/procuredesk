@@ -511,6 +511,7 @@ create table procurement.tender_plan_cases (
   tenant_id uuid not null references iam.tenants(id) on delete cascade,
   entity_id uuid not null references org.entities(id) on delete restrict,
   department_id uuid references org.departments(id) on delete restrict,
+  nature_of_work_id uuid references catalog.reference_values(id) on delete restrict,
   tender_description text,
   value_rs numeric(18,2),
   planned_date date,
@@ -528,6 +529,10 @@ create table procurement.tender_plan_cases (
 create index tender_plan_cases_planned_idx
   on procurement.tender_plan_cases (tenant_id, planned_date)
   where deleted_at is null;
+
+create index tender_plan_cases_nature_of_work_idx
+  on procurement.tender_plan_cases (tenant_id, nature_of_work_id)
+  where deleted_at is null and nature_of_work_id is not null;
 
 create table reporting.case_facts (
   case_id uuid primary key references procurement.cases(id) on delete cascade,
@@ -574,6 +579,8 @@ create table reporting.contract_expiry_facts (
   entity_id uuid not null,
   department_id uuid,
   owner_user_id uuid,
+  budget_type_id uuid references catalog.reference_values(id) on delete restrict,
+  nature_of_work_id uuid references catalog.reference_values(id) on delete restrict,
   tender_description text,
   awarded_vendors text,
   rc_po_amount numeric(18,2),
@@ -581,6 +588,7 @@ create table reporting.contract_expiry_facts (
   rc_po_validity_date date not null,
   tentative_tendering_date date,
   tender_floated_or_not_required boolean not null,
+  source_deleted_at timestamptz,
   source_type text not null,
   updated_at timestamptz not null default now(),
   constraint contract_expiry_source_check check (source_type in ('case_award', 'manual_plan'))
@@ -588,6 +596,27 @@ create table reporting.contract_expiry_facts (
 
 create index contract_expiry_facts_date_idx
   on reporting.contract_expiry_facts (tenant_id, rc_po_validity_date);
+
+create index contract_expiry_facts_filter_idx
+  on reporting.contract_expiry_facts (
+    tenant_id,
+    source_deleted_at,
+    tender_floated_or_not_required,
+    rc_po_validity_date,
+    entity_id
+  );
+
+create index contract_expiry_facts_department_idx
+  on reporting.contract_expiry_facts (tenant_id, department_id)
+  where department_id is not null;
+
+create index contract_expiry_facts_budget_type_idx
+  on reporting.contract_expiry_facts (tenant_id, budget_type_id)
+  where budget_type_id is not null;
+
+create index contract_expiry_facts_nature_of_work_idx
+  on reporting.contract_expiry_facts (tenant_id, nature_of_work_id)
+  where nature_of_work_id is not null;
 
 create table reporting.report_saved_views (
   id uuid primary key default gen_random_uuid(),
@@ -765,7 +794,14 @@ create table ops.notification_rules (
   updated_by uuid references iam.users(id),
   deleted_at timestamptz,
   constraint notification_rules_type_check check (
-    notification_type in ('entity_monthly_digest', 'rc_po_expiry', 'stale_tender')
+    notification_type in (
+      'delayed_case_alert',
+      'entity_monthly_digest',
+      'manager_daily_snapshot',
+      'off_track_case_alert',
+      'rc_po_expiry',
+      'stale_tender'
+    )
   ),
   constraint notification_rules_cadence_check check (
     cadence in ('manual', 'daily', 'weekly', 'monthly')
@@ -797,7 +833,21 @@ create table ops.notification_jobs (
   created_at timestamptz not null default now(),
   sent_at timestamptz,
   constraint notification_jobs_type_check check (
-    notification_type in ('entity_monthly_digest', 'rc_po_expiry', 'stale_tender', 'user_welcome', 'password_reset')
+    notification_type in (
+      'delayed_case_alert',
+      'entity_monthly_digest',
+      'export_ready',
+      'import_completed',
+      'import_failed',
+      'manager_daily_snapshot',
+      'off_track_case_alert',
+      'password_changed',
+      'password_reset',
+      'rc_po_expiry',
+      'security_alert',
+      'stale_tender',
+      'user_welcome'
+    )
   ),
   constraint notification_jobs_status_check check (
     status in ('queued', 'sending', 'sent', 'failed', 'cancelled')

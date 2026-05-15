@@ -34,9 +34,11 @@ const queryBoolean = z
   .transform((value) => (value == null ? undefined : value === "true"));
 
 export const PlanningListQuerySchema = z.object({
+  cpcInvolved: queryBoolean,
   departmentIds: csvUuidList,
   entityIds: csvUuidList,
   limit: z.coerce.number().int().min(1).max(100).optional(),
+  natureOfWorkIds: csvUuidList,
   q: z.string().trim().min(1).optional(),
 });
 
@@ -49,16 +51,18 @@ export const CreateTenderPlanRequestSchema = z.object({
   cpcInvolved: z.boolean().nullable().optional(),
   departmentId: nullableUuid,
   entityId: z.string().uuid(),
+  natureOfWorkId: nullableUuid,
   notes: z.string().trim().max(5000).nullable().optional(),
   plannedDate: dateString,
   tenderDescription: z.string().trim().max(5000).nullable().optional(),
   valueRs: amount,
 });
 
-export const UpdateTenderPlanRequestSchema = CreateTenderPlanRequestSchema.partial().refine(
-  (value) => Object.keys(value).length > 0,
-  "At least one field is required.",
-);
+export const UpdateTenderPlanRequestSchema =
+  CreateTenderPlanRequestSchema.partial().refine(
+    (value) => Object.keys(value).length > 0,
+    "At least one field is required.",
+  );
 
 export const CreateRcPoPlanRequestSchema = z.object({
   awardedVendors: z.string().trim().max(5000).nullable().optional(),
@@ -73,14 +77,19 @@ export const CreateRcPoPlanRequestSchema = z.object({
   tentativeTenderingDate: dateString,
 });
 
-export const UpdateRcPoPlanRequestSchema = CreateRcPoPlanRequestSchema.partial().refine(
-  (value) => Object.keys(value).length > 0,
-  "At least one field is required.",
-);
+export const UpdateRcPoPlanRequestSchema =
+  CreateRcPoPlanRequestSchema.partial().refine(
+    (value) => Object.keys(value).length > 0,
+    "At least one field is required.",
+  );
 
 export type CreateRcPoPlanRequest = z.infer<typeof CreateRcPoPlanRequestSchema>;
-export type CreateTenderPlanRequest = z.infer<typeof CreateTenderPlanRequestSchema>;
+export type CreateTenderPlanRequest = z.infer<
+  typeof CreateTenderPlanRequestSchema
+>;
 export type ExpiryQuery = z.infer<typeof ExpiryQuerySchema>;
 export type PlanningListQuery = z.infer<typeof PlanningListQuerySchema>;
 export type UpdateRcPoPlanRequest = z.infer<typeof UpdateRcPoPlanRequestSchema>;
-export type UpdateTenderPlanRequest = z.infer<typeof UpdateTenderPlanRequestSchema>;
+export type UpdateTenderPlanRequest = z.infer<
+  typeof UpdateTenderPlanRequestSchema
+>;

@@ -21,6 +21,7 @@ import type { AuthenticatedUser } from "../../domain/authenticated-user.js";
 import {
   AssignableOwnersQuerySchema,
   CreateUserRequestSchema,
+  ReplaceUserAccessAssignmentRequestSchema,
   ReplaceUserEntityScopesRequestSchema,
   ReplaceUserRolesRequestSchema,
   UpdateUserAccessLevelRequestSchema,
@@ -28,6 +29,7 @@ import {
   UpdateUserStatusRequestSchema,
   type AssignableOwnersQuery,
   type CreateUserRequest,
+  type ReplaceUserAccessAssignmentRequest,
   type ReplaceUserEntityScopesRequest,
   type ReplaceUserRolesRequest,
   type UpdateUserAccessLevelRequest,
@@ -112,6 +114,22 @@ export class AdminUsersController {
   ) {
     return this.adminUsers.replaceRoles(user, {
       userId,
+      roleIds: body.roleIds,
+    });
+  }
+
+  @Put(":userId/access-assignment")
+  @RequirePermissions("admin.console.access", "user.manage", "role.manage")
+  replaceAccessAssignment(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("userId", ParseUUIDPipe) userId: string,
+    @Body(new ZodValidationPipe(ReplaceUserAccessAssignmentRequestSchema))
+    body: ReplaceUserAccessAssignmentRequest,
+  ) {
+    return this.adminUsers.replaceAccessAssignment(user, {
+      userId,
+      accessLevel: body.accessLevel,
+      entityIds: body.entityIds,
       roleIds: body.roleIds,
     });
   }

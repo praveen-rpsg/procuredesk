@@ -33,6 +33,7 @@ import {
   canManageCaseDelay,
   canReadAudit,
   canUpdateCase,
+  canViewCaseDelay,
 } from "../../../shared/auth/permissions";
 import { formatCaseStage } from "../../../shared/utils/caseStage";
 import {
@@ -112,7 +113,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
         canManageCaseDelay(user, detail.data) ||
         canEditEntityManagedCaseFields(user, detail.data)),
   );
-  const canViewDelay = Boolean(detail.data && canManageCaseDelay(user, detail.data));
+  const canViewDelay = Boolean(detail.data && canViewCaseDelay(user, detail.data));
   const isCompletedCase = detail.data?.status === "completed";
   const visibleTabs = useMemo<Array<SecondaryNavItem<CaseDetailTabKey>>>(
     () =>
@@ -222,6 +223,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
   const age = runningAgeDays(kase.prReceiptDate);
   const elapsed = timeElapsedPct(kase.prReceiptDate, kase.tentativeCompletionDate);
   const fy = completionFY(kase.tentativeCompletionDate);
+  const showHeaderFinancials = activeTab !== "overview";
 
   return (
     <div className="case-page">
@@ -236,7 +238,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
 
         <div className="case-page-topbar-title">
           <span className="case-page-topbar-eyebrow">
-            {kase.entityId} · Case ID {kase.prId}
+            {kase.prId}
           </span>
           <h1 className="case-page-topbar-name">{caseTitle}</h1>
         </div>
@@ -274,7 +276,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
       </div>
 
       {/* ── KPI strip ──────────────────────────────────────────── */}
-      <div className="case-kpi-strip">
+      <div className={`case-kpi-strip${showHeaderFinancials ? "" : " case-kpi-strip-status-only"}`}>
         {/* Time / Progress group */}
         <div className="case-kpi-group case-kpi-group-progress">
           <span className="case-kpi-group-label">Progress</span>
@@ -330,38 +332,38 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
           </div>
         </div>
 
-        <div className="case-kpi-divider" />
+        {showHeaderFinancials && (
+          <>
+            <div className="case-kpi-divider" />
 
-        {/* Financials group */}
-        <div className="case-kpi-group case-kpi-group-financials">
-          <span className="case-kpi-group-label">Financials</span>
-          <div className="case-kpi-group-cards">
-            <KpiCard
-              icon={DollarSign}
-              label="PR Value / Approved Budget [All Inclusive]"
-              value={formatMoney(kase.financials.prValue)}
-              tone="neutral"
-            />
-            <KpiCard
-              icon={TrendingUp}
-              label={`Savings wrt PR Value/Approved Budget (Rs) ${formatSavingsPctBracket(
-                kase.financials.savingsWrtPr,
-                kase.financials.prValue,
-              )}`}
-              value={formatMoney(kase.financials.savingsWrtPr)}
-              tone={savingsTone(kase.financials.savingsWrtPr)}
-            />
-            <KpiCard
-              icon={PiggyBank}
-              label={`Savings wrt Estimate/Benchmark (Rs) ${formatSavingsPctBracket(
-                kase.financials.savingsWrtEstimate,
-                kase.financials.estimateBenchmark,
-              )}`}
-              value={formatMoney(kase.financials.savingsWrtEstimate)}
-              tone={savingsTone(kase.financials.savingsWrtEstimate)}
-            />
-          </div>
-        </div>
+            {/* Financials group */}
+            <div className="case-kpi-group case-kpi-group-financials">
+              <span className="case-kpi-group-label">Financials</span>
+              <div className="case-kpi-group-cards">
+                <KpiCard
+                  icon={DollarSign}
+                  label="PR Value / Approved Budget [All Inclusive]"
+                  value={formatMoney(kase.financials.prValue)}
+                  tone="neutral"
+                />
+                <KpiCard
+                  icon={TrendingUp}
+                  label="Savings wrt PR"
+                  meta={formatSavingsPctBracket(kase.financials.savingsWrtPr, kase.financials.prValue)}
+                  value={formatMoney(kase.financials.savingsWrtPr)}
+                  tone={savingsTone(kase.financials.savingsWrtPr)}
+                />
+                <KpiCard
+                  icon={PiggyBank}
+                  label="Savings wrt Estimate"
+                  meta={formatSavingsPctBracket(kase.financials.savingsWrtEstimate, kase.financials.estimateBenchmark)}
+                  value={formatMoney(kase.financials.savingsWrtEstimate)}
+                  tone={savingsTone(kase.financials.savingsWrtEstimate)}
+                />
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="case-page-subnav-shell">
@@ -375,67 +377,71 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
 
       <div className="case-page-tab-body">
         {activeTab === "overview" ? (
-          <div className="case-page-main case-page-main-contained">
-            <SectionCard title="PR Details">
-              <div className="case-info-list">
-                <InfoRow label="Case ID" value={String(kase.prId)} />
-                <InfoRow label="Entity" value={kase.entityId} />
-                {kase.departmentName && <InfoRow label="Department" value={kase.departmentName} />}
-                {kase.ownerFullName && <InfoRow label="Case Owner" value={kase.ownerFullName} />}
-                <InfoRow label="PR Receipt Date" value={formatDate(kase.prReceiptDate)} />
-                <InfoRow label="Tentative Completion" value={formatDate(kase.tentativeCompletionDate)} />
-                <InfoRow label="PR Scheme No." value={kase.prSchemeNo ?? "—"} />
-                {kase.prReceivingMediumLabel && <InfoRow label="PR Receiving Medium" value={kase.prReceivingMediumLabel} />}
-                {kase.budgetTypeLabel && <InfoRow label="Budget Type" value={kase.budgetTypeLabel} />}
-                {kase.natureOfWorkLabel && <InfoRow label="Nature of Work" value={kase.natureOfWorkLabel} />}
-                <InfoRow label="Tender Name" value={kase.tenderName ?? "—"} />
-                <InfoRow label="Tender No." value={kase.tenderNo ?? "—"} />
-                {kase.tenderTypeName && <InfoRow label="Tender Type" value={kase.tenderTypeName} />}
-                <InfoRow label="CPC Involved" value={kase.cpcInvolved == null ? "—" : kase.cpcInvolved ? "Yes" : "No"} />
-                <InfoRow label="Priority Case" value={kase.priorityCase ? "Yes" : "No"} />
-                {kase.prDescription && <InfoRow label="Description" value={kase.prDescription} />}
-              </div>
-            </SectionCard>
-
-            <SectionCard title="Financial Summary">
-              <div className="case-financials-grid">
-                <FinancialCell label="PR Value / Approved Budget (Rs.) [All Inclusive]" value={formatMoney(kase.financials.prValue)} sub="Requested budget" />
-                <FinancialCell label="Estimate / Benchmark (Rs.) [All Inclusive]" value={formatMoney(kase.financials.estimateBenchmark)} sub="Internal estimate" />
-                <FinancialCell label="NFA Approved Amount (Rs.) [All Inclusive]" value={formatMoney(kase.financials.approvedAmount)} sub="NFA approved" />
-                <FinancialCell label="Total Awarded (Rs.) [All Inclusive]" value={formatMoney(kase.financials.totalAwardedAmount)} sub="RC/PO value" />
-                <FinancialCell
-                  label="Savings wrt PR Value/Approved Budget (Rs)"
-                  percent={formatSavingsPctBracket(kase.financials.savingsWrtPr, kase.financials.prValue)}
-                  value={formatMoney(kase.financials.savingsWrtPr)}
-                  sub="PR Value / Approved Budget - NFA Approved Amount"
-                  tone={savingsTone(kase.financials.savingsWrtPr)}
-                />
-                <FinancialCell
-                  label="Savings wrt Estimate/Benchmark (Rs)"
-                  percent={formatSavingsPctBracket(
-                    kase.financials.savingsWrtEstimate,
-                    kase.financials.estimateBenchmark,
-                  )}
-                  value={formatMoney(kase.financials.savingsWrtEstimate)}
-                  sub="Estimate / Benchmark - NFA Approved Amount"
-                  tone={savingsTone(kase.financials.savingsWrtEstimate)}
-                />
-              </div>
-            </SectionCard>
-
-            {(kase.prRemarks || kase.tmRemarks) && (
-              <SectionCard icon={MessageSquare} title="Remarks">
+          <div className="case-overview-layout case-page-main-contained">
+            <div className="case-overview-primary">
+              <SectionCard title="PR Details">
                 <div className="case-info-list">
-                  {kase.prRemarks && <InfoRow label="PR Remarks" value={kase.prRemarks} />}
-                  {kase.tmRemarks && (
-                    <InfoRow
-                      label="Tender Owner's Remarks"
-                      value={kase.tmRemarks}
-                    />
-                  )}
+                  <InfoRow label="Case ID" value={String(kase.prId)} />
+                  <InfoRow label="Entity" value={kase.entityId} />
+                  {kase.departmentName && <InfoRow label="Department" value={kase.departmentName} />}
+                  {kase.ownerFullName && <InfoRow label="Case Owner" value={kase.ownerFullName} />}
+                  <InfoRow label="PR Receipt Date" value={formatDate(kase.prReceiptDate)} />
+                  <InfoRow label="Tentative Completion" value={formatDate(kase.tentativeCompletionDate)} />
+                  <InfoRow label="PR Scheme No." value={kase.prSchemeNo ?? "—"} />
+                  {kase.prReceivingMediumLabel && <InfoRow label="PR Receiving Medium" value={kase.prReceivingMediumLabel} />}
+                  {kase.budgetTypeLabel && <InfoRow label="Budget Type" value={kase.budgetTypeLabel} />}
+                  {kase.natureOfWorkLabel && <InfoRow label="Nature of Work" value={kase.natureOfWorkLabel} />}
+                  <InfoRow label="Tender Name" value={kase.tenderName ?? "—"} />
+                  <InfoRow label="Tender No." value={kase.tenderNo ?? "—"} />
+                  {kase.tenderTypeName && <InfoRow label="Tender Type" value={kase.tenderTypeName} />}
+                  <InfoRow label="CPC Involved" value={kase.cpcInvolved == null ? "—" : kase.cpcInvolved ? "Yes" : "No"} />
+                  <InfoRow label="Priority Case" value={kase.priorityCase ? "Yes" : "No"} />
+                  {kase.prDescription && <InfoRow label="Description" value={kase.prDescription} />}
                 </div>
               </SectionCard>
-            )}
+            </div>
+
+            <aside className="case-overview-side">
+              <SectionCard title="Financial Summary">
+                <div className="case-financials-grid case-financials-grid-compact">
+                  <FinancialCell label="PR Value / Approved Budget (Rs.) [All Inclusive]" value={formatMoney(kase.financials.prValue)} sub="Requested budget" />
+                  <FinancialCell label="Estimate / Benchmark (Rs.) [All Inclusive]" value={formatMoney(kase.financials.estimateBenchmark)} sub="Internal estimate" />
+                  <FinancialCell label="NFA Approved Amount (Rs.) [All Inclusive]" value={formatMoney(kase.financials.approvedAmount)} sub="NFA approved" />
+                  <FinancialCell label="Total Awarded (Rs.) [All Inclusive]" value={formatMoney(kase.financials.totalAwardedAmount)} sub="RC/PO value" />
+                  <FinancialCell
+                    label="Savings wrt PR Value/Approved Budget (Rs)"
+                    percent={formatSavingsPctBracket(kase.financials.savingsWrtPr, kase.financials.prValue)}
+                    value={formatMoney(kase.financials.savingsWrtPr)}
+                    sub="PR Value / Approved Budget - NFA Approved Amount"
+                    tone={savingsTone(kase.financials.savingsWrtPr)}
+                  />
+                  <FinancialCell
+                    label="Savings wrt Estimate/Benchmark (Rs)"
+                    percent={formatSavingsPctBracket(
+                      kase.financials.savingsWrtEstimate,
+                      kase.financials.estimateBenchmark,
+                    )}
+                    value={formatMoney(kase.financials.savingsWrtEstimate)}
+                    sub="Estimate / Benchmark - NFA Approved Amount"
+                    tone={savingsTone(kase.financials.savingsWrtEstimate)}
+                  />
+                </div>
+              </SectionCard>
+
+              {(kase.prRemarks || kase.tmRemarks) && (
+                <SectionCard icon={MessageSquare} title="Remarks">
+                  <div className="case-info-list">
+                    {kase.prRemarks && <InfoRow label="PR Remarks" value={kase.prRemarks} />}
+                    {kase.tmRemarks && (
+                      <InfoRow
+                        label="Tender Owner's Remarks"
+                        value={kase.tmRemarks}
+                      />
+                    )}
+                  </div>
+                </SectionCard>
+              )}
+            </aside>
           </div>
         ) : null}
 
@@ -528,7 +534,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
 
       {/* ── Timestamps footer ──────────────────────────────────── */}
       <div className="case-page-footer">
-        <span>Case ID: {caseId}</span>
+        <span>{kase.prId}</span>
         {kase.createdAt && (
           <span>Created: {formatDateTime(kase.createdAt)}</span>
         )}
@@ -593,12 +599,14 @@ type KpiTone = "neutral" | "brand" | "success" | "danger" | "warning";
 function KpiCard({
   icon: Icon,
   label,
+  meta,
   tone = "neutral",
   unit,
   value,
 }: {
   icon: React.ElementType;
   label: string;
+  meta?: string;
   tone?: KpiTone;
   unit?: string;
   value: string;
@@ -613,6 +621,7 @@ function KpiCard({
         {value}
         {unit && <span className="case-kpi-unit"> {unit}</span>}
       </dd>
+      {meta ? <span className="case-kpi-meta">{meta}</span> : null}
     </div>
   );
 }
@@ -683,12 +692,6 @@ function formatDateTime(value: string | null | undefined) {
   } catch {
     return value;
   }
-}
-
-function formatSavingsPct(savings: number | null | undefined, base: number | null | undefined) {
-  if (savings == null || !base) return "";
-  const pct = Math.round((savings / base) * 100);
-  return `${pct >= 0 ? "+" : ""}${pct}% of base`;
 }
 
 function formatSavingsPctBracket(savings: number | null | undefined, base: number | null | undefined) {

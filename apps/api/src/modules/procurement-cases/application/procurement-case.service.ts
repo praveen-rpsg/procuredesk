@@ -379,15 +379,7 @@ export class ProcurementCaseService {
   ) {
     const tenantId = this.requireTenant(actor);
     const kase = await this.getCase(actor, caseId);
-    if (
-      actor.isPlatformSuperAdmin ||
-      hasExpandedPermission(actor, "case.delay.manage.all") ||
-      hasExpandedPermission(actor, "case.update.all") ||
-      (hasExpandedPermission(actor, "case.delay.manage.entity") &&
-        actor.entityIds.includes(kase.entityId))
-    ) {
-      // allowed
-    } else {
+    if (!this.canManageDelay(actor, kase)) {
       throw new ForbiddenException("Delay update denied.");
     }
 
@@ -598,21 +590,19 @@ export class ProcurementCaseService {
     }
   }
 
-  private canManageDelay(actor: AuthenticatedUser, kase: { entityId: string }) {
-    return (
-      actor.isPlatformSuperAdmin ||
-      hasExpandedPermission(actor, "case.delay.manage.all") ||
-      hasExpandedPermission(actor, "case.update.all") ||
-      (hasExpandedPermission(actor, "case.delay.manage.entity") &&
-        actor.entityIds.includes(kase.entityId))
-    );
+  private canManageDelay(actor: AuthenticatedUser, _kase: { entityId: string }) {
+    return actor.isPlatformSuperAdmin;
+  }
+
+  private canViewDelay(actor: AuthenticatedUser) {
+    return actor.isPlatformSuperAdmin;
   }
 
   private presentCaseForActor(
     actor: AuthenticatedUser,
     kase: ProcurementCaseAggregate,
   ): ProcurementCaseAggregate {
-    if (this.canManageDelay(actor, kase)) return kase;
+    if (this.canViewDelay(actor)) return kase;
     return {
       ...kase,
       delay: {

@@ -27,6 +27,7 @@ values
   ('case.delete', 'Delete Cases', 'Soft-delete cases.'),
   ('case.restore', 'Restore Cases', 'Restore soft-deleted cases.'),
   ('case.delay.manage.entity', 'Manage Entity Delays', 'Manage delay fields for mapped entities.'),
+  ('case.delay.read.all', 'Read All Delay Fields', 'View external delay days and delay reasons across all entities in the tenant.'),
   ('case.delay.manage.all', 'Manage All Delays', 'Manage delay fields across all entities in the tenant.'),
   ('award.manage', 'Manage Awards', 'Create, update, and delete case awards.'),
   ('planning.manage', 'Manage Planning', 'Manage tender plans and RC/PO planning rows.'),
@@ -46,6 +47,8 @@ values
   (null, 'administration_manager', 'Administration Manager', 'Admin-console role for users, roles, system configuration, and master data.', true),
   (null, 'group_manager', 'Group Manager', 'Group-level tender operations manager across all entities.', true),
   (null, 'entity_manager', 'Entity Manager', 'Entity-scoped procurement manager.', true),
+  (null, 'entity_viewer', 'Entity Viewer', 'Entity-scoped read-only procurement and reporting access.', true),
+  (null, 'group_viewer', 'Group Viewer', 'Group-level read-only procurement and reporting access with report export.', true),
   (null, 'tender_owner', 'Tender Owner', 'Procurement user who manages assigned tenders.', true)
 on conflict (code) where tenant_id is null and deleted_at is null do update
 set
@@ -75,7 +78,7 @@ set deleted_at = now(),
     updated_at = now()
 where tenant_id is null
   and deleted_at is null
-  and code in ('tenant_admin', 'group_viewer', 'report_viewer');
+  and code in ('tenant_admin', 'report_viewer');
 
 with seed_categories(code, name) as (
   values
@@ -115,6 +118,7 @@ where r.id = rp.role_id
     'administration_manager',
     'group_manager',
     'entity_manager',
+    'entity_viewer',
     'tender_owner',
     'tenant_admin',
     'group_viewer',
@@ -166,7 +170,7 @@ join iam.permissions p on p.code in (
   'case.update.assigned',
   'case.update.entity',
   'case.update.all',
-  'case.delay.manage.entity',
+  'case.delay.read.all',
   'case.delay.manage.all',
   'award.manage',
   'planning.manage',
@@ -191,7 +195,6 @@ join iam.permissions p on p.code in (
   'case.create',
   'case.update.assigned',
   'case.update.entity',
-  'case.delay.manage.entity',
   'award.manage',
   'planning.manage',
   'report.read',
@@ -199,6 +202,35 @@ join iam.permissions p on p.code in (
   'import.manage'
 )
 where r.code = 'entity_manager'
+  and r.tenant_id is null
+  and r.deleted_at is null
+on conflict do nothing;
+
+insert into iam.role_permissions (role_id, permission_code)
+select r.id, p.code
+from iam.roles r
+join iam.permissions p on p.code in (
+  'entity.read',
+  'catalog.read',
+  'case.read.entity',
+  'report.read'
+)
+where r.code = 'entity_viewer'
+  and r.tenant_id is null
+  and r.deleted_at is null
+on conflict do nothing;
+
+insert into iam.role_permissions (role_id, permission_code)
+select r.id, p.code
+from iam.roles r
+join iam.permissions p on p.code in (
+  'entity.read',
+  'catalog.read',
+  'case.read.all',
+  'report.read',
+  'report.export'
+)
+where r.code = 'group_viewer'
   and r.tenant_id is null
   and r.deleted_at is null
 on conflict do nothing;

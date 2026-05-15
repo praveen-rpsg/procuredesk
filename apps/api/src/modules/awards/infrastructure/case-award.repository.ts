@@ -235,18 +235,12 @@ export class CaseAwardRepository {
     await this.db.query(
       `
         update procurement.case_milestones
-        set rc_po_award_date = $3,
-            rc_po_validity = $4,
+        set rc_po_validity = $3,
             updated_at = now()
         where tenant_id = $1
           and case_id = $2
       `,
-      [
-        tenantId,
-        caseId,
-        rollup.firstAwardDate,
-        rollup.effectiveValidityDate,
-      ],
+      [tenantId, caseId, rollup.effectiveValidityDate],
       client,
     );
 

@@ -17,10 +17,6 @@ import { TextArea } from "../../../shared/ui/form/TextArea";
 import { Skeleton } from "../../../shared/ui/skeleton/Skeleton";
 import { useToast } from "../../../shared/ui/toast/ToastProvider";
 
-type CreateCaseFormProps = {
-  onCreated: (caseId: string) => void;
-};
-
 type CreateCaseFormValues = {
   budgetTypeId: string;
   cpcInvolved: boolean;
@@ -35,6 +31,13 @@ type CreateCaseFormValues = {
   priorityCase: boolean;
   tenderTypeId: string;
   tentativeCompletionDate: string;
+};
+
+export type CreateCaseFormInitialValues = Partial<CreateCaseFormValues>;
+
+type CreateCaseFormProps = {
+  initialValues?: CreateCaseFormInitialValues;
+  onCreated: (caseId: string) => void;
 };
 
 type CreateCaseFormErrors = Partial<Record<keyof CreateCaseFormValues, string>>;
@@ -55,7 +58,7 @@ const createCaseFormSchema = {
   maxTextLength: 5000,
 };
 
-export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
+export function CreateCaseForm({ initialValues, onCreated }: CreateCaseFormProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const { user } = useAuth();
@@ -73,6 +76,24 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
   const [tentativeCompletionDate, setTentativeCompletionDate] = useState("");
   const [prValue, setPrValue] = useState("");
   const [formErrors, setFormErrors] = useState<CreateCaseFormErrors>({});
+
+  useEffect(() => {
+    if (!initialValues) return;
+    setEntityId(initialValues.entityId ?? "");
+    setDepartmentId(initialValues.departmentId ?? "");
+    setOwnerUserId(initialValues.ownerUserId ?? "");
+    setTenderTypeId(initialValues.tenderTypeId ?? "");
+    setBudgetTypeId(initialValues.budgetTypeId ?? "");
+    setNatureOfWorkId(initialValues.natureOfWorkId ?? "");
+    setCpcInvolved(initialValues.cpcInvolved ?? false);
+    setPriorityCase(initialValues.priorityCase ?? false);
+    setPrId(initialValues.prId ?? "");
+    setPrDescription(initialValues.prDescription ?? "");
+    setPrReceiptDate(initialValues.prReceiptDate ?? "");
+    setTentativeCompletionDate(initialValues.tentativeCompletionDate ?? "");
+    setPrValue(initialValues.prValue ?? "");
+    setFormErrors({});
+  }, [initialValues]);
 
   const entities = useQuery({ queryFn: listEntities, queryKey: ["entities"] });
   const catalog = useQuery({
@@ -248,7 +269,7 @@ export function CreateCaseForm({ onCreated }: CreateCaseFormProps) {
               <option value="">Select Entity</option>
               {entityOptions.map((entity) => (
                 <option key={entity.id} value={entity.id}>
-                  {entity.code} - {entity.name}
+                  {entity.code}
                 </option>
               ))}
             </select>

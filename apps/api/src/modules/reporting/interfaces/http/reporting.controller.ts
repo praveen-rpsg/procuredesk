@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from "@nestjs/common";
 
 import { CurrentUser } from "../../../../common/auth/current-user.decorator.js";
 import { RequirePermissions } from "../../../../common/auth/permissions.decorator.js";
@@ -106,6 +106,16 @@ export class ReportingController {
     @Body(new ZodValidationPipe(UpdateRcPoExpiryRowRequestSchema)) body: UpdateRcPoExpiryRowRequest,
   ) {
     return this.reporting.updateRcPoExpiryRow(user, sourceType, sourceId, stripUndefined(body));
+  }
+
+  @Delete("rc-po-expiry/:sourceType/:sourceId")
+  @RequirePermissions("planning.manage")
+  deleteRcPoExpiryRow(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("sourceType", new ZodValidationPipe(RcPoExpirySourceTypeSchema)) sourceType: RcPoExpirySourceType,
+    @Param("sourceId", ParseUUIDPipe) sourceId: string,
+  ) {
+    return this.reporting.deleteRcPoExpiryRow(user, sourceType, sourceId);
   }
 
   @Get("filter-metadata")

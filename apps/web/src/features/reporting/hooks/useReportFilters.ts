@@ -16,6 +16,8 @@ export type ReportFiltersState = {
   delayStatus: "all" | "delayed" | "on_time";
   deletedOnly: boolean;
   exportFilters: Record<string, unknown>;
+  expiryHorizonDays: string;
+  includeTenderFloatedOrNotRequired: boolean;
   loiAwarded: "all" | "false" | "true";
   priorityCase: boolean;
   reportParams: ReportQueryParams;
@@ -37,6 +39,8 @@ export type ReportFiltersState = {
   setCpcInvolved: (v: "any" | "false" | "true") => void;
   setDelayStatus: (v: "all" | "delayed" | "on_time") => void;
   setDeletedOnly: (v: boolean) => void;
+  setExpiryHorizonDays: (v: string) => void;
+  setIncludeTenderFloatedOrNotRequired: (v: boolean) => void;
   setLoiAwarded: (v: "all" | "false" | "true") => void;
   setPriorityCase: (v: boolean) => void;
   setSearchTerm: (v: string) => void;
@@ -60,6 +64,8 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
   const [cpcInvolved, setCpcInvolved] = useState<"any" | "false" | "true">("any");
   const [delayStatus, setDelayStatus] = useState<"all" | "delayed" | "on_time">("all");
   const [deletedOnly, setDeletedOnly] = useState(false);
+  const [expiryHorizonDays, setExpiryHorizonDays] = useState("365");
+  const [includeTenderFloatedOrNotRequired, setIncludeTenderFloatedOrNotRequired] = useState(false);
   const [loiAwarded, setLoiAwarded] = useState<"all" | "false" | "true">("all");
   const [priorityCase, setPriorityCase] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -78,33 +84,54 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 350);
 
   const includeStatus = reportCode === "tender_details" || reportCode === "stage_time";
-  const includeCompletionFilters = reportCode !== "running";
+  const includeCompletionFilters = reportCode !== "running" && reportCode !== "rc_po_expiry";
+  const isRcPoExpiry = reportCode === "rc_po_expiry";
+  const includeCaseWorkflowFilters = !isRcPoExpiry;
+  const expiryHorizonDaysParam = isRcPoExpiry
+    ? normalizeExpiryHorizonDays(expiryHorizonDays)
+    : undefined;
 
   const filterBase = useMemo(
     () => ({
       completionFys: includeCompletionFilters ? selectedCompletionFys : [],
       completionMonths: includeCompletionFilters ? selectedCompletionMonths : [],
-      cpcInvolved: cpcInvolved === "any" ? undefined : cpcInvolved === "true",
-      delayStatus: delayStatus === "all" ? undefined : delayStatus,
+      cpcInvolved:
+        includeCaseWorkflowFilters && cpcInvolved !== "any"
+          ? cpcInvolved === "true"
+          : undefined,
+      delayStatus:
+        includeCaseWorkflowFilters && delayStatus !== "all"
+          ? delayStatus
+          : undefined,
       deletedOnly: deletedOnly ? true : undefined,
       departmentIds: selectedDepartmentIds,
+      days: expiryHorizonDaysParam,
       entityIds: selectedEntityIds,
+      includeTenderFloatedOrNotRequired:
+        isRcPoExpiry && includeTenderFloatedOrNotRequired ? true : undefined,
       includeStatus,
-      loiAwarded: loiAwarded === "all" ? undefined : loiAwarded === "true",
+      loiAwarded:
+        includeCaseWorkflowFilters && loiAwarded !== "all"
+          ? loiAwarded === "true"
+          : undefined,
       natureOfWorkIds: selectedNatureOfWorkIds,
       ownerUserIds: selectedOwnerUserIds,
-      prReceiptMonths: selectedPrReceiptMonths,
-      priorityCase: priorityCase ? true : undefined,
+      prReceiptMonths: includeCaseWorkflowFilters ? selectedPrReceiptMonths : [],
+      priorityCase: includeCaseWorkflowFilters && priorityCase ? true : undefined,
       budgetTypeIds: selectedBudgetTypeIds,
-      stageCodes: selectedStageCodes,
+      stageCodes: includeCaseWorkflowFilters ? selectedStageCodes : [],
       status: statusFilter,
-      tenderTypeIds: selectedTenderTypeIds,
+      tenderTypeIds: includeCaseWorkflowFilters ? selectedTenderTypeIds : [],
       valueSlabs: selectedValueSlabs,
     }),
     [
       cpcInvolved,
       delayStatus,
       deletedOnly,
+      expiryHorizonDaysParam,
+      includeTenderFloatedOrNotRequired,
+      includeCaseWorkflowFilters,
+      isRcPoExpiry,
       loiAwarded,
       priorityCase,
       includeStatus,
@@ -135,8 +162,8 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
   );
 
   const exportFilters = useMemo(
-    () => buildReportFilterPayload({ ...filterBase, amountUnit: null, q: searchTerm }),
-    [filterBase, searchTerm],
+    () => buildReportFilterPayload({ ...filterBase, amountUnit, q: searchTerm }),
+    [amountUnit, filterBase, searchTerm],
   );
 
   const savedViewFilters = useMemo(
@@ -146,6 +173,9 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
 
   function clearFilters() {
     setSearchTerm("");
+    setAmountUnit("lakh");
+    setExpiryHorizonDays("365");
+    setIncludeTenderFloatedOrNotRequired(false);
     setSelectedEntityIds([]);
     setSelectedOwnerUserIds([]);
     setSelectedTenderTypeIds([]);
@@ -172,6 +202,8 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
     delayStatus,
     deletedOnly,
     exportFilters,
+    expiryHorizonDays,
+    includeTenderFloatedOrNotRequired,
     loiAwarded,
     priorityCase,
     reportParams,
@@ -193,6 +225,8 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
     setCpcInvolved,
     setDelayStatus,
     setDeletedOnly,
+    setExpiryHorizonDays,
+    setIncludeTenderFloatedOrNotRequired,
     setLoiAwarded,
     setPriorityCase,
     setSearchTerm,
@@ -210,4 +244,10 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
     setStatusFilter,
     clearFilters,
   };
+}
+
+function normalizeExpiryHorizonDays(value: string): number | undefined {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed)) return undefined;
+  return Math.min(Math.max(parsed, 0), 730);
 }

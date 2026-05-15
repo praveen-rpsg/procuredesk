@@ -8,9 +8,9 @@ import { useAuth } from "../../../shared/auth/AuthProvider";
 import {
   canDeleteCase,
   canManageCaseAwards,
-  canManageCaseDelay,
   canReadAudit,
   canUpdateCase,
+  canViewCaseDelay,
 } from "../../../shared/auth/permissions";
 import { formatCaseStageTransition } from "../../../shared/utils/caseStage";
 import {
@@ -132,7 +132,7 @@ export function CaseDetailPanel({
   const kase = detail.data;
   const canEdit = canUpdateCase(user, kase);
   const canAward = canManageCaseAwards(user, kase);
-  const canViewDelay = canManageCaseDelay(user, kase);
+  const canViewDelay = canViewCaseDelay(user, kase);
   return (
     <section className="case-preview-panel">
       <div className="case-preview-hero">

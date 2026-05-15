@@ -27,6 +27,7 @@ export type CaseListFilters = {
   q?: string;
   status?: "running" | "completed";
   tenderTypeIds?: string[];
+  trackStatus?: "delayed" | "off_track" | "on_track";
   valueSlab?: ValueSlabKey;
   valueSlabs?: ValueSlabKey[];
 };
@@ -423,15 +424,41 @@ export class ProcurementCaseRepository {
           end as cycle_time_days,
           c.id,
           c.cpc_involved,
+          case
+            when c.status <> 'running' then null
+            when c.stage_code >= 8 and m.rc_po_award_date is not null then current_date - m.rc_po_award_date
+            when c.stage_code >= 7 and m.nfa_approval_date is not null then current_date - m.nfa_approval_date
+            when c.stage_code >= 6 and m.nfa_submission_date is not null then current_date - m.nfa_submission_date
+            when c.stage_code >= 5 and m.commercial_evaluation_date is not null and m.technical_evaluation_date is not null
+              then current_date - greatest(m.commercial_evaluation_date, m.technical_evaluation_date)
+            when c.stage_code >= 5 and m.commercial_evaluation_date is not null
+              then current_date - m.commercial_evaluation_date
+            when c.stage_code >= 5 and m.technical_evaluation_date is not null
+              then current_date - m.technical_evaluation_date
+            when c.stage_code >= 4 and m.bid_receipt_date is not null then current_date - m.bid_receipt_date
+            when c.stage_code >= 3 and m.nit_publish_date is not null then current_date - m.nit_publish_date
+            when c.stage_code >= 2 and m.nit_approval_date is not null then current_date - m.nit_approval_date
+            when c.stage_code >= 1 and m.nit_initiation_date is not null then current_date - m.nit_initiation_date
+            when c.pr_receipt_date is not null then current_date - c.pr_receipt_date
+            else null
+          end as current_stage_aging_days,
           dep.name as department_name,
           c.desired_stage_code,
+          ent.code as entity_code,
           c.entity_id,
+          ent.name as entity_name,
           c.pr_id,
           c.pr_description,
           c.pr_receipt_date,
           f.pr_value,
           f.estimate_benchmark,
-          c.is_delayed,
+          case
+            when c.status = 'running'
+              and c.tentative_completion_date is not null
+              and c.tentative_completion_date < current_date
+            then true
+            else false
+          end as is_delayed,
           m.loi_issued,
           owner.full_name as owner_full_name,
           case
@@ -457,6 +484,7 @@ export class ProcurementCaseRepository {
         from procurement.cases c
         left join procurement.case_financials f on f.case_id = c.id and f.tenant_id = c.tenant_id
         left join procurement.case_milestones m on m.case_id = c.id and m.tenant_id = c.tenant_id
+        left join org.entities ent on ent.id = c.entity_id and ent.tenant_id = c.tenant_id
         left join org.departments dep on dep.id = c.department_id and dep.tenant_id = c.tenant_id
         left join iam.users owner on owner.id = c.owner_user_id and owner.tenant_id = c.tenant_id
         left join catalog.tender_types tt on tt.id = c.tender_type_id and tt.tenant_id = c.tenant_id
@@ -472,9 +500,12 @@ export class ProcurementCaseRepository {
       completionFy: row.completion_fy,
       cycleTimeDays: this.numberOrNull(row.cycle_time_days),
       cpcInvolved: row.cpc_involved,
+      currentStageAgingDays: this.numberOrNull(row.current_stage_aging_days),
       departmentName: row.department_name,
       desiredStageCode: row.desired_stage_code,
+      entityCode: row.entity_code,
       entityId: row.entity_id,
+      entityName: row.entity_name,
       id: row.id,
       prId: row.pr_id,
       prDescription: row.pr_description,
@@ -601,6 +632,8 @@ export class ProcurementCaseRepository {
       QueryResultRow & {
         completed_count: string;
         delayed_count: string;
+        off_track_count: string;
+        on_track_count: string;
         priority_count: string;
         risk_count: string;
         running_count: string;
@@ -612,9 +645,38 @@ export class ProcurementCaseRepository {
           count(*)::text as total_count,
           count(*) filter (where status = 'running')::text as running_count,
           count(*) filter (where status = 'completed')::text as completed_count,
-          count(*) filter (where status = 'running' and is_delayed)::text as delayed_count,
+          count(*) filter (
+            where status = 'running'
+              and tentative_completion_date is not null
+              and tentative_completion_date < current_date
+          )::text as delayed_count,
+          count(*) filter (
+            where status = 'running'
+              and (tentative_completion_date is null or tentative_completion_date >= current_date)
+              and desired_stage_code is not null
+              and stage_code < desired_stage_code
+          )::text as off_track_count,
+          count(*) filter (
+            where status = 'running'
+              and (tentative_completion_date is null or tentative_completion_date >= current_date)
+              and (desired_stage_code is null or stage_code >= desired_stage_code)
+          )::text as on_track_count,
           count(*) filter (where status = 'running' and priority_case)::text as priority_count,
-          count(*) filter (where status = 'running' and (is_delayed or priority_case))::text as risk_count
+          count(*) filter (
+            where status = 'running'
+              and (
+                (
+                  tentative_completion_date is not null
+                  and tentative_completion_date < current_date
+                )
+                or priority_case
+                or (
+                  (tentative_completion_date is null or tentative_completion_date >= current_date)
+                  and desired_stage_code is not null
+                  and stage_code < desired_stage_code
+                )
+              )
+          )::text as risk_count
         from procurement.cases
         where ${where.join(" and ")}
       `,
@@ -624,6 +686,8 @@ export class ProcurementCaseRepository {
     return {
       completed: Number(row?.completed_count ?? 0),
       delayed: Number(row?.delayed_count ?? 0),
+      offTrack: Number(row?.off_track_count ?? 0),
+      onTrack: Number(row?.on_track_count ?? 0),
       priority: Number(row?.priority_count ?? 0),
       risk: Number(row?.risk_count ?? 0),
       running: Number(row?.running_count ?? 0),
@@ -828,12 +892,20 @@ export class ProcurementCaseRepository {
         c.tenant_id,
         c.pr_id,
         c.entity_id,
+        ent.code as entity_code,
+        ent.name as entity_name,
         c.department_id,
         c.owner_user_id,
         c.status,
         c.stage_code,
         c.desired_stage_code,
-        c.is_delayed,
+        case
+          when c.status = 'running'
+            and c.tentative_completion_date is not null
+            and c.tentative_completion_date < current_date
+          then true
+          else false
+        end as is_delayed,
         c.priority_case,
         c.cpc_involved,
         c.pr_description,
@@ -878,6 +950,7 @@ export class ProcurementCaseRepository {
       left join procurement.case_financials f on f.case_id = c.id
       left join procurement.case_milestones m on m.case_id = c.id
       left join procurement.case_delays d on d.case_id = c.id
+      left join org.entities ent on ent.id = c.entity_id and ent.tenant_id = c.tenant_id
       left join org.departments dep on dep.id = c.department_id
       left join iam.users owner on owner.id = c.owner_user_id
       left join catalog.reference_values rv_budget on rv_budget.id = c.budget_type_id
@@ -896,6 +969,8 @@ export class ProcurementCaseRepository {
       tenantId: row.tenant_id,
       prId: row.pr_id,
       entityId: row.entity_id,
+      entityCode: row.entity_code,
+      entityName: row.entity_name,
       departmentId: row.department_id,
       departmentName: row.department_name,
       ownerUserId: row.owner_user_id,
@@ -1025,7 +1100,6 @@ function applyCaseListFilters(where: string[], values: unknown[], filters: CaseL
   ];
   const booleanFilters: Array<{ column: string; value: boolean | undefined }> = [
     { column: "c.priority_case", value: filters.priorityCase },
-    { column: "c.is_delayed", value: filters.isDelayed },
     { column: "c.cpc_involved", value: filters.cpcInvolved },
     { column: "m.loi_issued", value: filters.loiAwarded },
   ];
@@ -1043,6 +1117,8 @@ function applyCaseListFilters(where: string[], values: unknown[], filters: CaseL
   for (const filter of booleanFilters) {
     appendOptionalBooleanFilter(where, values, filter);
   }
+  appendDelayedStatusFilter(where, filters.isDelayed);
+  appendTrackStatusFilter(where, filters.trackStatus);
   for (const filter of arrayFilters) {
     appendOptionalArrayFilter(where, values, filter);
   }
@@ -1061,6 +1137,62 @@ function applyCaseListFilters(where: string[], values: unknown[], filters: CaseL
       end
     ) = any($${values.length}::text[])`);
   }
+}
+
+function appendTrackStatusFilter(
+  where: string[],
+  trackStatus: CaseListFilters["trackStatus"],
+): void {
+  if (!trackStatus) return;
+
+  if (trackStatus === "delayed") {
+    where.push(`
+      c.status = 'running'
+      and c.tentative_completion_date is not null
+      and c.tentative_completion_date < current_date
+    `);
+    return;
+  }
+
+  if (trackStatus === "off_track") {
+    where.push(`
+      c.status = 'running'
+      and (c.tentative_completion_date is null or c.tentative_completion_date >= current_date)
+      and c.desired_stage_code is not null
+      and c.stage_code < c.desired_stage_code
+    `);
+    return;
+  }
+
+  where.push(`
+    c.status = 'running'
+    and (c.tentative_completion_date is null or c.tentative_completion_date >= current_date)
+    and (c.desired_stage_code is null or c.stage_code >= c.desired_stage_code)
+  `);
+}
+
+function appendDelayedStatusFilter(
+  where: string[],
+  isDelayed: boolean | undefined,
+): void {
+  if (typeof isDelayed !== "boolean") return;
+
+  if (isDelayed) {
+    where.push(`
+      c.status = 'running'
+      and c.tentative_completion_date is not null
+      and c.tentative_completion_date < current_date
+    `);
+    return;
+  }
+
+  where.push(`
+    (
+    c.status <> 'running'
+    or c.tentative_completion_date is null
+    or c.tentative_completion_date >= current_date
+    )
+  `);
 }
 
 function applyCaseSearchFilter(where: string[], values: unknown[], query: string | undefined): void {
@@ -1123,9 +1255,12 @@ type CaseListRow = {
   completion_fy: string | null;
   cycle_time_days: string | number | null;
   cpc_involved: boolean | null;
+  current_stage_aging_days: string | number | null;
   department_name: string | null;
   desired_stage_code: number | null;
+  entity_code: string | null;
   entity_id: string;
+  entity_name: string | null;
   estimate_benchmark: string | null;
   id: string;
   pr_description: string | null;
@@ -1165,7 +1300,9 @@ type CaseAggregateRow = {
   department_id: string | null;
   department_name: string | null;
   desired_stage_code: number | null;
+  entity_code: string | null;
   entity_id: string;
+  entity_name: string | null;
   estimate_benchmark: string | null;
   id: string;
   is_delayed: boolean;

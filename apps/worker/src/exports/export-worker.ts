@@ -17,6 +17,7 @@ type ReportCode =
   | "tender_details"
   | "vendor_awards";
 type ReportFilters = {
+  amountUnit?: "lakh" | "rupees" | undefined;
   budgetTypeIds: string[];
   completionFys: string[];
   completionMonths: string[];
@@ -24,7 +25,9 @@ type ReportFilters = {
   delayStatus?: "delayed" | "on_time" | undefined;
   deletedOnly?: boolean | undefined;
   departmentIds: string[];
+  days?: number | undefined;
   entityIds: string[];
+  includeTenderFloatedOrNotRequired?: boolean | undefined;
   limit: number;
   loiAwarded?: boolean | undefined;
   natureOfWorkIds: string[];
@@ -40,6 +43,7 @@ type ReportFilters = {
 type ExportScope = {
   actorUserId: string;
   assignedOnly: boolean;
+  canViewDelay: boolean;
   entityIds: string[];
   tenantWide: boolean;
 };
@@ -51,7 +55,7 @@ type ExportJob = {
 };
 
 const PERMISSION_IMPLICATIONS: Record<string, string[]> = {
-  "case.delay.manage.all": ["case.delay.manage.entity"],
+  "case.delay.manage.all": ["case.delay.read.all"],
   "case.read.all": ["case.read.entity", "case.read.assigned"],
   "case.read.entity": ["case.read.assigned"],
   "case.update.all": [
@@ -331,7 +335,7 @@ async function queryExportRows(input: {
     "dep.name",
     "tt.name",
     "owner.full_name",
-    "d.delay_reason",
+      ...(input.scope.canViewDelay ? ["d.delay_reason"] : []),
   ]);
   values.push(input.filters.limit);
   const limitPosition = values.length;
@@ -406,8 +410,13 @@ async function queryExportRows(input: {
           : formatExportStage(row.desired_stage_code),
       "Running Tender Age": row.running_age_days ?? null,
       "Current Stage Aging (Days)": row.current_stage_aging_days ?? null,
-      "Uncontrollable Delay (Days)": row.uncontrollable_delay_days ?? null,
-      "Reasons for Delay": row.delay_reason ?? null,
+      ...(input.scope.canViewDelay
+        ? {
+            "Uncontrollable Delay (Days)":
+              row.uncontrollable_delay_days ?? null,
+            "Reasons for Delay": row.delay_reason ?? null,
+          }
+        : {}),
       "LOI Awarded?": row.loi_awarded ? "Yes" : "No",
       "LOI Award Date": formatExportDate(row.loi_award_date),
     }));
@@ -423,8 +432,13 @@ async function queryExportRows(input: {
       "Estimate / Benchmark [All Inclusive]": row.estimate_benchmark ?? null,
       "Award Value [All Inclusive]": row.total_awarded_amount ?? null,
       "Cycle Time": row.completed_cycle_time_days ?? null,
-      "Uncontrollable Delay (Days)": row.uncontrollable_delay_days ?? null,
-      "Reasons for Delay": row.delay_reason ?? null,
+      ...(input.scope.canViewDelay
+        ? {
+            "Uncontrollable Delay (Days)":
+              row.uncontrollable_delay_days ?? null,
+            "Reasons for Delay": row.delay_reason ?? null,
+          }
+        : {}),
       "Savings wrt PR Value / Approved Budget [All Inclusive]":
         row.savings_wrt_pr ?? null,
       "Savings wrt Estimate / Benchmark [All Inclusive]":
@@ -433,7 +447,72 @@ async function queryExportRows(input: {
       "LOI Award Date": formatExportDate(row.loi_award_date),
     }));
   }
-  return result.rows;
+  const prValueHeader =
+    input.filters.amountUnit === "rupees"
+      ? "PR Value / Approved Budget (Rs.) [All Inclusive]"
+      : "PR Value / Approved Budget (Lakhs) [All Inclusive]";
+  const awardHeader =
+    input.filters.amountUnit === "rupees"
+      ? "Total Award Amt (Rs.) [All Inclusive]"
+      : "Total Award Amt (Lakhs) [All Inclusive]";
+  const savingsPrHeader =
+    input.filters.amountUnit === "rupees"
+      ? "Savings vs PR Value / Approved Budget (Rs.) [All Inclusive]"
+      : "Savings vs PR Value / Approved Budget (Lakhs) [All Inclusive]";
+  const savingsEstimateHeader =
+    input.filters.amountUnit === "rupees"
+      ? "Savings vs Estimate / Benchmark (Rs.) [All Inclusive]"
+      : "Savings vs Estimate / Benchmark (Lakhs) [All Inclusive]";
+
+  return result.rows.map((row) => ({
+    "Tender No.": row.tender_no ?? row.pr_id ?? null,
+    "Tender Description": row.pr_description ?? row.tender_name ?? null,
+    Entity: row.entity ?? null,
+    Department: row.department ?? null,
+    [prValueHeader]:
+      input.filters.amountUnit === "rupees"
+        ? amountToNumber(row.pr_value)
+        : amountToLakhs(row.pr_value),
+    "Tender Type": row.tender_type ?? null,
+    "Tender Stage": formatExportStage(row.stage_code),
+    "Normative Tender Stage":
+      row.desired_stage_code == null
+        ? null
+        : formatExportStage(row.desired_stage_code),
+    "% Time Elapsed":
+      row.status === "completed" || row.percent_time_elapsed == null
+        ? null
+        : `${row.percent_time_elapsed}%`,
+    "Running Tender Age (Days)": row.running_age_days ?? null,
+    "NIT Publish Date": formatExportDate(row.nit_publish_date),
+    "Bidder Participated Count": row.bidders_participated ?? null,
+    "Qualified Bidders Count": row.qualified_bidders ?? null,
+    "Completed Cycle Time (Days)": row.completed_cycle_time_days ?? null,
+    [awardHeader]:
+      input.filters.amountUnit === "rupees"
+        ? amountToNumber(row.total_awarded_amount)
+        : amountToLakhs(row.total_awarded_amount),
+    [savingsPrHeader]:
+      input.filters.amountUnit === "rupees"
+        ? amountToNumber(row.savings_wrt_pr)
+        : amountToLakhs(row.savings_wrt_pr),
+    [savingsEstimateHeader]:
+      input.filters.amountUnit === "rupees"
+        ? amountToNumber(row.savings_wrt_estimate)
+        : amountToLakhs(row.savings_wrt_estimate),
+    "Tender Owner": row.tender_owner ?? null,
+    ...(input.scope.canViewDelay
+      ? {
+          "Uncontrollable Delay (Days)":
+            row.uncontrollable_delay_days ?? null,
+        }
+      : {}),
+    "LOI Awarded?": row.loi_awarded ? "Yes" : "No",
+    "LOI Award Date": formatExportDate(row.loi_award_date),
+    "PR Remarks": row.pr_remarks ?? null,
+    Status: row.status ?? null,
+    "Completion FY": row.completion_fy ?? null,
+  }));
 }
 
 async function queryStageTimeExport(input: {
@@ -565,19 +644,14 @@ async function queryRcPoExpiryExport(input: {
   const values: unknown[] = [input.tenantId];
   const where = ["e.tenant_id = $1"];
   applyScope(where, values, input.scope, "e.entity_id", "e.owner_user_id");
-  applyUuidArrayFilter(where, values, input.filters.entityIds, "e.entity_id");
-  applyUuidArrayFilter(
-    where,
-    values,
-    input.filters.ownerUserIds,
-    "e.owner_user_id",
-  );
-  if (input.filters.q) {
-    applyTextSearch(where, values, input.filters.q, [
-      "e.tender_description",
-      "e.awarded_vendors",
-    ]);
-  }
+  applyRcPoExpiryFilters(where, values, input.filters, [
+    "e.tender_description",
+    "e.awarded_vendors",
+    "ent.code",
+    "ent.name",
+    "dep.name",
+    "owner.full_name",
+  ]);
   values.push(input.filters.limit);
   const limitPosition = values.length;
   const result = await input.pool.query<ExportRow>(
@@ -610,12 +684,19 @@ async function queryRcPoExpiryExport(input: {
     `,
     values,
   );
+  const amountHeader =
+    input.filters.amountUnit === "rupees"
+      ? "RC/PO Amount (Rs.) [All Inclusive]"
+      : "RC/PO Amount (Lakhs) [All Inclusive]";
   return result.rows.map((row) => ({
     Source: row.source_type === "manual_plan" ? "Bulk Upload" : "TenderDB",
     "Tender Description": row.tender_description ?? null,
     Entity: row.entity ?? null,
     Department: row.department ?? null,
-    "RC/PO Amount (Lakhs) [All Inclusive]": amountToLakhs(row.rc_po_amount),
+    [amountHeader]:
+      input.filters.amountUnit === "rupees"
+        ? amountToNumber(row.rc_po_amount)
+        : amountToLakhs(row.rc_po_amount),
     "Award Date": formatExportDate(row.rc_po_award_date),
     "Validity Date": formatExportDate(row.rc_po_validity_date),
     Owner: row.tender_owner ?? null,
@@ -663,6 +744,7 @@ async function getExportScope(
     return {
       actorUserId: userId,
       assignedOnly: false,
+      canViewDelay: false,
       entityIds: [],
       tenantWide: false,
     };
@@ -671,15 +753,18 @@ async function getExportScope(
     return {
       actorUserId: userId,
       assignedOnly: false,
+      canViewDelay: true,
       entityIds: [],
       tenantWide: true,
     };
   }
   const permissions = expandPermissions(actor.permissions ?? []);
+  const canViewDelay = false;
   if (actor.access_level === "GROUP" && permissions.has("case.read.all")) {
     return {
       actorUserId: userId,
       assignedOnly: false,
+      canViewDelay,
       entityIds: [],
       tenantWide: true,
     };
@@ -688,6 +773,7 @@ async function getExportScope(
     return {
       actorUserId: userId,
       assignedOnly: false,
+      canViewDelay,
       entityIds: actor.entity_ids ?? [],
       tenantWide: false,
     };
@@ -696,6 +782,7 @@ async function getExportScope(
     return {
       actorUserId: userId,
       assignedOnly: true,
+      canViewDelay,
       entityIds: [],
       tenantWide: false,
     };
@@ -703,6 +790,7 @@ async function getExportScope(
   return {
     actorUserId: userId,
     assignedOnly: false,
+    canViewDelay,
     entityIds: [],
     tenantWide: false,
   };
@@ -729,6 +817,7 @@ function expandPermissions(permissions: string[]): Set<string> {
 function normalizeFilters(value: unknown): ReportFilters {
   const record = isRecord(value) ? value : {};
   return {
+    amountUnit: record.amountUnit === "rupees" ? "rupees" : "lakh",
     budgetTypeIds: stringArray(record.budgetTypeIds, 100),
     completionFys: stringArray(record.completionFys, 50),
     completionMonths: stringArray(record.completionMonths, 60),
@@ -739,7 +828,11 @@ function normalizeFilters(value: unknown): ReportFilters {
         : undefined,
     deletedOnly: optionalBoolean(record.deletedOnly),
     departmentIds: stringArray(record.departmentIds, 200),
+    days: optionalInteger(record.days, 0, 730),
     entityIds: stringArray(record.entityIds, 200),
+    includeTenderFloatedOrNotRequired: optionalBoolean(
+      record.includeTenderFloatedOrNotRequired,
+    ),
     limit: positiveLimit(record.limit),
     loiAwarded: optionalBoolean(record.loiAwarded),
     natureOfWorkIds: stringArray(record.natureOfWorkIds, 100),
@@ -856,6 +949,80 @@ function applyCaseFactFilters(
   }
 }
 
+function applyRcPoExpiryFilters(
+  where: string[],
+  values: unknown[],
+  filters: ReportFilters,
+  searchColumns: string[],
+) {
+  applyUuidArrayFilter(where, values, filters.entityIds, "e.entity_id");
+  applyUuidArrayFilter(where, values, filters.departmentIds, "e.department_id");
+  applyUuidArrayFilter(
+    where,
+    values,
+    filters.ownerUserIds,
+    "e.owner_user_id",
+  );
+  applyUuidArrayFilter(
+    where,
+    values,
+    filters.budgetTypeIds,
+    "e.budget_type_id",
+  );
+  applyUuidArrayFilter(
+    where,
+    values,
+    filters.natureOfWorkIds,
+    "e.nature_of_work_id",
+  );
+  applyValueSlabFilter(where, filters.valueSlabs, "e.rc_po_amount");
+
+  values.push(filters.days ?? 365);
+  where.push(`
+    e.rc_po_validity_date >= current_date
+    and e.rc_po_validity_date <= current_date + ($${values.length}::integer * interval '1 day')
+  `);
+
+  where.push(
+    filters.deletedOnly
+      ? "e.source_deleted_at is not null"
+      : "e.source_deleted_at is null",
+  );
+
+  if (!filters.includeTenderFloatedOrNotRequired) {
+    where.push("e.tender_floated_or_not_required = false");
+  }
+
+  if (filters.q) {
+    applyTextSearch(where, values, filters.q, searchColumns);
+  }
+}
+
+function applyValueSlabFilter(
+  where: string[],
+  slabs: string[],
+  column: string,
+) {
+  if (!slabs.length) return;
+  const predicates: string[] = [];
+  if (slabs.includes("lt_2l")) predicates.push(`${column} < 200000`);
+  if (slabs.includes("2l_5l"))
+    predicates.push(`(${column} >= 200000 and ${column} < 500000)`);
+  if (slabs.includes("5l_10l"))
+    predicates.push(`(${column} >= 500000 and ${column} < 1000000)`);
+  if (slabs.includes("10l_25l"))
+    predicates.push(`(${column} >= 1000000 and ${column} < 2500000)`);
+  if (slabs.includes("25l_50l"))
+    predicates.push(`(${column} >= 2500000 and ${column} < 5000000)`);
+  if (slabs.includes("50l_100l"))
+    predicates.push(`(${column} >= 5000000 and ${column} < 10000000)`);
+  if (slabs.includes("100l_200l"))
+    predicates.push(`(${column} >= 10000000 and ${column} < 20000000)`);
+  if (slabs.includes("gte_200l")) predicates.push(`${column} >= 20000000`);
+  if (predicates.length)
+    where.push(`${column} is not null and (${predicates.join(" or ")})`);
+}
+
 function applyScope(
   where: string[],
   values: unknown[],
@@ -935,6 +1102,13 @@ function optionalBoolean(value: unknown) {
   return undefined;
 }
 
+function optionalInteger(value: unknown, min: number, max: number) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const numberValue = typeof value === "number" ? value : Number(value);
+  if (!Number.isInteger(numberValue)) return undefined;
+  return Math.min(Math.max(numberValue, min), max);
+}
+
 function positiveLimit(value: unknown) {
   const limit = typeof value === "number" ? value : Number(value);
   if (!Number.isInteger(limit) || limit < 1) return 50_000;
@@ -978,6 +1152,12 @@ function amountToLakhs(value: unknown): number | null {
   if (value == null) return null;
   const amount = Number(value);
   return Number.isFinite(amount) ? Number((amount / 100000).toFixed(2)) : null;
+}
+
+function amountToNumber(value: unknown): number | null {
+  if (value == null) return null;
+  const amount = Number(value);
+  return Number.isFinite(amount) ? Number(amount.toFixed(2)) : null;
 }
 
 function formatExportStage(value: unknown): string {

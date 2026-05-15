@@ -10,8 +10,13 @@ export type EntityOption = {
 export type TenderPlanCase = {
   cpcInvolved: boolean | null;
   departmentId: string | null;
+  departmentName: string | null;
+  entityCode: string | null;
   entityId: string;
+  entityName: string | null;
   id: string;
+  natureOfWorkId: string | null;
+  natureOfWorkLabel: string | null;
   notes: string | null;
   plannedDate: string | null;
   tenderDescription: string | null;
@@ -47,17 +52,23 @@ export function listEntities() {
 
 export function listTenderPlans(
   params: {
+    cpcInvolved?: boolean | undefined;
     departmentIds?: string[] | undefined;
     entityIds?: string[] | undefined;
     limit?: number | undefined;
+    natureOfWorkIds?: string[] | undefined;
     q?: string | undefined;
   } = {},
 ) {
   const search = new URLSearchParams();
+  if (typeof params.cpcInvolved === "boolean")
+    search.set("cpcInvolved", String(params.cpcInvolved));
   if (params.departmentIds?.length)
     search.set("departmentIds", params.departmentIds.join(","));
   if (params.entityIds?.length)
     search.set("entityIds", params.entityIds.join(","));
+  if (params.natureOfWorkIds?.length)
+    search.set("natureOfWorkIds", params.natureOfWorkIds.join(","));
   if (params.limit) search.set("limit", String(params.limit));
   if (params.q) search.set("q", params.q);
   return apiRequest<TenderPlanCase[]>(
@@ -69,6 +80,7 @@ export function createTenderPlan(payload: {
   cpcInvolved?: boolean | null;
   departmentId?: string | null;
   entityId: string;
+  natureOfWorkId?: string | null;
   plannedDate?: string | null;
   tenderDescription?: string | null;
   valueRs?: string | null;
@@ -76,6 +88,12 @@ export function createTenderPlan(payload: {
   return apiRequest<{ id: string }>("/planning/tender-plans", {
     body: JSON.stringify(payload),
     method: "POST",
+  });
+}
+
+export function archiveTenderPlan(planId: string) {
+  return apiRequest<void>(`/planning/tender-plans/${planId}`, {
+    method: "DELETE",
   });
 }
 

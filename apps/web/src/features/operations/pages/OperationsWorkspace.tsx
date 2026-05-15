@@ -1,16 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, ListChecks, MailPlus, TriangleAlert } from "lucide-react";
+import { Bell, History, ListChecks, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import {
-  createNotificationJob,
+  cancelNotificationJob,
   getNotificationStatus,
   listDeadLetterEvents,
+  listNotificationJobs,
   listNotificationRules,
   notificationPreview,
+  retryNotificationJob,
   updateNotificationRule,
   type DeadLetterEvent,
+  type NotificationJob,
   type NotificationRule,
+  type NotificationRuleType,
+  type NotificationType,
   type NotificationPreviewRow,
 } from "../api/operationsApi";
 import { useAuth } from "../../../shared/auth/AuthProvider";
@@ -34,23 +39,38 @@ const previewColumns: DataTableColumn<NotificationPreviewRow>[] = [
 
 const notificationPreviewCards = [
   {
-    description: "Triggers daily; one email per Tender Owner with stale running cases.",
+    description: "Daily reminder for running cases that are already marked delayed.",
+    key: "delayed_case_alert",
+    label: "Delayed Case Reminder",
+  },
+  {
+    description: "Daily reminder for running cases whose form completion date has passed.",
+    key: "off_track_case_alert",
+    label: "Off Track Case Reminder",
+  },
+  {
+    description: "Weekly reminder for running cases that have not been updated recently.",
     key: "stale_tender",
-    label: "#21 - Tender Owner stale-update alert (>10 days)",
+    label: "No Recent Update Reminder",
   },
   {
-    description: "Triggers monthly; one email per ENTITY-level user.",
+    description: "Monthly digest for entity-level users.",
     key: "entity_monthly_digest",
-    label: "#22 - Entity-wise monthly stale-update digest",
+    label: "Entity Monthly Digest",
   },
   {
-    description: "Triggers on the 1st of each month.",
+    description: "Reminder for RC/PO contracts inside the configured expiry window.",
     key: "rc_po_expiry",
-    label: "#23 - Entity-wise RC/PO expiry alert (90-day window)",
+    label: "RC/PO Expiry Reminder",
+  },
+  {
+    description: "Daily workload snapshot for entity and group managers.",
+    key: "manager_daily_snapshot",
+    label: "Manager Daily Snapshot",
   },
 ] satisfies Array<{
   description: string;
-  key: "entity_monthly_digest" | "rc_po_expiry" | "stale_tender";
+  key: NotificationRuleType;
   label: string;
 }>;
 
@@ -62,19 +82,60 @@ const deadLetterColumns: DataTableColumn<DeadLetterEvent>[] = [
 ];
 
 const ruleColumns: DataTableColumn<NotificationRule>[] = [
-  { key: "type", header: "Type", render: (row) => row.notificationType },
+  { key: "type", header: "Rule", render: (row) => formatNotificationType(row.notificationType) },
   { key: "enabled", header: "Enabled", render: (row) => (row.isEnabled ? "Yes" : "No") },
-  { key: "cadence", header: "Cadence", render: (row) => row.cadence },
+  { key: "cadence", header: "Schedule", render: (row) => formatCadence(row.cadence) },
   { key: "threshold", header: "Threshold", render: (row) => row.thresholdDays ?? "-" },
+];
+
+const notificationJobColumns = (
+  onRetry: (job: NotificationJob) => void,
+  onCancel: (job: NotificationJob) => void,
+): DataTableColumn<NotificationJob>[] => [
+  { key: "created", header: "Created", render: (row) => new Date(row.createdAt).toLocaleString() },
+  { key: "type", header: "Type", render: (row) => formatNotificationType(row.notificationType) },
+  { key: "recipient", header: "Recipient", render: (row) => row.recipientEmail },
+  { key: "subject", header: "Subject", render: (row) => row.subject },
+  {
+    key: "status",
+    header: "Status",
+    render: (row) => <StatusBadge tone={notificationJobTone(row.status)}>{row.status}</StatusBadge>,
+  },
+  { key: "sent", header: "Sent", render: (row) => row.sentAt ? new Date(row.sentAt).toLocaleString() : "-" },
+  { key: "error", header: "Error", render: (row) => row.errorMessage ?? "-" },
+  {
+    key: "actions",
+    header: "Actions",
+    render: (row) => (
+      <div className="row-actions">
+        <Button
+          disabled={row.status !== "failed" && row.status !== "cancelled"}
+          onClick={() => onRetry(row)}
+          size="sm"
+          variant="secondary"
+        >
+          Retry
+        </Button>
+        <Button
+          disabled={row.status !== "queued" && row.status !== "failed"}
+          onClick={() => onCancel(row)}
+          size="sm"
+          variant="ghost"
+        >
+          Cancel
+        </Button>
+      </div>
+    ),
+  },
 ];
 
 type OperationsSectionKey = "dead-letters" | "jobs" | "preview" | "rules";
 
 const operationsSections = [
-  { description: "Notification cadence and threshold setup.", icon: Bell, key: "rules", label: "Notification Rules" },
-  { description: "Preview email audiences before queueing.", icon: ListChecks, key: "preview", label: "Preview" },
-  { description: "Queue manual notification jobs.", icon: MailPlus, key: "jobs", label: "Queue Jobs" },
-  { description: "Failed background events that need review.", icon: TriangleAlert, key: "dead-letters", label: "Dead Letters" },
+  { description: "Choose which business emails are enabled.", icon: Bell, key: "rules", label: "Email Rules" },
+  { description: "Check recipients before scheduled emails run.", icon: ListChecks, key: "preview", label: "Recipients Preview" },
+  { description: "Review queued, sent, and failed emails.", icon: History, key: "jobs", label: "Email History" },
+  { description: "Delivery failures that need admin review.", icon: TriangleAlert, key: "dead-letters", label: "Delivery Issues" },
 ] satisfies Array<{
   description: string;
   icon: typeof Bell;
@@ -112,13 +173,12 @@ export function OperationsWorkspace() {
     [hasAuditAccess, hasNotificationAccess],
   );
   const activeSection = requestedSection ?? visibleSections[0]?.key ?? "rules";
-  const [previewType, setPreviewType] = useState<"entity_monthly_digest" | "rc_po_expiry" | "stale_tender">("stale_tender");
-  const [recipientEmail, setRecipientEmail] = useState("");
-  const [subject, setSubject] = useState("");
-  const [ruleType, setRuleType] = useState<NotificationRule["notificationType"]>("stale_tender");
+  const [ruleType, setRuleType] = useState<NotificationRule["notificationType"]>("manager_daily_snapshot");
   const [ruleCadence, setRuleCadence] = useState<NotificationRule["cadence"]>("manual");
   const [ruleEnabled, setRuleEnabled] = useState(true);
   const [ruleThresholdDays, setRuleThresholdDays] = useState("14");
+  const [jobStatus, setJobStatus] = useState<NotificationJob["status"] | "">("");
+  const [jobType, setJobType] = useState<NotificationType | "">("");
 
   const deadLetters = useQuery({
     enabled: activeSection === "dead-letters" && hasAuditAccess,
@@ -129,6 +189,11 @@ export function OperationsWorkspace() {
     enabled: activeSection === "rules" && hasNotificationAccess,
     queryFn: listNotificationRules,
     queryKey: ["notification-rules"],
+  });
+  const notificationJobs = useQuery({
+    enabled: activeSection === "jobs" && hasNotificationAccess,
+    queryFn: () => listNotificationJobs({ limit: 50, notificationType: jobType, status: jobStatus }),
+    queryKey: ["notification-jobs", jobStatus, jobType],
   });
   const notificationStatus = useQuery({
     enabled: activeSection === "preview" && hasNotificationAccess,
@@ -150,8 +215,26 @@ export function OperationsWorkspace() {
     queryFn: () => notificationPreview("rc_po_expiry"),
     queryKey: ["notification-preview", "rc_po_expiry"],
   });
+  const managerDailySnapshotPreview = useQuery({
+    enabled: activeSection === "preview" && hasNotificationAccess,
+    queryFn: () => notificationPreview("manager_daily_snapshot"),
+    queryKey: ["notification-preview", "manager_daily_snapshot"],
+  });
+  const delayedCasePreview = useQuery({
+    enabled: activeSection === "preview" && hasNotificationAccess,
+    queryFn: () => notificationPreview("delayed_case_alert"),
+    queryKey: ["notification-preview", "delayed_case_alert"],
+  });
+  const offTrackCasePreview = useQuery({
+    enabled: activeSection === "preview" && hasNotificationAccess,
+    queryFn: () => notificationPreview("off_track_case_alert"),
+    queryKey: ["notification-preview", "off_track_case_alert"],
+  });
   const previewQueries = {
+    delayed_case_alert: delayedCasePreview,
     entity_monthly_digest: monthlyDigestPreview,
+    manager_daily_snapshot: managerDailySnapshotPreview,
+    off_track_case_alert: offTrackCasePreview,
     rc_po_expiry: rcPoExpiryPreview,
     stale_tender: staleTenderPreview,
   };
@@ -174,15 +257,18 @@ export function OperationsWorkspace() {
     return <AccessDeniedState />;
   }
 
-  const notificationMutation = useMutation({
-    mutationFn: () =>
-      createNotificationJob({
-        notificationType: previewType,
-        recipientEmail,
-        subject,
-      }),
-    onSuccess: (result) => {
-      notify({ message: `Notification queued: ${result.id}`, tone: "success" });
+  const retryMutation = useMutation({
+    mutationFn: (job: NotificationJob) => retryNotificationJob(job.id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["notification-jobs"] });
+      notify({ message: "Notification job queued for retry.", tone: "success" });
+    },
+  });
+  const cancelMutation = useMutation({
+    mutationFn: (job: NotificationJob) => cancelNotificationJob(job.id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["notification-jobs"] });
+      notify({ message: "Notification job cancelled.", tone: "success" });
     },
   });
 
@@ -203,8 +289,8 @@ export function OperationsWorkspace() {
 
   return (
     <section className="workspace-section">
-      <PageHeader eyebrow="Admin" title="Audit And Notifications">
-        Manage notification rules, delivery previews, queue jobs, and operational reliability events.
+      <PageHeader eyebrow="Admin" title="Email Notifications">
+        Manage business email rules, recipient previews, delivery history, and audit reliability events.
       </PageHeader>
 
       <section className="module-subnav-shell">
@@ -222,34 +308,34 @@ export function OperationsWorkspace() {
           <div className="detail-header">
             <div>
               <p className="eyebrow">Rules</p>
-              <h2>Notification Rules</h2>
+              <h2>Email Rules</h2>
             </div>
             <div className="panel-icon panel-icon-brand">
               <Bell size={16} />
             </div>
           </div>
           <div className="notification-job-form">
-            <FormField label="Rule Type">
+            <FormField label="Email Rule">
               <select
                 className="text-input"
                 onChange={(event) => setRuleType(event.target.value as NotificationRule["notificationType"])}
                 value={ruleType}
               >
-                <option value="stale_tender">Stale Tender</option>
-                <option value="entity_monthly_digest">Entity Monthly Digest</option>
-                <option value="rc_po_expiry">RC/PO Expiry</option>
+                {businessRuleOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
               </select>
             </FormField>
-            <FormField label="Cadence">
+            <FormField label="Schedule">
               <select
                 className="text-input"
                 onChange={(event) => setRuleCadence(event.target.value as NotificationRule["cadence"])}
                 value={ruleCadence}
               >
-                <option value="manual">Manual</option>
                 <option value="daily">Daily</option>
                 <option value="weekly">Weekly</option>
                 <option value="monthly">Monthly</option>
+                <option value="manual">Manual</option>
               </select>
             </FormField>
             <FormField label="Threshold Days">
@@ -298,7 +384,7 @@ export function OperationsWorkspace() {
           <div className="detail-header">
             <div>
               <p className="eyebrow">Notify</p>
-              <h2>Email Alert Preview</h2>
+              <h2>Recipients Preview</h2>
             </div>
             <div className="panel-icon panel-icon-brand">
               <Bell size={16} />
@@ -307,10 +393,10 @@ export function OperationsWorkspace() {
           <div className={`operations-alert-mode operations-alert-mode-${notificationStatus.data?.deliveryMode ?? "stub"}`}>
             <Bell aria-hidden="true" size={18} />
             {notificationStatus.data?.graphConfigured ? (
-              <span>Microsoft Graph delivery is configured. Preview rows show alerts that are eligible to be sent.</span>
+              <span>Microsoft Graph delivery is configured. Preview rows show emails that are eligible to be sent.</span>
             ) : (
               <span>
-                <strong>Stub mode</strong> - the system shows the alerts that would be sent right now, but no email leaves the system until Microsoft Graph is configured.
+                <strong>Stub mode</strong> - previews are available, but no email leaves the system until Microsoft Graph is configured.
               </span>
             )}
           </div>
@@ -321,8 +407,11 @@ export function OperationsWorkspace() {
               return (
                 <article className="operations-alert-card" key={card.key}>
                   <div className="operations-alert-card-header">
-                    <h3>{card.label} ({rows.length} emails)</h3>
+                    <h3>{card.label}</h3>
                     <span>{card.description}</span>
+                  </div>
+                  <div className="operations-alert-card-meta">
+                    <StatusBadge tone={rows.length ? "info" : "neutral"}>{rows.length} email{rows.length === 1 ? "" : "s"}</StatusBadge>
                   </div>
                   {query.isLoading ? (
                     <div className="operations-alert-card-body">
@@ -335,14 +424,14 @@ export function OperationsWorkspace() {
                   ) : rows.length ? (
                     <DataTable
                       columns={previewColumns}
-                      emptyMessage="No alerts to send right now."
+                      emptyMessage="No emails due right now."
                       getRowKey={(row) =>
                         `${card.key}:${row.targetId ?? row.subject}:${row.recipientEmail ?? "entity"}`
                       }
                       rows={rows}
                     />
                   ) : (
-                    <div className="operations-alert-card-body operations-alert-empty">No alerts to send right now.</div>
+                    <div className="operations-alert-card-body operations-alert-empty">No emails due right now.</div>
                   )}
                 </article>
               );
@@ -356,7 +445,7 @@ export function OperationsWorkspace() {
           <div className="detail-header">
             <div>
               <p className="eyebrow">Reliability</p>
-              <h2>Dead Letter Events</h2>
+              <h2>Delivery Issues</h2>
             </div>
           </div>
           {deadLetters.isLoading ? (
@@ -375,7 +464,7 @@ export function OperationsWorkspace() {
           ) : (
             <DataTable
               columns={deadLetterColumns}
-              emptyMessage="No dead-letter events."
+              emptyMessage="No delivery issues."
               getRowKey={(row) => row.id}
               rows={deadLetters.data ?? []}
             />
@@ -387,45 +476,46 @@ export function OperationsWorkspace() {
         <section className="state-panel module-focus-panel module-focus-panel-narrow">
           <div className="detail-header">
             <div>
-              <p className="eyebrow">Queue</p>
-              <h2>Create Notification Job</h2>
+              <p className="eyebrow">History</p>
+              <h2>Email History</h2>
             </div>
           </div>
-          <div className="notification-job-form">
-            <FormField label="Notification Type">
-              <select
-                className="text-input"
-                onChange={(event) =>
-                  setPreviewType(event.target.value as "entity_monthly_digest" | "rc_po_expiry" | "stale_tender")
-                }
-                value={previewType}
-              >
-                <option value="stale_tender">Stale Tender</option>
-                <option value="entity_monthly_digest">Entity Monthly Digest</option>
-                <option value="rc_po_expiry">RC/PO Expiry</option>
-              </select>
-            </FormField>
-            <FormField label="Recipient Email">
-              <TextInput
-                onChange={(event) => setRecipientEmail(event.target.value)}
-                type="email"
-                value={recipientEmail}
-              />
-            </FormField>
-            <FormField label="Subject">
-              <TextInput onChange={(event) => setSubject(event.target.value)} value={subject} />
-            </FormField>
-            <Button
-              disabled={notificationMutation.isPending || !recipientEmail || !subject}
-              onClick={() => notificationMutation.mutate()}
-            >
-              Queue Notification
-            </Button>
+          <div className="filter-bar">
+            <div className="filter-bar-controls">
+              <FormField label="History Type">
+                <select className="text-input" onChange={(event) => setJobType(event.target.value as NotificationType | "")} value={jobType}>
+                  <option value="">All</option>
+                  {notificationTypeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </FormField>
+              <FormField label="Status">
+                <select className="text-input" onChange={(event) => setJobStatus(event.target.value as NotificationJob["status"] | "")} value={jobStatus}>
+                  <option value="">All</option>
+                  <option value="queued">Queued</option>
+                  <option value="sending">Sending</option>
+                  <option value="sent">Sent</option>
+                  <option value="failed">Failed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </FormField>
+            </div>
           </div>
-          {notificationMutation.error ? (
-            <p className="inline-error">{notificationMutation.error.message}</p>
-          ) : null}
-          <StatusBadge tone="warning">Microsoft Graph credentials required before queuing</StatusBadge>
+          {retryMutation.error ? <p className="inline-error">{retryMutation.error.message}</p> : null}
+          {cancelMutation.error ? <p className="inline-error">{cancelMutation.error.message}</p> : null}
+          {notificationJobs.isLoading ? (
+            <Skeleton height={120} />
+          ) : notificationJobs.error ? (
+            <p className="inline-error">{notificationJobs.error.message}</p>
+          ) : (
+            <DataTable
+              columns={notificationJobColumns((job) => retryMutation.mutate(job), (job) => cancelMutation.mutate(job))}
+              emptyMessage="No notification jobs yet."
+              getRowKey={(row) => row.id}
+              rows={notificationJobs.data ?? []}
+            />
+          )}
         </section>
         ) : null}
       </section>
@@ -441,4 +531,42 @@ function operationsSectionFromPath(pathname: string): OperationsSectionKey | nul
 
 function sectionRequiresAudit(section: OperationsSectionKey): boolean {
   return section === "dead-letters";
+}
+
+const notificationTypeOptions: Array<{ label: string; value: NotificationType }> = [
+  { label: "New User Setup", value: "user_welcome" },
+  { label: "Forgot Password", value: "password_reset" },
+  { label: "Manager Daily Snapshot", value: "manager_daily_snapshot" },
+  { label: "Delayed Case Alert", value: "delayed_case_alert" },
+  { label: "Off Track Case Alert", value: "off_track_case_alert" },
+  { label: "RC/PO Expiry", value: "rc_po_expiry" },
+  { label: "No Recent Update Reminder", value: "stale_tender" },
+  { label: "Entity Monthly Digest", value: "entity_monthly_digest" },
+];
+
+const businessRuleOptions: Array<{ label: string; value: NotificationRuleType }> = [
+  { label: "Manager Daily Snapshot", value: "manager_daily_snapshot" },
+  { label: "Delayed Case Reminder", value: "delayed_case_alert" },
+  { label: "Off Track Case Reminder", value: "off_track_case_alert" },
+  { label: "RC/PO Expiry Reminder", value: "rc_po_expiry" },
+  { label: "Entity Monthly Digest", value: "entity_monthly_digest" },
+  { label: "No Recent Update Reminder", value: "stale_tender" },
+];
+
+function formatNotificationType(value: string): string {
+  return notificationTypeOptions.find((option) => option.value === value)?.label ?? value;
+}
+
+function formatCadence(value: NotificationRule["cadence"]): string {
+  if (value === "daily") return "Daily";
+  if (value === "weekly") return "Weekly";
+  if (value === "monthly") return "Monthly";
+  return "Manual";
+}
+
+function notificationJobTone(status: NotificationJob["status"]) {
+  if (status === "sent") return "success";
+  if (status === "failed") return "danger";
+  if (status === "cancelled") return "warning";
+  return "info";
 }

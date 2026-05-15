@@ -92,12 +92,16 @@ export type StageTimeRow = {
 
 export type ContractExpiryReportRow = {
   awardedVendors: string | null;
+  budgetTypeId: string | null;
+  departmentId: string | null;
   departmentName: string | null;
   daysToExpiry: number;
   entityCode: string | null;
   entityId: string;
   entityName: string | null;
   ownerFullName: string | null;
+  ownerUserId: string | null;
+  natureOfWorkId: string | null;
   rcPoAwardDate: string | null;
   rcPoAmount: number | null;
   rcPoValidityDate: string;

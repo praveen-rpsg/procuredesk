@@ -3,7 +3,7 @@ import type { LucideIcon } from "lucide-react";
 
 import type { ReportCode, ReportQueryParams, SavedReportView } from "../api/reportingApi";
 
-export type AmountUnit = "lakh";
+export type AmountUnit = "lakh" | "rupees";
 export type ReportViewKey = ReportCode | "analytics" | "export_jobs" | "saved_views";
 export type ReportStatusFilter = "all" | "completed" | "running";
 
@@ -15,7 +15,9 @@ export function buildReportParams(input: {
   delayStatus: "delayed" | "on_time" | undefined;
   deletedOnly: boolean | undefined;
   departmentIds: string[];
+  days: number | undefined;
   entityIds: string[];
+  includeTenderFloatedOrNotRequired: boolean | undefined;
   includeStatus: boolean;
   loiAwarded: boolean | undefined;
   natureOfWorkIds: string[];
@@ -37,7 +39,9 @@ export function buildReportParams(input: {
   assignStringParam(params, "delayStatus", input.delayStatus ?? "");
   assignBooleanParam(params, "deletedOnly", input.deletedOnly);
   assignStringArrayParam(params, "departmentIds", input.departmentIds);
+  assignNumberParam(params, "days", input.days);
   assignStringArrayParam(params, "entityIds", input.entityIds);
+  assignBooleanParam(params, "includeTenderFloatedOrNotRequired", input.includeTenderFloatedOrNotRequired);
   assignBooleanParam(params, "loiAwarded", input.loiAwarded);
   assignStringArrayParam(params, "natureOfWorkIds", input.natureOfWorkIds);
   assignStringArrayParam(params, "ownerUserIds", input.ownerUserIds);
@@ -61,7 +65,9 @@ export function buildReportFilterPayload(input: {
   delayStatus: "delayed" | "on_time" | undefined;
   deletedOnly: boolean | undefined;
   departmentIds: string[];
+  days: number | undefined;
   entityIds: string[];
+  includeTenderFloatedOrNotRequired: boolean | undefined;
   includeStatus: boolean;
   loiAwarded: boolean | undefined;
   natureOfWorkIds: string[];
@@ -81,7 +87,9 @@ export function buildReportFilterPayload(input: {
   assignStringParam(payload, "delayStatus", input.delayStatus ?? "");
   assignBooleanParam(payload, "deletedOnly", input.deletedOnly);
   assignStringArrayParam(payload, "departmentIds", input.departmentIds);
+  assignNumberParam(payload, "days", input.days);
   assignStringArrayParam(payload, "entityIds", input.entityIds);
+  assignBooleanParam(payload, "includeTenderFloatedOrNotRequired", input.includeTenderFloatedOrNotRequired);
   assignBooleanParam(payload, "loiAwarded", input.loiAwarded);
   assignStringArrayParam(payload, "natureOfWorkIds", input.natureOfWorkIds);
   assignStringArrayParam(payload, "ownerUserIds", input.ownerUserIds);
@@ -135,9 +143,12 @@ function assignAmountUnitParam(target: Record<string, unknown>, amountUnit: Amou
   if (amountUnit) target.amountUnit = amountUnit;
 }
 
-export function formatAmount(value: number | null, _unit: AmountUnit) {
+export function formatAmount(value: number | null, unit: AmountUnit) {
   if (value == null) return "-";
   const normalizedValue = Math.abs(value) < 0.005 ? 0 : value;
+  if (unit === "rupees") {
+    return normalizedValue.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
   return `${(normalizedValue / 100000).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 }
 
@@ -145,8 +156,8 @@ export function formatDecimal(value: number | null | undefined) {
   return value == null ? "-" : value.toLocaleString(undefined, { maximumFractionDigits: 1 });
 }
 
-export function amountUnitLabel(_unit: AmountUnit) {
-  return "Lakhs";
+export function amountUnitLabel(unit: AmountUnit) {
+  return unit === "rupees" ? "Rupees" : "Lakhs";
 }
 
 export const REPORT_OPTIONS: Array<{ code: ReportViewKey; description: string; icon: LucideIcon; label: string; path: string }> = [
@@ -186,7 +197,7 @@ export function toStatusFilter(value: string): ReportStatusFilter {
 }
 
 export function isAmountUnit(value: unknown): value is AmountUnit {
-  return value === "lakh";
+  return value === "lakh" || value === "rupees";
 }
 
 export function stringArray(value: unknown) {
@@ -205,7 +216,9 @@ export function applySavedView(
     setDelayStatus: (v: "all" | "delayed" | "on_time") => void;
     setDeletedOnly: (v: boolean) => void;
     setDepartmentIds: (v: string[]) => void;
+    setExpiryHorizonDays: (v: string) => void;
     setEntityIds: (v: string[]) => void;
+    setIncludeTenderFloatedOrNotRequired: (v: boolean) => void;
     setLoiAwarded: (v: "all" | "false" | "true") => void;
     setNatureOfWorkIds: (v: string[]) => void;
     setOwnerUserIds: (v: string[]) => void;
@@ -234,6 +247,10 @@ export function applySavedView(
   setters.setStatusFilter(toStatusFilter(typeof filters.status === "string" ? filters.status : "all"));
   setters.setDelayStatus(filters.delayStatus === "delayed" || filters.delayStatus === "on_time" ? filters.delayStatus : "all");
   setters.setDeletedOnly(filters.deletedOnly === true);
+  setters.setExpiryHorizonDays(
+    typeof filters.days === "number" ? String(filters.days) : "365",
+  );
+  setters.setIncludeTenderFloatedOrNotRequired(filters.includeTenderFloatedOrNotRequired === true);
   setters.setLoiAwarded(typeof filters.loiAwarded === "boolean" ? String(filters.loiAwarded) as "false" | "true" : "all");
   setters.setCpcInvolved(typeof filters.cpcInvolved === "boolean" ? String(filters.cpcInvolved) as "false" | "true" : "any");
   setters.setPriorityCase(filters.priorityCase === true);

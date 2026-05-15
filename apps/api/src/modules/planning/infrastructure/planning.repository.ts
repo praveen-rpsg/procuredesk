@@ -19,9 +19,11 @@ export type PlanningScope = {
 };
 
 export type ListPlanningFilters = {
+  cpcInvolved?: boolean;
   departmentIds?: string[];
   entityIds?: string[];
   limit?: number;
+  natureOfWorkIds?: string[];
   q?: string;
 };
 
@@ -34,6 +36,7 @@ export type TenderPlanInput = {
   cpcInvolved?: boolean | null;
   departmentId?: string | null;
   entityId: string;
+  natureOfWorkId?: string | null;
   notes?: string | null;
   plannedDate?: string | null;
   tenderDescription?: string | null;
@@ -75,15 +78,17 @@ export class PlanningRepository {
     tenantId: string;
   }): Promise<TenderPlanCase[]> {
     const values: unknown[] = [input.tenantId];
-    const where = ["tenant_id = $1", "deleted_at is null"];
-    this.applyScope(where, values, input.scope, "entity_id", null);
+    const where = ["p.tenant_id = $1", "p.deleted_at is null"];
+    this.applyScope(where, values, input.scope, "p.entity_id", null);
     this.applyPlanningFilters(
       where,
       values,
       input.filters,
-      "tender_description",
-      "entity_id",
-      "department_id",
+      "p.tender_description",
+      "p.entity_id",
+      "p.department_id",
+      "p.nature_of_work_id",
+      "p.cpc_involved",
     );
     values.push(input.filters.limit ?? 25);
     const limitPosition = values.length;
@@ -91,11 +96,17 @@ export class PlanningRepository {
     const result = await this.db.query<QueryResultRow & TenderPlanRow>(
       `
         select
-          id, entity_id, department_id, tender_description, value_rs,
-          planned_date, cpc_involved, notes
-        from procurement.tender_plan_cases
+          p.id, p.entity_id, ent.code as entity_code, ent.name as entity_name,
+          p.department_id, dep.name as department_name,
+          p.nature_of_work_id, nature.label as nature_of_work_label,
+          p.tender_description, p.value_rs, p.planned_date, p.cpc_involved,
+          p.notes
+        from procurement.tender_plan_cases p
+        left join org.entities ent on ent.id = p.entity_id and ent.tenant_id = $1
+        left join org.departments dep on dep.id = p.department_id and dep.tenant_id = $1
+        left join catalog.reference_values nature on nature.id = p.nature_of_work_id
         where ${where.join(" and ")}
-        order by planned_date asc nulls last, updated_at desc
+        order by p.planned_date asc nulls last, p.updated_at desc
         limit $${limitPosition}
       `,
       values,
@@ -113,16 +124,18 @@ export class PlanningRepository {
     const row = await this.db.one<QueryResultRow & { id: string }>(
       `
         insert into procurement.tender_plan_cases (
-          tenant_id, entity_id, department_id, tender_description, value_rs,
-          planned_date, cpc_involved, notes, created_by, updated_by
+          tenant_id, entity_id, department_id, nature_of_work_id,
+          tender_description, value_rs, planned_date, cpc_involved, notes,
+          created_by, updated_by
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
         returning id
       `,
       [
         input.tenantId,
         input.entityId,
         input.departmentId ?? null,
+        input.natureOfWorkId ?? null,
         input.tenderDescription ?? null,
         input.valueRs ?? null,
         input.plannedDate ?? null,
@@ -139,6 +152,7 @@ export class PlanningRepository {
     const fields: Array<[string, unknown]> = [];
     this.pushIfPresent(fields, input, "entityId", "entity_id");
     this.pushIfPresent(fields, input, "departmentId", "department_id");
+    this.pushIfPresent(fields, input, "natureOfWorkId", "nature_of_work_id");
     this.pushIfPresent(
       fields,
       input,
@@ -168,6 +182,26 @@ export class PlanningRepository {
           and deleted_at is null
       `,
       values,
+    );
+  }
+
+  async deleteTenderPlan(input: {
+    actorUserId: string;
+    planId: string;
+    tenantId: string;
+  }): Promise<void> {
+    await this.db.query(
+      `
+        update procurement.tender_plan_cases
+        set deleted_at = now(),
+            deleted_by = $3,
+            updated_at = now(),
+            updated_by = $3
+        where id = $1
+          and tenant_id = $2
+          and deleted_at is null
+      `,
+      [input.planId, input.tenantId, input.actorUserId],
     );
   }
 
@@ -350,15 +384,13 @@ export class PlanningRepository {
     if (!input.filters.includeCompleted) {
       manualWhere.push("p.tender_floated_or_not_required = false");
     }
-    if (input.filters.days != null) {
-      values.push(input.filters.days);
-      manualWhere.push(
-        `p.rc_po_validity_date <= current_date + ($${values.length}::integer * interval '1 day')`,
-      );
-      awardWhere.push(
-        `a.po_validity_date <= current_date + ($${values.length}::integer * interval '1 day')`,
-      );
-    }
+    values.push(Math.min(input.filters.days ?? 90, 90));
+    manualWhere.push(
+      `p.rc_po_validity_date >= current_date and p.rc_po_validity_date <= current_date + ($${values.length}::integer * interval '1 day')`,
+    );
+    awardWhere.push(
+      `a.po_validity_date >= current_date and a.po_validity_date <= current_date + ($${values.length}::integer * interval '1 day')`,
+    );
     if (input.filters.q) {
       values.push(input.filters.q);
       const position = values.length;
@@ -506,9 +538,10 @@ export class PlanningRepository {
       `
         insert into reporting.contract_expiry_facts (
           tenant_id, rc_po_plan_id, case_id, entity_id, department_id,
-          owner_user_id, tender_description, awarded_vendors, rc_po_amount,
-          rc_po_award_date, rc_po_validity_date, tentative_tendering_date,
-          tender_floated_or_not_required, source_type, updated_at
+          owner_user_id, budget_type_id, nature_of_work_id, tender_description,
+          awarded_vendors, rc_po_amount, rc_po_award_date, rc_po_validity_date,
+          tentative_tendering_date, tender_floated_or_not_required,
+          source_deleted_at, source_type, updated_at
         )
         select
           p.tenant_id,
@@ -517,6 +550,8 @@ export class PlanningRepository {
           p.entity_id,
           p.department_id,
           coalesce(p.owner_user_id, c.owner_user_id),
+          c.budget_type_id,
+          c.nature_of_work_id,
           p.tender_description,
           p.awarded_vendors,
           p.rc_po_amount,
@@ -524,13 +559,13 @@ export class PlanningRepository {
           p.rc_po_validity_date,
           coalesce(p.tentative_tendering_date, p.rc_po_award_date + 150),
           p.tender_floated_or_not_required,
+          coalesce(p.deleted_at, c.deleted_at),
           'manual_plan',
           now()
         from procurement.rc_po_plans p
-        left join procurement.cases c on c.id = p.source_case_id
+        left join procurement.cases c on c.id = p.source_case_id and c.tenant_id = p.tenant_id
         where p.tenant_id = $1
           and p.id = $2
-          and p.deleted_at is null
           and p.rc_po_validity_date is not null
       `,
       [tenantId, planId],
@@ -592,6 +627,8 @@ export class PlanningRepository {
     searchColumn: string,
     entityColumn: string,
     departmentColumn: string,
+    natureOfWorkColumn?: string,
+    cpcInvolvedColumn?: string,
   ) {
     if (filters.entityIds?.length) {
       values.push(filters.entityIds);
@@ -600,6 +637,14 @@ export class PlanningRepository {
     if (filters.departmentIds?.length) {
       values.push(filters.departmentIds);
       where.push(`${departmentColumn} = any($${values.length}::uuid[])`);
+    }
+    if (natureOfWorkColumn && filters.natureOfWorkIds?.length) {
+      values.push(filters.natureOfWorkIds);
+      where.push(`${natureOfWorkColumn} = any($${values.length}::uuid[])`);
+    }
+    if (cpcInvolvedColumn && typeof filters.cpcInvolved === "boolean") {
+      values.push(filters.cpcInvolved);
+      where.push(`${cpcInvolvedColumn} = $${values.length}`);
     }
     if (filters.q) {
       values.push(filters.q);
@@ -624,8 +669,13 @@ export class PlanningRepository {
     return {
       cpcInvolved: row.cpc_involved,
       departmentId: row.department_id,
+      departmentName: row.department_name,
+      entityCode: row.entity_code,
       entityId: row.entity_id,
+      entityName: row.entity_name,
       id: row.id,
+      natureOfWorkId: row.nature_of_work_id,
+      natureOfWorkLabel: row.nature_of_work_label,
       notes: row.notes,
       plannedDate: this.dateOnly(row.planned_date),
       tenderDescription: row.tender_description,
@@ -666,8 +716,13 @@ export class PlanningRepository {
 type TenderPlanRow = {
   cpc_involved: boolean | null;
   department_id: string | null;
+  department_name: string | null;
+  entity_code: string | null;
   entity_id: string;
+  entity_name: string | null;
   id: string;
+  nature_of_work_id: string | null;
+  nature_of_work_label: string | null;
   notes: string | null;
   planned_date: Date | null;
   tender_description: string | null;

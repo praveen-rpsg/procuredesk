@@ -446,15 +446,18 @@ export class ImportExportRepository {
         )
         insert into reporting.contract_expiry_facts (
           tenant_id, rc_po_plan_id, case_id, entity_id, department_id,
-          owner_user_id, tender_description, awarded_vendors, rc_po_amount,
-          rc_po_award_date, rc_po_validity_date, tentative_tendering_date,
-          tender_floated_or_not_required, source_type, updated_at
+          owner_user_id, budget_type_id, nature_of_work_id, tender_description,
+          awarded_vendors, rc_po_amount, rc_po_award_date, rc_po_validity_date,
+          tentative_tendering_date, tender_floated_or_not_required,
+          source_deleted_at, source_type, updated_at
         )
         select
           tenant_id, id, source_case_id, entity_id, department_id,
-          owner_user_id, tender_description, awarded_vendors, rc_po_amount,
-          rc_po_award_date, rc_po_validity_date, tentative_tendering_date,
-          tender_floated_or_not_required, 'manual_plan', now()
+          owner_user_id, null::uuid, null::uuid, tender_description,
+          awarded_vendors, rc_po_amount, rc_po_award_date,
+          rc_po_validity_date, tentative_tendering_date,
+          tender_floated_or_not_required, null::timestamptz, 'manual_plan',
+          now()
         from inserted
         where rc_po_validity_date is not null
       `,
@@ -515,15 +518,18 @@ export class ImportExportRepository {
         )
         insert into reporting.contract_expiry_facts (
           tenant_id, rc_po_plan_id, case_id, entity_id, department_id,
-          owner_user_id, tender_description, awarded_vendors, rc_po_amount,
-          rc_po_award_date, rc_po_validity_date, tentative_tendering_date,
-          tender_floated_or_not_required, source_type, updated_at
+          owner_user_id, budget_type_id, nature_of_work_id, tender_description,
+          awarded_vendors, rc_po_amount, rc_po_award_date, rc_po_validity_date,
+          tentative_tendering_date, tender_floated_or_not_required,
+          source_deleted_at, source_type, updated_at
         )
         select
           tenant_id, id, source_case_id, entity_id, department_id,
-          owner_user_id, tender_description, awarded_vendors, rc_po_amount,
-          rc_po_award_date, rc_po_validity_date, tentative_tendering_date,
-          tender_floated_or_not_required, 'manual_plan', now()
+          owner_user_id, null::uuid, null::uuid, tender_description,
+          awarded_vendors, rc_po_amount, rc_po_award_date,
+          rc_po_validity_date, tentative_tendering_date,
+          tender_floated_or_not_required, null::timestamptz, 'manual_plan',
+          now()
         from inserted
         where rc_po_validity_date is not null
       `,
@@ -673,7 +679,7 @@ export class ImportExportRepository {
               when coalesce(r.normalized_payload->>'dataAccessLevel', '') in ('GROUP', 'ENTITY', 'USER')
                 then r.normalized_payload->>'dataAccessLevel'
               when lower(r.normalized_payload->>'accessLevelRequired') in ('group', 'group manager', 'group_manager', 'administration manager', 'administration_manager', 'group viewer', 'group_viewer', 'tenant admin', 'tenant_admin', 'report viewer', 'report_viewer') then 'GROUP'
-              when lower(r.normalized_payload->>'accessLevelRequired') in ('entity', 'entity manager', 'entity_manager') then 'ENTITY'
+              when lower(r.normalized_payload->>'accessLevelRequired') in ('entity', 'entity manager', 'entity_manager', 'entity viewer', 'entity_viewer') then 'ENTITY'
               else 'USER'
             end as data_access_level
           from ops.import_job_rows r

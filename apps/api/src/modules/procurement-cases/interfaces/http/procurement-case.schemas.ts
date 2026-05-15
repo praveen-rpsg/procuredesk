@@ -20,6 +20,7 @@ const csvTextList = z
   .transform((value) => (value ? value.split(",").filter(Boolean) : undefined))
   .pipe(z.array(z.string().trim().min(1)).optional());
 const valueSlabValues = ["lt_2l", "2l_5l", "5l_10l", "10l_25l", "25l_50l", "50l_100l", "100l_200l", "gte_200l"] as const;
+const trackStatusValues = ["delayed", "off_track", "on_track"] as const;
 const csvValueSlabList = z
   .string()
   .optional()
@@ -128,6 +129,7 @@ export const ListCasesQuerySchema = z.object({
   q: z.string().trim().min(1).optional(),
   status: z.enum(["running", "completed"]).optional(),
   tenderTypeIds: csvUuidList,
+  trackStatus: z.enum(trackStatusValues).optional(),
   valueSlab: z.enum(valueSlabValues).optional(),
   valueSlabs: csvValueSlabList,
 });
