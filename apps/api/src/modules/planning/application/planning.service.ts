@@ -34,7 +34,6 @@ export class PlanningService {
 
   listTenderPlans(actor: AuthenticatedUser, filters: ListPlanningFilters) {
     const tenantId = this.requireTenant(actor);
-    this.assertPlanningAccessLevel(actor);
     return this.repository.listTenderPlans({
       filters: this.limitFilters(filters),
       scope: this.scope(actor),

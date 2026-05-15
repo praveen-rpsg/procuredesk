@@ -29,6 +29,7 @@ import {
 } from "../../planning/api/planningApi";
 import { useAuth } from "../../../shared/auth/AuthProvider";
 import {
+  canAccessPlanning,
   canCreateCase,
   canManagePlanning,
   canReadCases,
@@ -247,7 +248,8 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const hasTenantContext = Boolean(user?.tenantId);
   const hasCaseAccess = hasTenantContext && canReadCases(user);
   const hasCreateAccess = hasTenantContext && canCreateCase(user);
-  const hasPlanningAccess = hasTenantContext && canManagePlanning(user);
+  const hasPlanningAccess = hasTenantContext && canAccessPlanning(user);
+  const hasPlanningManageAccess = hasTenantContext && canManagePlanning(user);
   const hasReportAccess = hasTenantContext && canReadReports(user);
   const summary = useQuery({
     enabled: hasCaseAccess,
@@ -274,7 +276,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     queryKey: ["dashboard-stage-aging-case", stageAgingCaseId],
   });
   const expiryRows = useQuery({
-    enabled: hasCaseAccess && hasPlanningAccess,
+    enabled: hasCaseAccess && hasPlanningManageAccess,
     queryFn: () => listRcPoExpiry({ days: 90, limit: 25 }),
     queryKey: ["dashboard-rc-po-expiry"],
   });
@@ -721,7 +723,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       ) : null}
 
       {/* RC/PO expiry */}
-      {hasCaseAccess && hasPlanningAccess ? (
+      {hasCaseAccess && hasPlanningManageAccess ? (
         <section className="state-panel dashboard-expiry-panel">
           <div className="detail-header">
             <div>

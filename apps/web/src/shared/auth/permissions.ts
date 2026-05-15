@@ -74,7 +74,7 @@ const workspacePermissions: Record<WorkspaceKey, Permission[]> = {
   dashboard: ["case.read.assigned", "case.read.entity", "case.read.all"],
   imports: ["import.manage"],
   operations: ["admin.console.access"],
-  planning: ["planning.manage"],
+  planning: [],
   reports: ["report.read"],
 };
 
@@ -130,6 +130,7 @@ export function canAccessWorkspace(
 ): boolean {
   if (!user) return false;
   if (workspace === "admin") return canAccessAdminWorkspace(user);
+  if (workspace === "planning") return canAccessPlanning(user);
   if (!user.tenantId) return false;
   return hasAnyPermission(user, workspacePermissions[workspace]);
 }
@@ -309,6 +310,12 @@ export function canManagePlanning(
   user: CurrentUser | null | undefined,
 ): boolean {
   return hasPermission(user, "planning.manage");
+}
+
+export function canAccessPlanning(
+  user: CurrentUser | null | undefined,
+): boolean {
+  return Boolean(user?.tenantId);
 }
 
 export function canManageImports(

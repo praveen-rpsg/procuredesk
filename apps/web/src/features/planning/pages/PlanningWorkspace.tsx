@@ -46,6 +46,8 @@ import {
   todayDateOnlyString,
   toDateOnlyInputValue,
 } from "../../../shared/utils/dateOnly";
+import { useAuth } from "../../../shared/auth/AuthProvider";
+import { canManagePlanning } from "../../../shared/auth/permissions";
 
 const tenderColumns: VirtualTableColumn<TenderPlanCase>[] = [
   {
@@ -124,7 +126,9 @@ const planningSectionPaths: Record<PlanningSectionKey, string> = {
 export function PlanningWorkspace() {
   const queryClient = useQueryClient();
   const { notify } = useToast();
+  const { user } = useAuth();
   const location = useAppLocation();
+  const canEditPlanning = canManagePlanning(user);
   const activeSection = planningSectionFromPath(location.pathname) ?? "tenders";
   const [selectedEntityId, setSelectedEntityId] = useState("");
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
@@ -160,18 +164,23 @@ export function PlanningWorkspace() {
     }
   }, [location.pathname]);
 
-  const entities = useQuery({ queryFn: listEntities, queryKey: ["entities"] });
+  const entities = useQuery({
+    enabled: canEditPlanning,
+    queryFn: listEntities,
+    queryKey: ["entities"],
+  });
   const activeEntities = useMemo(
     () => activeEntityOptions(entities.data),
     [entities.data],
   );
   const entityId = selectedEntityId || activeEntities[0]?.id || "";
   const formDepartments = useQuery({
-    enabled: Boolean(entityId),
+    enabled: canEditPlanning && Boolean(entityId),
     queryFn: () => listAdminDepartments(entityId),
     queryKey: ["planning-form-departments", entityId],
   });
   const catalog = useQuery({
+    enabled: canEditPlanning,
     queryFn: getCatalogSnapshot,
     queryKey: ["catalog-snapshot"],
   });
@@ -249,34 +258,37 @@ export function PlanningWorkspace() {
   });
 
   const tenderPlanColumns = useMemo<VirtualTableColumn<TenderPlanCase>[]>(
-    () => [
-      ...tenderColumns,
-      {
-        key: "actions",
-        header: "Actions",
-        render: (row) => (
-          <div className="planning-row-actions">
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => openCreateCaseFromPlan(row)}
-            >
-              <FilePlus2 size={16} />
-              Create Case
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => openTenderEdit(row)}
-            >
-              <Pencil size={16} />
-              Edit
-            </Button>
-          </div>
-        ),
-      },
-    ],
-    [],
+    () =>
+      canEditPlanning
+        ? [
+            ...tenderColumns,
+            {
+              key: "actions",
+              header: "Actions",
+              render: (row) => (
+                <div className="planning-row-actions">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => openCreateCaseFromPlan(row)}
+                  >
+                    <FilePlus2 size={16} />
+                    Create Case
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => openTenderEdit(row)}
+                  >
+                    <Pencil size={16} />
+                    Edit
+                  </Button>
+                </div>
+              ),
+            } satisfies VirtualTableColumn<TenderPlanCase>,
+          ]
+        : tenderColumns,
+    [canEditPlanning],
   );
 
   const onTenderSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -389,7 +401,7 @@ export function PlanningWorkspace() {
         />
       </section>
 
-      {entities.isLoading ? (
+      {canEditPlanning && entities.isLoading ? (
         <section className="state-panel">
           <div style={{ display: "grid", gap: "var(--space-3)" }}>
             {[1, 2, 3, 4].map((i) => (
@@ -408,7 +420,7 @@ export function PlanningWorkspace() {
             ))}
           </div>
         </section>
-      ) : entities.error ? (
+      ) : canEditPlanning && entities.error ? (
         <ErrorState
           message={entities.error.message}
           title="Could not load entities"
@@ -423,14 +435,16 @@ export function PlanningWorkspace() {
                   <h2>Upcoming Tender Plans</h2>
                 </div>
                 <div className="planning-expiry-actions">
-                  <Button
-                    disabled={!entityId}
-                    size="sm"
-                    onClick={() => setCreatePlanModal("tender")}
-                  >
-                    <FilePlus2 size={16} />
-                    Create Tender Plan
-                  </Button>
+                  {canEditPlanning ? (
+                    <Button
+                      disabled={!entityId}
+                      size="sm"
+                      onClick={() => setCreatePlanModal("tender")}
+                    >
+                      <FilePlus2 size={16} />
+                      Create Tender Plan
+                    </Button>
+                  ) : null}
                   <Button
                     size="sm"
                     variant="secondary"
@@ -644,22 +658,24 @@ export function PlanningWorkspace() {
         {creatingCaseFromPlan ? (
           <CreateCaseForm
             initialValues={creatingCaseFromPlan.initialValues}
-            onCreated={async (caseId) => {
-              try {
-                await archiveTenderMutation.mutateAsync(
-                  creatingCaseFromPlan.plan.id,
-                );
-              } catch (error) {
-                notify({
-                  message:
-                    error instanceof Error
-                      ? error.message
-                      : "Case created, but tender plan could not be removed.",
-                  tone: "warning",
-                });
-              }
-              setCreatingCaseFromPlan(null);
-              navigateToAppPath(`/cases/${caseId}`);
+            onCreated={(caseId) => {
+              void (async () => {
+                try {
+                  await archiveTenderMutation.mutateAsync(
+                    creatingCaseFromPlan.plan.id,
+                  );
+                } catch (error) {
+                  notify({
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : "Case created, but tender plan could not be removed.",
+                    tone: "warning",
+                  });
+                }
+                setCreatingCaseFromPlan(null);
+                navigateToAppPath(`/cases/${caseId}`);
+              })();
             }}
           />
         ) : null}

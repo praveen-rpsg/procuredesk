@@ -512,6 +512,11 @@ export function ReportsWorkspace() {
         render: (row) => row.runningAgeDays ?? "-",
       },
       {
+        key: "prReceipt",
+        header: "PR Receipt Date",
+        render: (row) => formatDateCell(row.prReceiptDate),
+      },
+      {
         key: "nit",
         header: "NIT Publish Date",
         render: (row) => formatDateCell(row.nitPublishDate),
@@ -577,9 +582,9 @@ export function ReportsWorkspace() {
         render: (row) => formatDateCell(row.loiAwardDate),
       },
       {
-        key: "remarks",
-        header: "PR Remarks",
-        render: (row) => row.prRemarks ?? "-",
+        key: "tmRemarks",
+        header: "Tender Owner's Remarks",
+        render: (row) => row.tmRemarks ?? "-",
       },
       {
         key: "status",

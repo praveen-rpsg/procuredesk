@@ -377,7 +377,7 @@ async function queryExportRows(input: {
         d.delay_reason,
         m.loi_issued as loi_awarded,
         m.loi_issued_date as loi_award_date,
-        c.pr_remarks,
+        c.tm_remarks,
         f.completion_fy
       from reporting.case_facts f
       join procurement.cases c on c.id = f.case_id and c.tenant_id = f.tenant_id
@@ -484,6 +484,7 @@ async function queryExportRows(input: {
         ? null
         : `${row.percent_time_elapsed}%`,
     "Running Tender Age (Days)": row.running_age_days ?? null,
+    "PR Receipt Date": formatExportDate(row.pr_receipt_date),
     "NIT Publish Date": formatExportDate(row.nit_publish_date),
     "Bidder Participated Count": row.bidders_participated ?? null,
     "Qualified Bidders Count": row.qualified_bidders ?? null,
@@ -509,7 +510,7 @@ async function queryExportRows(input: {
       : {}),
     "LOI Awarded?": row.loi_awarded ? "Yes" : "No",
     "LOI Award Date": formatExportDate(row.loi_award_date),
-    "PR Remarks": row.pr_remarks ?? null,
+    "Tender Owner's Remarks": row.tm_remarks ?? null,
     Status: row.status ?? null,
     "Completion FY": row.completion_fy ?? null,
   }));

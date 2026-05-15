@@ -177,75 +177,53 @@ export class ImportExportService {
   }
 
   async downloadPortalUserMappingTemplate(actor: AuthenticatedUser) {
-    const tenantId = this.requireTenant(actor);
+    this.requireTenant(actor);
     this.requirePermission(actor, "import.manage");
     return await this.templateFile(
-      await this.buildImportTemplate({
+      this.buildSimpleSampleTemplate({
         columns: portalUserTemplateColumns(),
-        filename: "procuredesk-portal-user-mapping-template.xlsx",
-        instructions: [
-          "Select Entity and Access Level Required from dropdowns.",
-          "Access Level Definition is derived from the role master lookup.",
-          "Use comma-separated Entity values for multi-entity access.",
-          "For Group Manager or Administration Manager, Entity can be blank or ALL.",
-          "Username is automatically set to Mail ID. New users receive generated passwords in the credentials export.",
-          "Mail ID must be a valid unique email address.",
-          "Contact No. should include country code where applicable.",
-        ],
-        metadataName: "ProcureDesk Entity - Portal User Mapping",
+        sampleRows: portalUserTemplateSampleRows(),
         sheetName: "Portal User Mapping",
-        tenantId,
       }),
       "procuredesk-portal-user-mapping-template.xlsx",
     );
   }
 
   async downloadUserDepartmentMappingTemplate(actor: AuthenticatedUser) {
-    const tenantId = this.requireTenant(actor);
+    this.requireTenant(actor);
     this.requirePermission(actor, "import.manage");
     return await this.templateFile(
-      await this.buildImportTemplate({
+      this.buildSimpleSampleTemplate({
         columns: userDepartmentTemplateColumns(),
-        filename: "procuredesk-user-department-mapping-template.xlsx",
-        instructions: [
-          "Select Entity from dropdown.",
-          "Fill one User Department per row.",
-          "Department names are checked case-insensitively within each entity.",
-        ],
-        metadataName: "ProcureDesk Entity - User Department Mapping",
+        sampleRows: userDepartmentTemplateSampleRows(),
         sheetName: "User Department Mapping",
-        tenantId,
       }),
       "procuredesk-user-department-mapping-template.xlsx",
     );
   }
 
   async downloadOldContractsTemplate(actor: AuthenticatedUser) {
-    const tenantId = this.requireTenant(actor);
+    this.requireTenant(actor);
     this.requirePermission(actor, "import.manage");
     return await this.templateFile(
-      await this.buildImportTemplate({
+      this.buildSimpleSampleTemplate({
         columns: oldContractTemplateColumns(),
-        filename: "procuredesk-old-contracts-template.xlsx",
-        instructions: [
-          "All contracts expiring on or after the configured migration date should be updated here.",
-          "All Dates shall be in DD-MM-YYYY format.",
-          "Awarded Vendors should be comma separated.",
-          "Values should be all-inclusive and in Rupees.",
-        ],
-        metadataName: "ProcureDesk Bulk Upload - Old Contract",
+        sampleRows: oldContractTemplateSampleRows(),
         sheetName: "Old Contracts",
-        tenantId,
       }),
       "procuredesk-old-contracts-template.xlsx",
     );
   }
 
   async downloadRcPoPlanTemplate(actor: AuthenticatedUser) {
-    const tenantId = this.requireTenant(actor);
+    this.requireTenant(actor);
     this.requirePermission(actor, "import.manage");
     return await this.templateFile(
-      await this.buildRcPoPlanTemplate(tenantId),
+      this.buildSimpleSampleTemplate({
+        columns: rcPoPlanTemplateColumns(),
+        sampleRows: rcPoPlanTemplateSampleRows(),
+        sheetName: "Old Contracts",
+      }),
       "procuredesk-bulk-upload-old-contract-template.xlsx",
     );
   }
@@ -602,6 +580,7 @@ export class ImportExportService {
     filename: string;
     instructions: string[];
     metadataName: string;
+    sampleRows?: ExcelJS.CellValue[][];
     sheetName: string;
     tenantId: string;
   }): Promise<ExcelJS.Workbook> {
@@ -656,6 +635,9 @@ export class ImportExportService {
       from: `A${headerRow}`,
       to: `${template.getColumn(input.columns.length).letter}${headerRow}`,
     };
+    input.sampleRows?.forEach((row, index) => {
+      template.getRow(headerRow + index + 1).values = row;
+    });
 
     input.columns.forEach((column, index) => {
       const worksheetColumn = template.getColumn(index + 1);
@@ -677,6 +659,43 @@ export class ImportExportService {
       lookupData,
       headerRow + 1,
     );
+    return workbook;
+  }
+
+  private buildSimpleSampleTemplate(input: {
+    columns: TenderTemplateColumn[];
+    sampleRows: ExcelJS.CellValue[][];
+    sheetName: string;
+  }): ExcelJS.Workbook {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "ProcureDesk";
+    workbook.created = new Date();
+    const template = workbook.addWorksheet(input.sheetName, {
+      views: [{ state: "frozen", xSplit: 0, ySplit: 1 }],
+    });
+
+    template.getRow(1).values = input.columns.map((column) => column.label);
+    template.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    template.getRow(1).fill = {
+      fgColor: { argb: "FF0070C0" },
+      pattern: "solid",
+      type: "pattern",
+    };
+    template.getRow(1).alignment = { vertical: "middle", wrapText: true };
+    template.autoFilter = {
+      from: "A1",
+      to: `${template.getColumn(input.columns.length).letter}1`,
+    };
+    input.sampleRows.forEach((row, index) => {
+      template.getRow(index + 2).values = row;
+    });
+
+    input.columns.forEach((column, index) => {
+      const worksheetColumn = template.getColumn(index + 1);
+      worksheetColumn.width = column.width;
+      if (column.type === "DD-MM-YYYY") worksheetColumn.numFmt = "dd-mm-yyyy";
+    });
+
     return workbook;
   }
 
@@ -706,15 +725,9 @@ export class ImportExportService {
       from: "A1",
       to: `${template.getColumn(columns.length).letter}1`,
     };
-    template.getRow(2).values = [
-      "CESC",
-      "Mechanical",
-      "Sample tender",
-      "Vendor A, Vendor B",
-      100000,
-      "31-01-2026",
-      "30-01-2027",
-    ];
+    rcPoPlanTemplateSampleRows().forEach((row, index) => {
+      template.getRow(index + 2).values = row;
+    });
 
     columns.forEach((column, index) => {
       const worksheetColumn = template.getColumn(index + 1);
@@ -909,9 +922,46 @@ function rcPoPlanTemplateColumns(): TenderTemplateColumn[] {
     { label: "User Department", type: "Dropdown", width: 24 },
     { label: "Tender Description", type: "Text", width: 32 },
     { label: "Awarded Vendors (comma separated)", type: "Text", width: 36 },
-    { label: "RC/PO Amount (Rs.)", type: "Number", width: 22 },
+    { label: "RC/PO Amount (Rs.) [All Inclusive]", type: "Number", width: 26 },
     { label: "RC/PO Award Date", type: "DD-MM-YYYY", width: 18 },
     { label: "RC/PO Validity Date", type: "DD-MM-YYYY", width: 20 },
+  ];
+}
+
+function portalUserTemplateSampleRows(): ExcelJS.CellValue[][] {
+  return [
+    [
+      "CPDL",
+      "Anshul Varshney",
+      "Tender Owner",
+      "Procurement user who manages assigned tenders.",
+      "Anshul.Varshney@rpsg.in",
+      "",
+    ],
+  ];
+}
+
+function userDepartmentTemplateSampleRows(): ExcelJS.CellValue[][] {
+  return [["CPDL", "IT"]];
+}
+
+function oldContractTemplateSampleRows(): ExcelJS.CellValue[][] {
+  return [["CPDL", "IT", "tenant.admin", ...rcPoPlanTemplateSampleRow().slice(2)]];
+}
+
+function rcPoPlanTemplateSampleRows(): ExcelJS.CellValue[][] {
+  return [rcPoPlanTemplateSampleRow()];
+}
+
+function rcPoPlanTemplateSampleRow(): ExcelJS.CellValue[] {
+  return [
+    "CPDL",
+    "IT",
+    "CPDL-IT-Tender Description Test 1",
+    "Vendor 1, Vendor 2",
+    1_000_000,
+    "15-05-2025",
+    "11-11-2025",
   ];
 }
 

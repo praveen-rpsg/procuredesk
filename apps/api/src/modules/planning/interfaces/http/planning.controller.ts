@@ -40,7 +40,6 @@ export class PlanningController {
   constructor(private readonly planning: PlanningService) {}
 
   @Get("tender-plans")
-  @RequirePermissions("planning.manage")
   listTenderPlans(
     @CurrentUser() user: AuthenticatedUser,
     @Query(new ZodValidationPipe(PlanningListQuerySchema))

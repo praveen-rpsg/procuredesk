@@ -41,6 +41,7 @@ export type ReportCaseRow = {
   tenderName: string | null;
   tenderNo: string | null;
   tenderTypeName: string | null;
+  tmRemarks: string | null;
   totalAwardedAmount: number | null;
   uncontrollableDelayDays: number | null;
 };

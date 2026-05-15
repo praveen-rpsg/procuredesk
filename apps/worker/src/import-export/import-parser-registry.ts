@@ -51,7 +51,7 @@ const OLD_CONTRACT_TEMPLATE_COLUMNS = [
   "Tender Owner",
   "Tender Description",
   "Awarded Vendors (comma separated)",
-  "RC/PO Amount (Rs.)",
+  "RC/PO Amount (Rs.) [All Inclusive]",
   "RC/PO Award Date",
   "RC/PO Validity Date",
 ] as const;
@@ -60,7 +60,7 @@ const RC_PO_PLAN_TEMPLATE_COLUMNS = [
   "User Department",
   "Tender Description",
   "Awarded Vendors (comma separated)",
-  "RC/PO Amount (Rs.)",
+  "RC/PO Amount (Rs.) [All Inclusive]",
   "RC/PO Award Date",
   "RC/PO Validity Date",
 ] as const;

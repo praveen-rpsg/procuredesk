@@ -481,7 +481,8 @@ export class ReportingRepository {
           m.loi_issued_date,
           d.delay_external_days,
           d.delay_reason,
-          c.pr_remarks
+          c.pr_remarks,
+          c.tm_remarks
         from reporting.case_facts f
         join procurement.cases c on c.id = f.case_id and c.tenant_id = f.tenant_id and ${caseDeletionPredicate}
         left join org.entities e on e.id = f.entity_id and e.tenant_id = f.tenant_id
@@ -532,6 +533,7 @@ export class ReportingRepository {
       tenderName: row.tender_name,
       tenderNo: row.tender_no,
       tenderTypeName: row.tender_type_name,
+      tmRemarks: row.tm_remarks,
       totalAwardedAmount: this.numberOrNull(row.total_awarded_amount),
       uncontrollableDelayDays: row.delay_external_days,
     }));
@@ -1834,6 +1836,7 @@ type CaseReportRow = {
   tender_name: string | null;
   tender_no: string | null;
   tender_type_name: string | null;
+  tm_remarks: string | null;
   total_awarded_amount: string | null;
   delay_external_days: number | null;
 };
