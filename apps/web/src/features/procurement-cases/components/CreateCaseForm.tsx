@@ -9,6 +9,7 @@ import {
 import { listEntities } from "../../planning/api/planningApi";
 import { createCase } from "../api/casesApi";
 import { useAuth } from "../../../shared/auth/AuthProvider";
+import { canEditEntityManagedCaseFields } from "../../../shared/auth/permissions";
 import { addDaysToDateOnly, isDateOnlyString } from "../../../shared/utils/dateOnly";
 import { Button } from "../../../shared/ui/button/Button";
 import { ComboboxSelect } from "../../../shared/ui/form/ComboboxSelect";
@@ -135,6 +136,9 @@ export function CreateCaseForm({ initialValues, onCreated }: CreateCaseFormProps
     () => (entities.data ?? []).find((entity) => entity.id === entityId) ?? null,
     [entities.data, entityId],
   );
+  const canEditTentativeCompletionDate = Boolean(
+    entityId && canEditEntityManagedCaseFields(user, { entityId }),
+  );
   const singleMappedEntityId = user?.entityIds.length === 1 ? user.entityIds[0] : "";
   const isSingleEntityMapped = Boolean(singleMappedEntityId);
   const entityOptions = useMemo(() => {
@@ -175,12 +179,19 @@ export function CreateCaseForm({ initialValues, onCreated }: CreateCaseFormProps
       selectedTenderType?.completionDays === null ||
       selectedTenderType?.completionDays === undefined
     ) {
+      if (!canEditTentativeCompletionDate) {
+        setTentativeCompletionDate("");
+      }
       return;
     }
     setTentativeCompletionDate(
       addDaysToDateOnly(prReceiptDate, selectedTenderType.completionDays),
     );
-  }, [prReceiptDate, selectedTenderType?.completionDays]);
+  }, [
+    canEditTentativeCompletionDate,
+    prReceiptDate,
+    selectedTenderType?.completionDays,
+  ]);
 
   const mutation = useMutation({
     mutationFn: createCase,
@@ -402,13 +413,20 @@ export function CreateCaseForm({ initialValues, onCreated }: CreateCaseFormProps
           </FormField>
           <FormField
             error={formErrors.tentativeCompletionDate ?? ""}
-            helperText="Defaults from PR receipt date plus the selected tender type days."
+            helperText={
+              canEditTentativeCompletionDate
+                ? "Defaults from PR receipt date plus the selected tender type days. Entity-level users may override it."
+                : "Auto-calculated from PR receipt date plus the selected tender type days."
+            }
             label="Tentative Completion Date"
           >
             <TextInput
-              onChange={(event) =>
-                setTentativeCompletionDate(event.target.value)
-              }
+              disabled={!canEditTentativeCompletionDate}
+              onChange={(event) => {
+                if (canEditTentativeCompletionDate) {
+                  setTentativeCompletionDate(event.target.value);
+                }
+              }}
               required
               type="date"
               value={tentativeCompletionDate}

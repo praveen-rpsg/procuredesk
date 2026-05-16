@@ -1,0 +1,116 @@
+# MIS Portal Review Resolution Tracker
+
+Source PDF: `/Users/praveenvishnoi/Downloads/MIS Portal Review.pdf`
+PDF pages: 3
+Branch: `bugfix/pdf-issue-resolution-2026-05-16`
+Created: 2026-05-16
+
+## Extracted Issues
+
+| Issue ID | PDF Page | Module/Feature Name | Issue Summary | Expected Behavior | Current Behavior | Screenshot Reference | Severity | Confidence Level | Missing Information | Technical Area Impacted | Possible Root Cause | Estimated Complexity |
+|---|---:|---|---|---|---|---|---|---|---|---|---|---|
+| MIS-001 | 1 | Roles/Admin | "Create user and check visible portal" review item | User role setup should expose only permitted portals/workspaces | Not described | Page 1 row text | Medium | Low | Exact role, user, expected visible portals, failing portal | IAM, permissions, shell navigation | Role permission mapping or test request, not enough reproduction detail | Unknown |
+| MIS-002 | 1 | Notifications/Mail | Mail configuration review item | Mail configuration should be complete and testable | Not described | Page 1 row text | Medium | Low | Expected SMTP/Graph settings, failing behavior, environment | Notification config, Microsoft Graph email adapter | Configuration or deployment task, no actionable bug detail | Unknown |
+| MIS-003 | 1 | Case Creation | Add new case "Tentative Completion Date" must not be editable for tender owner; auto-calculated and only entity-level user editable | Tender owner sees calculated read-only date; entity-level users can edit where allowed | Field is editable in create case form for all creators | Page 1 dashboard link row | High | High | Whether GROUP/super-admin should also edit; backend validation rule for owner override | CreateCaseForm, case create API validation | UI lacks access-level gating; API accepts client-supplied value | Medium |
+| MIS-004 | 1 | Dashboard Command Center | Procurement command center tiles need entity-wise count bifurcation with drill-down to case level | Each tile shows total plus entity count breakup; clicking entity/category opens filtered cases | Tiles show totals only | Page 1 dashboard link row | Medium | Medium | Which tiles require breakup and exact drill-down targets | Dashboard summary API/UI, case filters | Summary response lacks entity breakdown or UI does not render it | High |
+| MIS-005 | 1 | Dashboard/Reports | Focus section, Tender Details, and Running report do not show normative stages and percent time elapsed in some running cases | Running cases show normative stage and percent elapsed when computable, otherwise "-" | Some rows show blank/missing values unexpectedly | Page 1 dashboard and report links | High | Medium | Sample case IDs with missing values | Reporting projections, case listing, dashboard focus table | Desired stage and percent logic depends on missing projection fields or tender type dates | Medium |
+| MIS-006 | 1 | Dashboard RC/PO Expiry | Rename RC/PO expiry dashboard headers: "NFA Approved (Contract) Amount..." to "Contract Amount..."; "Contract Type" to "Source" | UI label rename only, no logic change | Old labels shown | Page 1 dashboard link row | Low | High | None | Dashboard table columns | Static copy needs update | Low |
+| MIS-007 | 1 | Tables | Every displayed table should have free search textbox | All tables provide a free-text search input | Some tables rely only on column filters or no search | Page 1 row | Medium | Medium | Scope of "every table"; whether global DataTable and VirtualTable should own search | Shared table components, pages | Search implemented page-by-page, not globally available | High |
+| MIS-008 | 1 | Filters/Forms | Filter selection should be enabled by clicking labels | Clicking filter labels toggles/opens associated controls | Some labels are not bound to controls | Page 1 row | Low | Medium | Exact failing filters | FormField, custom multi-select, checkbox wrappers | Labels are rendered as text around custom components without htmlFor/control wiring | Medium |
+| MIS-009 | 1 | Planning | In Create Tender Plan form, rename Value field to "Value (Rs.) [All Inclusive]" | Create/edit tender plan form label uses requested copy | Existing form may show "Value" or inconsistent copy | Page 1 tender plans link row | Low | High | None | PlanningWorkspace UI labels | Static copy mismatch | Low |
+| MIS-010 | 1 | Case Overview | Show all filled milestone details for a tender on Overview page | Case overview displays every non-empty milestone field | Overview hides some milestone details | Page 1 case detail link row | Medium | High | Expected order/labels for milestones | CaseDetailPage | Detail view only highlights selected milestone fields | Medium |
+| MIS-011 | 1 | Planning | Entity-level user should have option to delete planned tender cases | Entity-level planning manager can delete/archive planned tenders | UI lacks delete action for tender plans | Page 1 tender plans link row | Medium | High | Whether delete is soft archive or hard delete | PlanningWorkspace, planning API | API supports DELETE, UI omits action | Low |
+| MIS-012 | 1 | Reporting Analytics | All charts and tiles need drill-down to case-level filtered grid | Clicking chart/tile segment opens filtered case grid or report grid | Only some charts support click behavior | Page 1 analytics link row | High | Medium | Target grid preference: /cases vs /reports/tender-details | Analytics UI, report routing, case filters | Partial drill-down implementation | High |
+| MIS-013 | 1 | Tender Details Report | Add stage-wise aging popup like dashboard Focus table with option to open case details | Report rows can open stage aging modal and case details | Tender Details report lacks popup | Page 1 tender details link row | Medium | Medium | Exact popup fields; dashboard modal is reference | ReportsWorkspace, CaseDetail APIs | Report table rows are not clickable and do not fetch case detail | Medium |
+| MIS-014 | 1 | Running Tender Report | Add stage-wise aging popup like dashboard Focus table with option to open case details | Running report rows can open stage aging modal and case details | Running report lacks popup | Page 1 running link row | Medium | Medium | Same as MIS-013 | ReportsWorkspace, CaseDetail APIs | Same as MIS-013 | Medium |
+| MIS-015 | 1 | Completed Tender Report | Add stage-wise aging popup like dashboard Focus table with option to open case details | Completed report rows can open stage aging modal and case details | Completed report lacks popup | Page 1 completed link row | Medium | Medium | Same as MIS-013 | ReportsWorkspace, CaseDetail APIs | Same as MIS-013 | Medium |
+| MIS-016 | 1 | Vendor Awards Report | Clicking a case in Vendor Awards report should open tender overview | Row/case link navigates to `/cases/:caseId` | Vendor Awards rows are not navigable | Page 1 vendor awards link row | Medium | High | Whether row click or case link cell preferred | ReportsWorkspace table behavior | No row click handler | Low |
+| MIS-017 | 1 | Stage-Time Report | Clicking a case in Stage-Time Lapsed report should open tender overview | Row/case link navigates to `/cases/:caseId` | Stage-Time rows are not navigable | Page 1 stage-time link row | Medium | High | Same | ReportsWorkspace table behavior | No row click handler | Low |
+| MIS-018 | 1 | RC/PO Expiry Report | Clicking a case in RC/PO Expiry report opens overview only for TenderDB rows, not bulk uploads | TenderDB rows navigate to source case; bulk upload rows do not | RC/PO report rows are not navigable | Page 1 rc-po-expiry link row | Medium | High | Whether sourceType `case_award` maps to TenderDB | ReportsWorkspace table behavior | No row click handler | Low |
+| MIS-019 | 1 | Analytics PR Value Mix | In PR value mix entity-wise PR value distribution, mention units "Rs. Lakhs" against values | Chart labels clearly show Rs. Lakhs values | Unit may show "Lakhs" or dynamic copy only | Page 1 analytics link row | Low | High | Whether analytics should lock to lakhs or follow selected unit | ReportsWorkspace analytics copy | amount unit label copy mismatch | Low |
+| MIS-020 | 2 | Analytics Cases By Entity | Remove "awarded amount" from Cases by entity chart and show completion status breakup instead of delay indicator breakup | Entity chart shows total/running/completed distribution; no awarded amount | Chart shows awarded amount plus On-Track/Off-Track/Delayed | Page 2 analytics link row | Medium | High | Desired colors/order for running/completed | Analytics API/UI | UI derives delay breakup and awarded amount from byEntity | Medium |
+| MIS-021 | 2 | Analytics Department Workload | Add labels within bars showing case count by nature of work | Stacked bars display segment counts where space allows | Bars have color segments only and total at row end | Page 2 analytics link row | Low | High | Behavior for very small segments | Analytics UI/CSS | Segment labels omitted | Low |
+| MIS-022 | 2 | Analytics Tender Type Split | Add tender count labels on graph and rename chart description to "Tender Track Analysis" | Tender type chart shows counts; chart description/title copy updated | Count appears above bar but chart title remains "Tender type split" | Page 2 analytics link row | Low | High | Whether "description" means title or eyebrow | Analytics UI copy/chart labels | Static copy mismatch / labels may be insufficient | Low |
+| MIS-023 | 2 | Stage-Time Report | Current stage aging logic incorrect: only for running tenders; completed cases show "-"; age should be days in current stage, not since PR receipt | Stage aging is current stage duration for running cases only; completed cases show "-" | Reporting projection sets current stage aging from PR receipt date for all statuses | Page 2 stage-time link row | High | High | None | Reporting projection SQL and import projection SQL | reporting.case_facts current_stage_aging_days calculation differs from case list logic | Medium |
+| MIS-024 | 2 | Reporting | Add "Technical Evaluation Pendency Report" | New report defaults to running cases at Stage 4 with blank Technical Evaluation date; supports columns, filters, stage aging popup, export | Report does not exist | Page 2 report request | High | High | Exact route name and export file naming | API report endpoint, DTOs, repository, export worker, UI routes | New report not implemented | High |
+| MIS-025 | 3 | Reporting | Add "Technical Evaluation Time - Completed Tenders" report | New completed-only report with technical evaluation duration, filters, popup, export | Report does not exist | Page 3 report request | High | High | Exact route name and export file naming | API report endpoint, DTOs, repository, export worker, UI routes | New report not implemented | High |
+| MIS-026 | 3 | Reports Navigation | Reports left pane should have dropdown of all report names for direct access | Reports pane offers dropdown/direct report selector | Current reports navigation uses horizontal secondary nav only | Page 3 row | Medium | High | Whether existing secondary nav should stay | ReportsWorkspace navigation UI | Navigation layout does not include dropdown | Low |
+
+## MASTER ISSUE TRACKER
+
+| ID | Module | Issue Summary | Severity | Status | Root Cause | Fix Plan | Validation Plan | Dependencies | Notes |
+|----|---------|----------------|----------|--------|-------------|-----------|----------------|-------------|------|
+| MIS-001 | Roles/Admin | Create user and check visible portal | Medium | NEEDS CLARIFICATION | PDF contains only a review note without failing role/user/workspace details; initial inspection shows existing route visibility is permission-driven through `canAccessWorkspace` and API user creation assigns roles/entity scopes | No code fix without a reproducible role-to-portal mismatch; request exact role/access level/entity assignment and expected visible portals | Reviewed frontend workspace permission mapping and admin user creation/role assignment flow; full validation needs a concrete test user | Test role/user details | Ambiguous PDF item |
+| MIS-002 | Notifications/Mail | Mail configuration | Medium | NEEDS CLARIFICATION | PDF contains only "Mail Configuration" with no failing symptom; code already supports optional Microsoft Graph mail configuration and reports configured/stub status | No code fix without environment values or failing behavior; request expected mail provider, current env, and observed delivery/status failure | Reviewed env schema, example env files, Graph email adapter, notification status/job flow | Microsoft Graph tenant/client/secret/sender mailbox or alternate mail-provider details | Ambiguous PDF item |
+| MIS-003 | Case Creation | Tentative completion date editable only by entity-level users | High | VALIDATED | Create form rendered the field editable for every creator, and the create API accepted client-provided dates before deriving from tender-type rules | UI now disables editing unless the actor can manage entity-owned case fields; API now derives/enforces the date for tender owners when a tender-type completion rule exists, while preserving entity/group/super-admin override behavior | Focused API spec passed; API typecheck passed; web typecheck passed | GROUP/super-admin override retained to match existing update-case behavior | Files: `CreateCaseForm.tsx`, `procurement-case.schemas.ts`, `procurement-case.service.ts`, `procurement-case.service.spec.ts` |
+| MIS-004 | Dashboard | Entity-wise tile breakup and drill-down | Medium | NOT STARTED | Summary model lacks entity breakdown in UI/API | Extend dashboard summary or fetch grouped cases; add drill-down links | API tests/typecheck; dashboard route smoke | Case filter supports entity/status/track params | Potential API contract change |
+| MIS-005 | Dashboard/Reports | Normative stages and percent elapsed missing in running cases | High | NOT STARTED | Projection/listing logic may return null when desired stage or dates missing | Align desired stage/percent fallback; render "-" only when truly unavailable | Unit/API checks for null cases; UI table checks | Sample affected cases helpful | Related to reporting facts refresh |
+| MIS-006 | Dashboard RC/PO | RC/PO expiry label rename | Low | NOT STARTED | Static copy mismatch | Rename headers only | Typecheck; visual smoke | None | Low-risk |
+| MIS-007 | Tables | Free search textbox for every table | Medium | NOT STARTED | Search is page-specific, not universal | Add optional global search to shared table components and enable where missing | Table unit/typecheck; UI smoke on major tables | Decide scope of "every table" | Broad regression area |
+| MIS-008 | Filters | Labels clickable for filter selection | Low | NOT STARTED | Custom controls may not bind label/control | Add accessible label handling to filter controls | Keyboard/mouse smoke; accessibility basics | Exact failing labels if any | Could be addressed while touching filters |
+| MIS-009 | Planning | Tender plan value label rename | Low | NOT STARTED | Static copy mismatch | Rename create/edit labels | Typecheck; planning form smoke | None | Low-risk |
+| MIS-010 | Case Overview | Show all filled milestone details | Medium | NOT STARTED | Overview renders subset of milestones | Render milestone detail grid from all non-empty milestone fields | Typecheck; case detail smoke | Expected label order | Existing API appears to expose milestones |
+| MIS-011 | Planning | Entity-level user can delete planned tenders | Medium | NOT STARTED | DELETE API exists but UI lacks action | Add delete action with confirmation and permission gating | API/UI smoke; deleted row removal | Confirm delete/archive wording | Low-risk |
+| MIS-012 | Analytics | Drill-down for all charts and tiles | High | NOT STARTED | Partial drill-down implementation | Add click handlers and filtered navigation for KPIs/charts | UI route smoke; filter query validation | Target grid route decision | Broad UI behavior |
+| MIS-013 | Tender Details | Stage aging popup and open case details | Medium | NOT STARTED | Report table lacks row modal | Reuse dashboard-style stage aging modal and navigate action | UI smoke; row click; modal error/loading | Popup exact fields | Can group with MIS-014/MIS-015 |
+| MIS-014 | Running Report | Stage aging popup and open case details | Medium | NOT STARTED | Same as MIS-013 | Same shared report row detail interaction | Same | Same | Group with MIS-013 |
+| MIS-015 | Completed Report | Stage aging popup and open case details | Medium | NOT STARTED | Same as MIS-013 | Same shared report row detail interaction | Same | Same | Group with MIS-013 |
+| MIS-016 | Vendor Awards | Click case opens overview | Medium | NOT STARTED | Row click missing | Add row click to case route | UI smoke; keyboard row activation | None | Low-risk |
+| MIS-017 | Stage-Time | Click case opens overview | Medium | NOT STARTED | Row click missing | Add row click to case route | UI smoke; keyboard row activation | None | Low-risk |
+| MIS-018 | RC/PO Expiry | TenderDB rows open overview; bulk upload rows do not | Medium | NOT STARTED | Row click missing and source guard absent | Add conditional row navigation for `sourceCaseId`/case award rows | UI smoke; source type cases | Confirm source mapping | Low-risk |
+| MIS-019 | Analytics | PR value mix values mention Rs. Lakhs | Low | NOT STARTED | Unit copy mismatch | Update copy/labels to include Rs. Lakhs when shown | Typecheck; visual smoke | Whether dynamic unit remains | Low-risk |
+| MIS-020 | Analytics | Entity chart completion breakup, remove awarded amount | Medium | NOT STARTED | UI shows delay breakup and amount | Use running/completed counts in analytics payload/UI | API mapping/typecheck; visual smoke | API byEntity currently lacks completed count | API contract likely needed |
+| MIS-021 | Analytics | Department bar segment count labels | Low | NOT STARTED | Segment labels omitted | Render segment count labels with small-segment fallback | Visual smoke; responsive check | None | Low-risk |
+| MIS-022 | Analytics | Tender type count labels and "Tender Track Analysis" copy | Low | NOT STARTED | Static copy/label behavior mismatch | Update chart title/subtitle and labels | Visual smoke | None | Low-risk |
+| MIS-023 | Stage-Time | Current stage aging logic | High | NOT STARTED | Reporting projection uses PR receipt date instead of stage start and includes completed | Align reporting/import projections to case list logic; render "-" for completed | API tests/typecheck; SQL review | None | Root-cause fix |
+| MIS-024 | Reports | Technical Evaluation Pendency Report | High | NOT STARTED | New report absent | Add API/report code/UI columns/filter/export support | API tests/typecheck; UI smoke; export path | Route/report code naming | Large feature |
+| MIS-025 | Reports | Technical Evaluation Time - Completed Tenders report | High | NOT STARTED | New report absent | Add API/report code/UI columns/filter/export support | API tests/typecheck; UI smoke; export path | Route/report code naming | Large feature |
+| MIS-026 | Reports Navigation | Report selector dropdown | Medium | NOT STARTED | Secondary nav only | Add direct report selector/dropdown | Responsive UI smoke | Keep secondary nav? | Low-risk |
+
+## Architecture Notes
+
+- Frontend: React 19 with Vite, TypeScript, React Query, custom app-location routing, shared UI primitives.
+- Backend: NestJS modular monolith on Fastify, TypeScript, Zod validation pipes, permission guards.
+- Database: PostgreSQL schemas under `db/migrations`, with reporting projections in `reporting.case_facts` and `reporting.contract_expiry_facts`.
+- Worker: background exports/imports/notifications; export jobs are API-triggered and worker-processed.
+- APIs: REST controllers under `apps/api/src/modules/*/interfaces/http`.
+- Auth flow: API guards (`AuthGuard`, `PermissionGuard`) plus frontend permission helpers in `apps/web/src/shared/auth/permissions.ts`.
+- State management: React local state plus TanStack React Query caching/invalidation.
+- Validation layers: Zod schemas on API; local form validators in frontend.
+- Reusable components: `VirtualTable`, `DataTable`, form primitives, `SecondaryNav`, modal/toast/status components.
+- Logging/error handling: Nest problem-details filter; UI `ErrorState` and inline mutation/query errors.
+
+## Risk Assessment
+
+- High regression risk: reporting projection SQL, export job report-code expansion, shared table behavior.
+- Medium regression risk: dashboard summary contract, report navigation, case detail milestone rendering.
+- Low regression risk: static label changes and row navigation.
+- Data risk: projection changes require refresh before existing records show corrected stage aging.
+- Permission risk: entity-level vs tender-owner editability must match backend and frontend semantics.
+
+## Fix Order Priority
+
+1. Clarify/triage ambiguous MIS-001 and MIS-002 without blocking.
+2. Low-risk copy/navigation fixes: MIS-006, MIS-009, MIS-011, MIS-016, MIS-017, MIS-018, MIS-026.
+3. Root-cause data fixes: MIS-003, MIS-005, MIS-023.
+4. Report interaction improvements: MIS-013, MIS-014, MIS-015.
+5. Analytics drill-down and chart fixes: MIS-012, MIS-019, MIS-020, MIS-021, MIS-022.
+6. New reports: MIS-024, MIS-025.
+7. Broad shared-table/filter improvements: MIS-007, MIS-008.
+
+## Dependency Chain
+
+- MIS-023 influences MIS-013/MIS-014/MIS-015/MIS-024 because all depend on correct stage aging.
+- MIS-024 and MIS-025 require report code/type/schema/API/UI/export changes together.
+- MIS-012 and MIS-020 may require analytics API payload additions before UI drill-down can be complete.
+- MIS-003 needs frontend permission semantics and ideally backend enforcement in case creation/update.
+
+## Regression Checklist
+
+- `pnpm --filter @procuredesk/web typecheck`
+- `pnpm --filter @procuredesk/api typecheck`
+- `pnpm --filter @procuredesk/api test`
+- Route smoke: `/dashboard`, `/cases`, `/cases/:id`, `/planning/tender-plans`, `/reports/analytics`, every report route.
+- Permission smoke: tender owner, entity-level user, group/super-admin where possible.
+- UI checks: loading, empty, error states; row click keyboard activation; mobile/narrow report navigation.
+- API checks: report filters, deleted-case flag, entity scope, assigned scope, export job report-code validation.

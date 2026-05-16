@@ -79,7 +79,7 @@ export const CreateCaseRequestSchema = z.object({
   prSchemeNo: z.string().trim().max(100).nullable().optional(),
   priorityCase: z.boolean(),
   tenderTypeId: requiredUuid,
-  tentativeCompletionDate: requiredDateString,
+  tentativeCompletionDate: requiredDateString.optional(),
 });
 
 export const UpdateCaseRequestSchema = z.object({

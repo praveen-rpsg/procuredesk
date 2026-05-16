@@ -87,13 +87,29 @@ export class ProcurementCaseService {
       tenderTypeId: command.tenderTypeId ?? null,
       tenantId,
     });
-    const tentativeCompletionDate =
-      command.tentativeCompletionDate ??
-      (await this.deriveTentativeCompletionDate({
+    const requestedTentativeCompletionDate =
+      command.tentativeCompletionDate ?? null;
+    const derivedTentativeCompletionDate =
+      await this.deriveTentativeCompletionDate({
         prReceiptDate: command.prReceiptDate ?? null,
         tenderTypeId: command.tenderTypeId ?? null,
         tenantId,
-      }));
+      });
+    const canOverrideTentativeCompletionDate =
+      this.canUpdateEntityManagedFields(actor, command.entityId);
+    if (
+      !canOverrideTentativeCompletionDate &&
+      derivedTentativeCompletionDate &&
+      requestedTentativeCompletionDate &&
+      requestedTentativeCompletionDate !== derivedTentativeCompletionDate
+    ) {
+      throw new ForbiddenException(
+        "Tentative Completion Date is auto-calculated for tender owners.",
+      );
+    }
+    const tentativeCompletionDate = canOverrideTentativeCompletionDate
+      ? (requestedTentativeCompletionDate ?? derivedTentativeCompletionDate)
+      : (derivedTentativeCompletionDate ?? requestedTentativeCompletionDate);
     await this.assertOwnerAssignmentAllowed(
       actor,
       command.entityId,
@@ -535,21 +551,28 @@ export class ProcurementCaseService {
     actor: AuthenticatedUser,
     entityId: string,
   ) {
-    if (actor.isPlatformSuperAdmin) return;
-    if (
-      actor.accessLevel === "GROUP" &&
-      hasExpandedPermission(actor, "case.update.all")
-    )
-      return;
-    if (
-      actor.accessLevel === "ENTITY" &&
-      hasExpandedPermission(actor, "case.update.entity") &&
-      actor.entityIds.includes(entityId)
-    ) {
+    if (this.canUpdateEntityManagedFields(actor, entityId)) {
       return;
     }
     throw new ForbiddenException(
       "Only group-level case managers or entity-level users for this entity can update Tender Owner or Tentative Completion Date.",
+    );
+  }
+
+  private canUpdateEntityManagedFields(
+    actor: AuthenticatedUser,
+    entityId: string,
+  ): boolean {
+    if (actor.isPlatformSuperAdmin) return true;
+    if (
+      actor.accessLevel === "GROUP" &&
+      hasExpandedPermission(actor, "case.update.all")
+    )
+      return true;
+    return (
+      actor.accessLevel === "ENTITY" &&
+      hasExpandedPermission(actor, "case.update.entity") &&
+      actor.entityIds.includes(entityId)
     );
   }
 
