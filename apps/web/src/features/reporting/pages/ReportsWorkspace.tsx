@@ -1663,6 +1663,7 @@ export function ReportsWorkspace() {
                 error={data.running.error}
                 getRowKey={(row) => row.caseId}
                 isLoading={data.running.isLoading}
+                onRowClick={(row) => setStageAgingCaseId(row.caseId)}
               />
             ) : null}
             {reportCode === "completed" ? (
