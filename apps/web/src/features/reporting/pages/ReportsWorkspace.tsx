@@ -1685,6 +1685,7 @@ export function ReportsWorkspace() {
                 error={data.vendorAwards.error}
                 getRowKey={(row) => row.awardId}
                 isLoading={data.vendorAwards.isLoading}
+                onRowClick={(row) => navigateToAppPath(`/cases/${row.caseId}`)}
               />
             ) : null}
             {reportCode === "stage_time" ? (
