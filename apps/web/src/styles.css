@@ -1651,27 +1651,44 @@ textarea:focus:not(:focus-visible) {
   color: inherit;
   font: inherit;
   text-align: left;
-  min-height: 92px;
+  min-height: 132px;
   min-width: 0;
   padding: var(--space-2);
 }
 
 .dashboard-hero-metrics .dashboard-metric-card {
   border-radius: var(--radius-md);
-  min-height: 92px;
+  min-height: 132px;
   padding: var(--space-2);
 }
 
-.dashboard-metric-card > span {
+.dashboard-metric-main-button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  display: block;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.dashboard-metric-main-button > span {
   font-size: var(--font-size-2xs);
   margin-bottom: 0;
 }
 
-.dashboard-metric-card > strong {
+.dashboard-metric-main-button > strong {
+  color: var(--color-ink);
+  display: block;
   font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0;
+  line-height: 1;
 }
 
-.dashboard-hero-metrics .dashboard-metric-card > strong {
+.dashboard-hero-metrics .dashboard-metric-main-button > strong {
   font-size: var(--font-size-lg);
 }
 
@@ -1713,6 +1730,53 @@ textarea:focus:not(:focus-visible) {
   font-size: var(--font-size-2xs);
   line-height: var(--line-height-snug);
   margin-top: 0;
+}
+
+.dashboard-metric-entity-breakdown {
+  border-top: 1px solid var(--color-border);
+  display: grid;
+  gap: 2px;
+  margin-top: var(--space-2);
+  max-height: 88px;
+  overflow-y: auto;
+  padding-top: var(--space-2);
+}
+
+.dashboard-metric-entity-chip {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: var(--space-2);
+  justify-content: space-between;
+  min-height: 22px;
+  padding: 2px var(--space-1);
+  text-align: left;
+}
+
+.dashboard-metric-entity-chip:hover,
+.dashboard-metric-entity-chip:focus-visible {
+  background: var(--color-surface-muted);
+  color: var(--color-ink);
+  outline: none;
+}
+
+.dashboard-metric-entity-chip span {
+  font-size: var(--font-size-2xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-metric-entity-chip strong {
+  color: var(--color-ink);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
 }
 
 .dashboard-action-card {

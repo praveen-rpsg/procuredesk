@@ -627,8 +627,8 @@ export class ProcurementCaseRepository {
 
   async summary(tenantId: string, scope: CaseListScope) {
     const values: unknown[] = [tenantId];
-    const where = ["tenant_id = $1", "deleted_at is null"];
-    applyCaseScope(where, values, scope, "entity_id", "owner_user_id");
+    const where = ["c.tenant_id = $1", "c.deleted_at is null"];
+    applyCaseScope(where, values, scope, "c.entity_id", "c.owner_user_id");
     const row = await this.db.one<
       QueryResultRow & {
         completed_count: string;
@@ -644,47 +644,106 @@ export class ProcurementCaseRepository {
       `
         select
           count(*)::text as total_count,
-          count(*) filter (where status = 'running')::text as running_count,
-          count(*) filter (where status = 'completed')::text as completed_count,
+          count(*) filter (where c.status = 'running')::text as running_count,
+          count(*) filter (where c.status = 'completed')::text as completed_count,
           count(*) filter (
-            where status = 'running'
-              and tentative_completion_date is not null
-              and tentative_completion_date < current_date
+            where c.status = 'running'
+              and c.tentative_completion_date is not null
+              and c.tentative_completion_date < current_date
           )::text as delayed_count,
           count(*) filter (
-            where status = 'running'
-              and (tentative_completion_date is null or tentative_completion_date >= current_date)
-              and desired_stage_code is not null
-              and stage_code < desired_stage_code
+            where c.status = 'running'
+              and (c.tentative_completion_date is null or c.tentative_completion_date >= current_date)
+              and c.desired_stage_code is not null
+              and c.stage_code < c.desired_stage_code
           )::text as off_track_count,
           count(*) filter (
-            where status = 'running'
-              and (tentative_completion_date is null or tentative_completion_date >= current_date)
-              and (desired_stage_code is null or stage_code >= desired_stage_code)
+            where c.status = 'running'
+              and (c.tentative_completion_date is null or c.tentative_completion_date >= current_date)
+              and (c.desired_stage_code is null or c.stage_code >= c.desired_stage_code)
           )::text as on_track_count,
-          count(*) filter (where status = 'running' and priority_case)::text as priority_count,
+          count(*) filter (where c.status = 'running' and c.priority_case)::text as priority_count,
           count(*) filter (
-            where status = 'running'
+            where c.status = 'running'
               and (
                 (
-                  tentative_completion_date is not null
-                  and tentative_completion_date < current_date
+                  c.tentative_completion_date is not null
+                  and c.tentative_completion_date < current_date
                 )
-                or priority_case
+                or c.priority_case
                 or (
-                  (tentative_completion_date is null or tentative_completion_date >= current_date)
-                  and desired_stage_code is not null
-                  and stage_code < desired_stage_code
+                  (c.tentative_completion_date is null or c.tentative_completion_date >= current_date)
+                  and c.desired_stage_code is not null
+                  and c.stage_code < c.desired_stage_code
                 )
               )
           )::text as risk_count
-        from procurement.cases
+        from procurement.cases c
         where ${where.join(" and ")}
+      `,
+      values,
+    );
+    const entityRows = await this.db.query<
+      QueryResultRow & {
+        completed_count: string;
+        delayed_count: string;
+        entity_code: string | null;
+        entity_id: string;
+        entity_name: string | null;
+        off_track_count: string;
+        on_track_count: string;
+        priority_count: string;
+        running_count: string;
+        total_count: string;
+      }
+    >(
+      `
+        select
+          c.entity_id,
+          e.code as entity_code,
+          e.name as entity_name,
+          count(*)::text as total_count,
+          count(*) filter (where c.status = 'running')::text as running_count,
+          count(*) filter (where c.status = 'completed')::text as completed_count,
+          count(*) filter (
+            where c.status = 'running'
+              and c.tentative_completion_date is not null
+              and c.tentative_completion_date < current_date
+          )::text as delayed_count,
+          count(*) filter (
+            where c.status = 'running'
+              and (c.tentative_completion_date is null or c.tentative_completion_date >= current_date)
+              and c.desired_stage_code is not null
+              and c.stage_code < c.desired_stage_code
+          )::text as off_track_count,
+          count(*) filter (
+            where c.status = 'running'
+              and (c.tentative_completion_date is null or c.tentative_completion_date >= current_date)
+              and (c.desired_stage_code is null or c.stage_code >= c.desired_stage_code)
+          )::text as on_track_count,
+          count(*) filter (where c.status = 'running' and c.priority_case)::text as priority_count
+        from procurement.cases c
+        left join org.entities e on e.id = c.entity_id and e.tenant_id = c.tenant_id
+        where ${where.join(" and ")}
+        group by c.entity_id, e.code, e.name
+        order by count(*) desc, e.code asc nulls last, e.name asc nulls last
       `,
       values,
     );
 
     return {
+      byEntity: entityRows.rows.map((entityRow) => ({
+        completed: Number(entityRow.completed_count ?? 0),
+        delayed: Number(entityRow.delayed_count ?? 0),
+        entityCode: entityRow.entity_code,
+        entityId: entityRow.entity_id,
+        entityName: entityRow.entity_name,
+        offTrack: Number(entityRow.off_track_count ?? 0),
+        onTrack: Number(entityRow.on_track_count ?? 0),
+        priority: Number(entityRow.priority_count ?? 0),
+        running: Number(entityRow.running_count ?? 0),
+        total: Number(entityRow.total_count ?? 0),
+      })),
       completed: Number(row?.completed_count ?? 0),
       delayed: Number(row?.delayed_count ?? 0),
       offTrack: Number(row?.off_track_count ?? 0),

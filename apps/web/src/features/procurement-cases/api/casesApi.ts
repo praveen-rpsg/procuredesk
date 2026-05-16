@@ -39,6 +39,18 @@ export type DeletedCaseListItem = CaseListItem & {
 };
 
 export type CaseSummary = {
+  byEntity: Array<{
+    completed: number;
+    delayed: number;
+    entityCode: string | null;
+    entityId: string;
+    entityName: string | null;
+    offTrack: number;
+    onTrack: number;
+    priority: number;
+    running: number;
+    total: number;
+  }>;
   completed: number;
   delayed: number;
   offTrack: number;

@@ -326,17 +326,23 @@ function CasesWorkspaceList() {
     const nextStatus = toStatusFilter(params.get("status"));
     const nextIsDelayed = toBooleanFilter(params.get("isDelayed") ?? "");
     const nextPriorityCase = toBooleanFilter(params.get("priorityCase") ?? "");
+    const nextEntityIds = csvParam(params.get("entityIds"));
     const nextTenderTypeIds = csvParam(params.get("tenderTypeIds"));
     const nextTrackStatuses = csvParam(params.get("trackStatuses"))
       .map(toTrackStatusFilter)
       .filter(Boolean) as TrackStatusValue[];
     const nextTrackStatus = toTrackStatusFilter(params.get("trackStatus") ?? "");
 
-    if (!params.has("status") && !params.has("isDelayed") && !params.has("priorityCase") && !params.has("tenderTypeIds") && !params.has("trackStatus") && !params.has("trackStatuses")) return;
+    if (!params.has("status") && !params.has("isDelayed") && !params.has("priorityCase") && !params.has("entityIds") && !params.has("tenderTypeIds") && !params.has("trackStatus") && !params.has("trackStatuses")) return;
 
     setStatusValues(nextStatus ? [nextStatus as StatusFilter] : []);
     setIsDelayed(nextIsDelayed);
     setPriorityCase(nextPriorityCase);
+    setEntityIds(nextEntityIds);
+    if (nextEntityIds.length !== 1) {
+      setDepartmentIds([]);
+      setOwnerUserId("");
+    }
     setTenderTypeIds(nextTenderTypeIds);
     setTrackStatuses(nextTrackStatuses.length ? nextTrackStatuses : toTrackStatuses(nextTrackStatus || trackStatusFromLegacyDelay(nextIsDelayed)));
     setPageCursors([""]);

@@ -20,6 +20,7 @@ import {
   getCase,
   getCaseSummary,
   listCases,
+  type CaseSummary,
   type CaseDetail,
   type CaseListItem,
 } from "../../procurement-cases/api/casesApi";
@@ -73,6 +74,17 @@ type DashboardPageProps = {
 };
 
 type FocusCaseMode = "delayed" | "priority";
+type DashboardMetricTarget = Extract<
+  DashboardTarget,
+  | "all-cases"
+  | "completed-cases"
+  | "delayed-cases"
+  | "off-track-cases"
+  | "on-track-cases"
+  | "priority-cases"
+  | "running-cases"
+>;
+type CaseSummaryEntity = CaseSummary["byEntity"][number];
 
 const DASHBOARD_TABLE_FETCH_LIMIT = 100;
 const DASHBOARD_TABLE_PAGE_SIZE = 10;
@@ -213,6 +225,57 @@ function percentage(value: number, total: number): number {
   return Math.round((value / total) * 100);
 }
 
+function dashboardCasePathForTarget(
+  target: DashboardMetricTarget,
+  entityId?: string,
+): string {
+  const params = new URLSearchParams();
+  if (entityId) params.set("entityIds", entityId);
+  if (target === "running-cases") params.set("status", "running");
+  if (target === "completed-cases") params.set("status", "completed");
+  if (target === "delayed-cases") params.set("trackStatus", "delayed");
+  if (target === "off-track-cases") params.set("trackStatus", "off_track");
+  if (target === "on-track-cases") params.set("trackStatus", "on_track");
+  if (target === "priority-cases") {
+    params.set("status", "running");
+    params.set("priorityCase", "true");
+  }
+  const query = params.toString();
+  return `/cases${query ? `?${query}` : ""}`;
+}
+
+function metricEntityCount(
+  entity: CaseSummaryEntity,
+  target: DashboardMetricTarget,
+): number {
+  if (target === "running-cases") return entity.running;
+  if (target === "completed-cases") return entity.completed;
+  if (target === "delayed-cases") return entity.delayed;
+  if (target === "off-track-cases") return entity.offTrack;
+  if (target === "on-track-cases") return entity.onTrack;
+  if (target === "priority-cases") return entity.priority;
+  return entity.total;
+}
+
+function entityBreakdownForMetric(
+  entities: CaseSummaryEntity[],
+  target: DashboardMetricTarget,
+) {
+  return entities
+    .map((entity) => ({
+      count: metricEntityCount(entity, target),
+      entity,
+    }))
+    .filter((item) => item.count > 0)
+    .sort(
+      (left, right) =>
+        right.count - left.count ||
+        entityDisplayName(left.entity).localeCompare(
+          entityDisplayName(right.entity),
+        ),
+    );
+}
+
 function caseFlagLabel(row: CaseListItem): string {
   if (row.isDelayed) return "Delayed";
   if (isCaseOffTrack(row)) return "Off Track";
@@ -313,6 +376,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   }
 
   const metrics = summary.data ?? {
+    byEntity: [],
     completed: 0,
     delayed: 0,
     offTrack: 0,
@@ -595,43 +659,78 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                 <div className="dashboard-hero-metrics">
                   {group.metrics.map((metric) => {
                     const Icon = metric.icon;
+                    const entityBreakdown = entityBreakdownForMetric(
+                      metrics.byEntity,
+                      metric.target,
+                    );
                     return (
-                      <button
-                        aria-label={`Open ${metric.label} cases`}
-                        className={`metric-card dashboard-metric-card dashboard-metric-card-clickable metric-card-${metric.tone}`}
-                        disabled={!hasCaseAccess}
+                      <article
+                        className={`metric-card dashboard-metric-card metric-card-${metric.tone}`}
                         key={metric.label}
-                        onClick={() => onNavigate?.(metric.target)}
-                        type="button"
                       >
-                        <div className="dashboard-metric-topline">
-                          <div className="metric-card-icon">
-                            <Icon size={15} />
+                        <button
+                          aria-label={`Open ${metric.label} cases`}
+                          className="dashboard-metric-main-button dashboard-metric-card-clickable"
+                          disabled={!hasCaseAccess}
+                          onClick={() => onNavigate?.(metric.target)}
+                          type="button"
+                        >
+                          <div className="dashboard-metric-topline">
+                            <div className="metric-card-icon">
+                              <Icon size={15} />
+                            </div>
+                            {metric.progress != null ? (
+                              <span className="dashboard-metric-percent">
+                                {metric.progress}%
+                              </span>
+                            ) : null}
                           </div>
+                          <span>{metric.label}</span>
+                          <strong>
+                            {summary.isLoading ? (
+                              <Skeleton height={22} width="60%" />
+                            ) : (
+                              metric.value
+                            )}
+                          </strong>
+                          <small>{metric.subLabel}</small>
                           {metric.progress != null ? (
-                            <span className="dashboard-metric-percent">
-                              {metric.progress}%
+                            <span
+                              aria-hidden="true"
+                              className="dashboard-metric-bar"
+                            >
+                              <i style={{ width: `${metric.progress}%` }} />
                             </span>
                           ) : null}
-                        </div>
-                        <span>{metric.label}</span>
-                        <strong>
-                          {summary.isLoading ? (
-                            <Skeleton height={22} width="60%" />
-                          ) : (
-                            metric.value
-                          )}
-                        </strong>
-                        <small>{metric.subLabel}</small>
-                        {metric.progress != null ? (
-                          <span
-                            aria-hidden="true"
-                            className="dashboard-metric-bar"
+                        </button>
+                        {!summary.isLoading && entityBreakdown.length ? (
+                          <div
+                            aria-label={`${metric.label} by entity`}
+                            className="dashboard-metric-entity-breakdown"
                           >
-                            <i style={{ width: `${metric.progress}%` }} />
-                          </span>
+                            {entityBreakdown.map(({ count, entity }) => (
+                              <button
+                                aria-label={`Open ${metric.label} cases for ${entityDisplayName(entity)}`}
+                                className="dashboard-metric-entity-chip"
+                                disabled={!hasCaseAccess}
+                                key={entity.entityId}
+                                onClick={() =>
+                                  navigateToAppPath(
+                                    dashboardCasePathForTarget(
+                                      metric.target,
+                                      entity.entityId,
+                                    ),
+                                  )
+                                }
+                                type="button"
+                              >
+                                <span>{entityDisplayName(entity)}</span>
+                                <strong>{count}</strong>
+                              </button>
+                            ))}
+                          </div>
                         ) : null}
-                      </button>
+                      </article>
                     );
                   })}
                 </div>
