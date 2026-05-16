@@ -25,6 +25,7 @@ export type CaseListFilters = {
   priorityCase?: boolean;
   prReceiptMonths?: string[];
   q?: string;
+  stageCodes?: number[];
   status?: "running" | "completed";
   tenderTypeIds?: string[];
   trackStatus?: "delayed" | "off_track" | "on_track";
@@ -1194,6 +1195,10 @@ function applyCaseListFilters(where: string[], values: unknown[], filters: CaseL
   appendTrackStatusFilter(where, filters.trackStatuses ?? (filters.trackStatus ? [filters.trackStatus] : undefined));
   for (const filter of arrayFilters) {
     appendOptionalArrayFilter(where, values, filter);
+  }
+  if (filters.stageCodes?.length) {
+    values.push(filters.stageCodes);
+    where.push(`c.stage_code = any($${values.length}::int[])`);
   }
   if (filters.prReceiptMonths?.length) {
     values.push(filters.prReceiptMonths);

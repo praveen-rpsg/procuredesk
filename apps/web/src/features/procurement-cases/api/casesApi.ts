@@ -145,6 +145,7 @@ export function listCases(params: {
   priorityCase?: boolean | undefined;
   prReceiptMonths?: string[] | undefined;
   q?: string | undefined;
+  stageCodes?: number[] | undefined;
   status?: string | undefined;
   tenderTypeIds?: string[] | undefined;
   trackStatus?: "delayed" | "off_track" | "on_track" | undefined;
@@ -177,6 +178,7 @@ function setCaseListSearchParams(
   setBooleanParam(search, "priorityCase", params.priorityCase);
   setArrayParam(search, "prReceiptMonths", params.prReceiptMonths);
   setStringParam(search, "q", params.q);
+  setNumberArrayParam(search, "stageCodes", params.stageCodes);
   setStringParam(search, "status", params.status);
   setArrayParam(search, "tenderTypeIds", params.tenderTypeIds);
   setStringParam(search, "trackStatus", params.trackStatus);
@@ -207,6 +209,14 @@ function setNumberParam(
   value: number | undefined,
 ): void {
   if (value != null) search.set(key, String(value));
+}
+
+function setNumberArrayParam(
+  search: URLSearchParams,
+  key: string,
+  value: number[] | undefined,
+): void {
+  if (value?.length) search.set(key, value.join(","));
 }
 
 function setStringParam(

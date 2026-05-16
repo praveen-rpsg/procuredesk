@@ -37,6 +37,7 @@ import {
   type ExportJobStatus,
   type ReportCode,
   type ReportCaseRow,
+  type ReportQueryParams,
   type ReportingAnalytics,
   type SavedReportView,
   type StageTimeRow,
@@ -251,6 +252,12 @@ export function ReportsWorkspace() {
   }, [filters.reportParams, reportCode]);
 
   const metrics = data.analytics.data;
+  const openAnalyticsDrilldown = useCallback(
+    (overrides: ReportQueryParams = {}) => {
+      navigateToAppPath(buildCaseDrilldownPath(filters.analyticsParams, overrides));
+    },
+    [filters.analyticsParams],
+  );
   const rcPoExpiryRows = data.rcPoExpiry.data ?? [];
   const rcPoVisibleRows = rcPoExpiryRows.slice(0, rcPoPageSize);
   const rcPoHasNextPage = rcPoExpiryRows.length > rcPoPageSize;
@@ -1613,6 +1620,7 @@ export function ReportsWorkspace() {
               activeFilterCount={activeFilterCount}
               amountUnit={filters.amountUnit}
               metrics={metrics}
+              onOpenCaseDrilldown={openAnalyticsDrilldown}
               stageError={data.stageTime.error}
               stageIsLoading={data.stageTime.isLoading}
               stageRows={data.stageTime.data}
@@ -1893,6 +1901,7 @@ function ReportAnalyticsDashboard({
   activeFilterCount,
   amountUnit,
   metrics,
+  onOpenCaseDrilldown,
   stageError,
   stageIsLoading,
   stageRows,
@@ -1900,6 +1909,7 @@ function ReportAnalyticsDashboard({
   activeFilterCount: number;
   amountUnit: AmountUnit;
   metrics: ReportingAnalytics | undefined;
+  onOpenCaseDrilldown: (overrides?: ReportQueryParams) => void;
   stageError: Error | null;
   stageIsLoading: boolean;
   stageRows: StageTimeRow[] | undefined;
@@ -1907,28 +1917,33 @@ function ReportAnalyticsDashboard({
   const statusRows = [
     {
       label: "On-Track",
+      onClick: () => onOpenCaseDrilldown({ status: "running", trackStatuses: ["on_track"] }),
       tone: "success" as const,
       value: metrics?.onTrackCases ?? 0,
     },
     {
       label: "Off-Track",
+      onClick: () => onOpenCaseDrilldown({ status: "running", trackStatuses: ["off_track"] }),
       tone: "warning" as const,
       value: metrics?.offTrackCases ?? 0,
     },
     {
       label: "Delayed",
+      onClick: () => onOpenCaseDrilldown({ status: "running", trackStatuses: ["delayed"] }),
       tone: "danger" as const,
       value: metrics?.delayedCases ?? 0,
     },
   ];
   const entityRows = (metrics?.byEntity ?? []).map((row) => ({
     amount: row.totalAwardedAmount,
+    id: row.entityId,
     label: row.entityCode ?? row.entityName ?? row.entityId,
     secondaryValue: row.delayedCount,
     tertiaryValue: row.offTrackCount,
     value: row.caseCount,
   }));
   const entityPrRows = (metrics?.byEntity ?? []).map((row) => ({
+    id: row.entityId,
     label: row.entityCode ?? row.entityName ?? row.entityId,
     value: row.totalPrValue,
   }));
@@ -1960,24 +1975,28 @@ function ReportAnalyticsDashboard({
     {
       label: "Tenders Count",
       meta: `${formatInteger(metrics?.runningCases ?? 0)} running / ${formatInteger(metrics?.completedCases ?? 0)} completed`,
+      onClick: () => onOpenCaseDrilldown(),
       tone: "neutral",
       value: formatInteger(metrics?.totalCases ?? 0),
     },
     {
       label: `Tender Value (${amountUnitLabel(amountUnit)}) [All Inclusive]`,
       meta: "",
+      onClick: () => onOpenCaseDrilldown(),
       tone: "brand",
       value: formatAmount(metrics?.totalPrValue ?? 0, amountUnit),
     },
     {
       label: `NFA Approved Amount (${amountUnitLabel(amountUnit)}) [All Inclusive]`,
       meta: "",
+      onClick: () => onOpenCaseDrilldown({ status: "completed", trackStatuses: [] }),
       tone: "success",
       value: formatAmount(metrics?.totalApprovedAmount ?? 0, amountUnit),
     },
     {
       label: `Savings wrt PR Value/Approved Budget (${amountUnitLabel(amountUnit)}) [All Inclusive]`,
       meta: formatSavingsPercent(metrics?.savingsWrtPr, metrics?.completedPrValue),
+      onClick: () => onOpenCaseDrilldown({ status: "completed", trackStatuses: [] }),
       tone: "success",
       value: formatAmount(metrics?.savingsWrtPr ?? 0, amountUnit),
     },
@@ -1987,30 +2006,35 @@ function ReportAnalyticsDashboard({
         metrics?.savingsWrtEstimate,
         metrics?.completedEstimateBenchmark,
       ),
+      onClick: () => onOpenCaseDrilldown({ status: "completed", trackStatuses: [] }),
       tone: "success",
       value: formatAmount(metrics?.savingsWrtEstimate ?? 0, amountUnit),
     },
     {
       label: "Avg Bidder Participation (Open + Limited, Completed)",
       meta: "",
+      onClick: () => onOpenCaseDrilldown({ status: "completed", trackStatuses: [] }),
       tone: "warning",
       value: formatNullableDecimal(metrics?.averageBiddersParticipated),
     },
     {
       label: "Avg Qualified Bidders Count (Open + Limited, Completed)",
       meta: "",
+      onClick: () => onOpenCaseDrilldown({ status: "completed", trackStatuses: [] }),
       tone: "brand",
       value: formatNullableDecimal(metrics?.averageQualifiedBidders),
     },
     {
       label: "Avg Cycle Time (Days)",
       meta: metrics?.completedCases != null ? `${metrics.completedCases} completed` : "",
+      onClick: () => onOpenCaseDrilldown({ status: "completed", trackStatuses: [] }),
       tone: delayedRatio > 0 ? "danger" : "success",
       value: formatNullableDecimal(metrics?.averageCycleTimeDays),
     },
     {
       label: "Avg Running Tender Age",
       meta: metrics?.runningCases != null ? `${metrics.runningCases} running` : "",
+      onClick: () => onOpenCaseDrilldown({ status: "running", trackStatuses: [] }),
       tone: "warning",
       value: formatNullableDecimal(metrics?.averageRunningCycleTimeDays),
     },
@@ -2032,16 +2056,19 @@ function ReportAnalyticsDashboard({
         <div className="report-analytics-overview-grid">
           <div className="report-analytics-kpi-strip">
             {kpiTiles.map((tile) => (
-              <article
+              <button
                 className={`report-analytics-kpi report-analytics-kpi-${tile.tone}`}
                 key={tile.label}
+                onClick={tile.onClick}
+                title={`Open cases for ${tile.label}`}
+                type="button"
               >
                 <div>
                   <span>{tile.label}</span>
                   <strong>{tile.value}</strong>
                   {tile.meta ? <small>{tile.meta}</small> : null}
                 </div>
-              </article>
+              </button>
             ))}
           </div>
           <aside className="report-analytics-status-panel">
@@ -2080,6 +2107,7 @@ function ReportAnalyticsDashboard({
         />
         <ReportEntityPrValueDonut
           amountUnit={amountUnit}
+          onEntityClick={(entityId) => onOpenCaseDrilldown({ entityIds: [entityId] })}
           rows={entityPrRows}
           total={metrics?.totalPrValue ?? 0}
         />
@@ -2091,7 +2119,14 @@ function ReportAnalyticsDashboard({
           subtitle={`${entityRows.length} reporting groups`}
           title="Cases by entity"
         />
-        <ReportEntityRankedList rows={entityRows} amountUnit={amountUnit} />
+        <ReportEntityRankedList
+          amountUnit={amountUnit}
+          onEntityClick={(entityId) => onOpenCaseDrilldown({ entityIds: [entityId] })}
+          onEntityStatusClick={(entityId, trackStatus) =>
+            onOpenCaseDrilldown({ entityIds: [entityId], status: "running", trackStatuses: [trackStatus] })
+          }
+          rows={entityRows}
+        />
       </section>
 
       <section className="state-panel report-analytics-card report-analytics-wide">
@@ -2100,7 +2135,16 @@ function ReportAnalyticsDashboard({
           subtitle={`${departmentNatureRows.length} department(s)`}
           title="User department case count by nature of work"
         />
-        <ReportDepartmentNatureStackedBar rows={departmentNatureRows} />
+        <ReportDepartmentNatureStackedBar
+          onDepartmentClick={(departmentId) => onOpenCaseDrilldown({ departmentIds: [departmentId] })}
+          onNatureClick={(departmentId, natureOfWorkId) =>
+            onOpenCaseDrilldown({
+              ...(departmentId ? { departmentIds: [departmentId] } : {}),
+              natureOfWorkIds: [natureOfWorkId],
+            })
+          }
+          rows={departmentNatureRows}
+        />
       </section>
 
       <section className="state-panel report-analytics-card report-analytics-wide report-analytics-tender-type-card">
@@ -2112,15 +2156,10 @@ function ReportAnalyticsDashboard({
         <ReportTenderTypeStackedChart
           rows={tenderTypeRows}
           onTenderTypeClick={(tenderTypeId) => {
-            const params = new URLSearchParams();
-            params.set("tenderTypeIds", tenderTypeId);
-            navigateToAppPath(`/cases?${params.toString()}`);
+            onOpenCaseDrilldown({ tenderTypeIds: [tenderTypeId] });
           }}
           onTenderTypeStatusClick={(tenderTypeId, trackStatus) => {
-            const params = new URLSearchParams();
-            params.set("tenderTypeIds", tenderTypeId);
-            params.set("trackStatus", trackStatus);
-            navigateToAppPath(`/cases?${params.toString()}`);
+            onOpenCaseDrilldown({ status: "running", tenderTypeIds: [tenderTypeId], trackStatuses: [trackStatus] });
           }}
         />
       </section>
@@ -2140,7 +2179,10 @@ function ReportAnalyticsDashboard({
         ) : stageError ? (
           <p className="inline-error">{stageError.message}</p>
         ) : (
-          <ReportStageBreakdown rows={stageChartRows} />
+          <ReportStageBreakdown
+            onStageClick={(stageCode) => onOpenCaseDrilldown({ stageCodes: [stageCode] })}
+            rows={stageChartRows}
+          />
         )}
       </section>
     </section>
@@ -2156,6 +2198,7 @@ function buildStageBreakdownRows(rows: StageTimeRow[]) {
     .sort(([left], [right]) => left - right)
     .map(([stageCode, value]) => ({
       label: formatCaseStage(stageCode),
+      stageCode,
       value,
     }));
 }
@@ -2164,9 +2207,10 @@ function buildDepartmentNatureChartRows(
   rows: ReportingAnalytics["byDepartmentNatureOfWork"],
 ) {
   const departments = new Map<string, {
+    departmentId: string | null;
     departmentName: string;
     total: number;
-    values: Map<string, number>;
+    values: Map<string, { natureOfWorkId: string | null; value: number }>;
   }>();
   const natureNames = new Set<string>();
 
@@ -2174,12 +2218,20 @@ function buildDepartmentNatureChartRows(
     const departmentKey = row.departmentId ?? row.departmentName;
     const natureName = row.natureOfWorkName || "Unspecified";
     const department = departments.get(departmentKey) ?? {
+      departmentId: row.departmentId,
       departmentName: row.departmentName || "Unspecified",
       total: 0,
-      values: new Map<string, number>(),
+      values: new Map<string, { natureOfWorkId: string | null; value: number }>(),
     };
     department.total += row.caseCount;
-    department.values.set(natureName, (department.values.get(natureName) ?? 0) + row.caseCount);
+    const segment = department.values.get(natureName) ?? {
+      natureOfWorkId: row.natureOfWorkId,
+      value: 0,
+    };
+    department.values.set(natureName, {
+      natureOfWorkId: segment.natureOfWorkId ?? row.natureOfWorkId,
+      value: segment.value + row.caseCount,
+    });
     departments.set(departmentKey, department);
     natureNames.add(natureName);
   });
@@ -2189,10 +2241,12 @@ function buildDepartmentNatureChartRows(
     .sort((left, right) => right.total - left.total || left.departmentName.localeCompare(right.departmentName))
     .slice(0, 10)
     .map((department) => ({
+      departmentId: department.departmentId,
       departmentName: department.departmentName,
       segments: natures.map((nature) => ({
         label: nature,
-        value: department.values.get(nature) ?? 0,
+        natureOfWorkId: department.values.get(nature)?.natureOfWorkId ?? null,
+        value: department.values.get(nature)?.value ?? 0,
       })),
       total: department.total,
     }));
@@ -2252,6 +2306,52 @@ function toggleReportFilterValue(
   return checked
     ? [...new Set([...values, value])]
     : values.filter((item) => item !== value);
+}
+
+function buildCaseDrilldownPath(
+  baseParams: ReportQueryParams,
+  overrides: ReportQueryParams = {},
+): string {
+  const params = new URLSearchParams();
+  const mergedParams = { ...baseParams, ...overrides };
+
+  setDrilldownCsvParam(params, "budgetTypeIds", mergedParams.budgetTypeIds);
+  setDrilldownCsvParam(params, "completionFys", mergedParams.completionFys);
+  setDrilldownBooleanParam(params, "cpcInvolved", mergedParams.cpcInvolved);
+  setDrilldownCsvParam(params, "departmentIds", mergedParams.departmentIds);
+  setDrilldownCsvParam(params, "entityIds", mergedParams.entityIds);
+  setDrilldownBooleanParam(params, "loiAwarded", mergedParams.loiAwarded);
+  setDrilldownCsvParam(params, "natureOfWorkIds", mergedParams.natureOfWorkIds);
+  if (mergedParams.ownerUserIds?.length) {
+    params.set("ownerUserId", mergedParams.ownerUserIds[0] ?? "");
+  }
+  setDrilldownCsvParam(params, "prReceiptMonths", mergedParams.prReceiptMonths);
+  setDrilldownBooleanParam(params, "priorityCase", mergedParams.priorityCase);
+  if (mergedParams.q) params.set("q", mergedParams.q);
+  setDrilldownCsvParam(params, "stageCodes", mergedParams.stageCodes);
+  if (mergedParams.status) params.set("status", mergedParams.status);
+  setDrilldownCsvParam(params, "tenderTypeIds", mergedParams.tenderTypeIds);
+  setDrilldownCsvParam(params, "trackStatuses", mergedParams.trackStatuses);
+  setDrilldownCsvParam(params, "valueSlabs", mergedParams.valueSlabs);
+
+  const query = params.toString();
+  return `/cases${query ? `?${query}` : ""}`;
+}
+
+function setDrilldownCsvParam(
+  params: URLSearchParams,
+  key: string,
+  value: Array<number | string> | undefined,
+): void {
+  if (value?.length) params.set(key, value.join(","));
+}
+
+function setDrilldownBooleanParam(
+  params: URLSearchParams,
+  key: string,
+  value: boolean | undefined,
+): void {
+  if (typeof value === "boolean") params.set(key, String(value));
 }
 
 function selectedReportFilterLabel(
@@ -2359,11 +2459,19 @@ function ReportPremiumBarChart({
 
 function ReportEntityRankedList({
   amountUnit,
+  onEntityClick,
+  onEntityStatusClick,
   rows,
 }: {
   amountUnit: AmountUnit;
+  onEntityClick?: (entityId: string) => void;
+  onEntityStatusClick?: (
+    entityId: string,
+    trackStatus: "delayed" | "off_track" | "on_track",
+  ) => void;
   rows: Array<{
     amount: number;
+    id: string;
     label: string;
     secondaryValue: number;
     tertiaryValue?: number;
@@ -2382,8 +2490,30 @@ function ReportEntityRankedList({
         const delayed = row.secondaryValue;
         const offTrack = row.tertiaryValue ?? 0;
         const onTrack = Math.max(row.value - delayed - offTrack, 0);
+        const openEntity = () => onEntityClick?.(row.id);
+        const openEntityStatus = (
+          event: MouseEvent<HTMLButtonElement>,
+          trackStatus: "delayed" | "off_track" | "on_track",
+        ) => {
+          event.stopPropagation();
+          onEntityStatusClick?.(row.id, trackStatus);
+        };
         return (
-          <article className="report-entity-ranked-row" key={row.label}>
+          <article
+            className="report-entity-ranked-row"
+            key={row.label}
+            onClick={openEntity}
+            onKeyDown={(event) => {
+              if (!onEntityClick) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                openEntity();
+              }
+            }}
+            role={onEntityClick ? "button" : undefined}
+            tabIndex={onEntityClick ? 0 : undefined}
+            title={onEntityClick ? `Open ${row.label} cases` : undefined}
+          >
             <span className="report-entity-rank">#{index + 1}</span>
             <div className="report-entity-ranked-main">
               <div className="report-entity-ranked-title">
@@ -2396,9 +2526,30 @@ function ReportEntityRankedList({
             </div>
             <div className="report-entity-ranked-metrics">
               <strong>{row.value}</strong>
-              <span className="report-status-pill report-status-pill-success">{onTrack}</span>
-              <span className="report-status-pill report-status-pill-warning">{offTrack}</span>
-              <span className="report-status-pill report-status-pill-danger">{delayed}</span>
+              <button
+                className="report-status-pill report-status-pill-success"
+                onClick={(event) => openEntityStatus(event, "on_track")}
+                title={`Open ${row.label} on-track cases`}
+                type="button"
+              >
+                {onTrack}
+              </button>
+              <button
+                className="report-status-pill report-status-pill-warning"
+                onClick={(event) => openEntityStatus(event, "off_track")}
+                title={`Open ${row.label} off-track cases`}
+                type="button"
+              >
+                {offTrack}
+              </button>
+              <button
+                className="report-status-pill report-status-pill-danger"
+                onClick={(event) => openEntityStatus(event, "delayed")}
+                title={`Open ${row.label} delayed cases`}
+                type="button"
+              >
+                {delayed}
+              </button>
             </div>
           </article>
         );
@@ -2415,11 +2566,13 @@ function ReportEntityRankedList({
 
 function ReportEntityPrValueDonut({
   amountUnit,
+  onEntityClick,
   rows,
   total,
 }: {
   amountUnit: AmountUnit;
-  rows: Array<{ label: string; value: number }>;
+  onEntityClick?: (entityId: string) => void;
+  rows: Array<{ id: string; label: string; value: number }>;
   total: number;
 }) {
   const radius = 38;
@@ -2453,10 +2606,12 @@ function ReportEntityPrValueDonut({
                 cx="48"
                 cy="48"
                 key={row.label}
+                onClick={() => onEntityClick?.(row.id)}
                 r={radius}
                 stroke={analyticsPaletteColor(index)}
                 strokeDasharray={`${length} ${circumference - length}`}
                 strokeDashoffset={dashOffset}
+                style={{ cursor: onEntityClick ? "pointer" : undefined }}
               />
             );
           })}
@@ -2470,7 +2625,13 @@ function ReportEntityPrValueDonut({
         {visibleRows.map((row, index) => {
           const share = total > 0 ? (row.value / total) * 100 : 0;
           return (
-            <div key={row.label}>
+            <button
+              className="report-entity-value-legend-row"
+              key={row.label}
+              onClick={() => onEntityClick?.(row.id)}
+              title={`Open ${row.label} cases`}
+              type="button"
+            >
               <span
                 className="report-entity-value-dot"
                 style={{ background: analyticsPaletteColor(index) }}
@@ -2478,7 +2639,7 @@ function ReportEntityPrValueDonut({
               <strong>{row.label}</strong>
               <span>{formatAmount(row.value, amountUnit)}</span>
               <em>{share.toFixed(1)}%</em>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -2487,11 +2648,16 @@ function ReportEntityPrValueDonut({
 }
 
 function ReportDepartmentNatureStackedBar({
+  onDepartmentClick,
+  onNatureClick,
   rows,
 }: {
+  onDepartmentClick?: (departmentId: string) => void;
+  onNatureClick?: (departmentId: string | null, natureOfWorkId: string) => void;
   rows: Array<{
+    departmentId: string | null;
     departmentName: string;
-    segments: Array<{ label: string; value: number }>;
+    segments: Array<{ label: string; natureOfWorkId: string | null; value: number }>;
     total: number;
   }>;
 }) {
@@ -2515,8 +2681,26 @@ function ReportDepartmentNatureStackedBar({
         ))}
       </div>
       <div className="report-department-nature-rows">
-        {rows.map((row) => (
-          <div className="report-department-nature-row" key={row.departmentName}>
+        {rows.map((row) => {
+          const canOpenDepartment = Boolean(row.departmentId && onDepartmentClick);
+          return (
+          <div
+            className="report-department-nature-row"
+            key={row.departmentName}
+            onClick={() => {
+              if (row.departmentId) onDepartmentClick?.(row.departmentId);
+            }}
+            onKeyDown={(event) => {
+              if (!canOpenDepartment) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                if (row.departmentId) onDepartmentClick?.(row.departmentId);
+              }
+            }}
+            role={canOpenDepartment ? "button" : undefined}
+            tabIndex={canOpenDepartment ? 0 : undefined}
+            title={canOpenDepartment ? `Open ${row.departmentName} cases` : undefined}
+          >
             <div className="report-department-nature-label">
               <strong>{row.departmentName}</strong>
               <span>{row.total} case{row.total === 1 ? "" : "s"}</span>
@@ -2527,14 +2711,27 @@ function ReportDepartmentNatureStackedBar({
                 style={{ width: `${Math.max(8, (row.total / max) * 100)}%` }}
               >
                 {legend.map((label, index) => {
-                  const value = row.segments.find((segment) => segment.label === label)?.value ?? 0;
+                  const segment = row.segments.find((item) => item.label === label);
+                  const value = segment?.value ?? 0;
                   return value > 0 ? (
-                    <span
+                    <button
                       key={label}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (segment?.natureOfWorkId) {
+                          onNatureClick?.(row.departmentId, segment.natureOfWorkId);
+                        }
+                      }}
                       style={{
                         background: analyticsPaletteColor(index),
                         flexBasis: `${(value / row.total) * 100}%`,
                       }}
+                      title={
+                        segment?.natureOfWorkId
+                          ? `Open ${row.departmentName} ${label} cases`
+                          : undefined
+                      }
+                      type="button"
                     />
                   ) : null;
                 })}
@@ -2542,7 +2739,8 @@ function ReportDepartmentNatureStackedBar({
             </div>
             <strong className="report-department-nature-total">{row.total}</strong>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -2718,9 +2916,11 @@ function analyticsPaletteColor(index: number) {
 }
 
 function ReportStageBreakdown({
+  onStageClick,
   rows,
 }: {
-  rows: Array<{ label: string; value: number }>;
+  onStageClick?: (stageCode: number) => void;
+  rows: Array<{ label: string; stageCode: number; value: number }>;
 }) {
   const max = Math.max(1, ...rows.map((row) => row.value));
   const total = rows.reduce((sum, row) => sum + row.value, 0);
@@ -2732,7 +2932,21 @@ function ReportStageBreakdown({
   return (
     <div className="report-stage-breakdown">
       {rows.map((row) => (
-        <div className="report-stage-row" key={row.label}>
+        <div
+          className="report-stage-row"
+          key={row.label}
+          onClick={() => onStageClick?.(row.stageCode)}
+          onKeyDown={(event) => {
+            if (!onStageClick) return;
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onStageClick(row.stageCode);
+            }
+          }}
+          role={onStageClick ? "button" : undefined}
+          tabIndex={onStageClick ? 0 : undefined}
+          title={onStageClick ? `Open ${row.label} cases` : undefined}
+        >
           <div>
             <strong>{row.label}</strong>
             <span>
@@ -2845,6 +3059,7 @@ function ReportDonutChart({
 }: {
   rows: Array<{
     label: string;
+    onClick?: () => void;
     tone: "danger" | "success" | "warning";
     value: number;
   }>;
@@ -2873,9 +3088,11 @@ function ReportDonutChart({
                 cx="48"
                 cy="48"
                 key={row.label}
+                onClick={row.onClick}
                 r={radius}
                 strokeDasharray={`${length} ${circumference - length}`}
                 strokeDashoffset={dashOffset}
+                style={{ cursor: row.onClick ? "pointer" : undefined }}
               />
             );
           })}
@@ -2886,13 +3103,28 @@ function ReportDonutChart({
         </div>
       </div>
       <div className="report-donut-legend">
-        {rows.map((row) => (
-          <div key={row.label}>
-            <span className={`report-legend-dot report-legend-${row.tone}`} />
-            <span>{row.label}</span>
-            <strong>{row.value}</strong>
-          </div>
-        ))}
+        {rows.map((row) => {
+          const content = (
+            <>
+              <span className={`report-legend-dot report-legend-${row.tone}`} />
+              <span>{row.label}</span>
+              <strong>{row.value}</strong>
+            </>
+          );
+          return row.onClick ? (
+            <button
+              className="report-donut-legend-row"
+              key={row.label}
+              onClick={row.onClick}
+              title={`Open ${row.label} cases`}
+              type="button"
+            >
+              {content}
+            </button>
+          ) : (
+            <div key={row.label}>{content}</div>
+          );
+        })}
       </div>
     </div>
   );

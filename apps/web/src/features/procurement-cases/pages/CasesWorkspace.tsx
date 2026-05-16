@@ -114,6 +114,7 @@ type CaseViewState = {
   priorityCase: BooleanFilter;
   prReceiptMonths: string[];
   q: string;
+  stageCodes: string[];
   statusValues: StatusFilter[];
   tenderTypeIds: string[];
   trackStatus?: TrackStatusFilter;
@@ -208,6 +209,7 @@ function CasesWorkspaceList() {
   const [q, setQ] = useState("");
   const [savedViewName, setSavedViewName] = useState("");
   const [savedViews, setSavedViews] = useState<SavedCaseView[]>(readSavedCaseViews);
+  const [stageCodes, setStageCodes] = useState<string[]>([]);
   const [statusValues, setStatusValues] = useState<StatusFilter[]>([]);
   const [tenderTypeIds, setTenderTypeIds] = useState<string[]>([]);
   const [trackStatuses, setTrackStatuses] = useState<TrackStatusValue[]>([]);
@@ -219,6 +221,10 @@ function CasesWorkspaceList() {
   const canCreate = canCreateCase(user);
   const canRestore = canRestoreCase(user);
   const selectedStatus = statusValues.length === 1 ? statusValues[0] : "";
+  const numericStageCodes = useMemo(
+    () => stageCodes.map(Number).filter((stageCode) => Number.isInteger(stageCode)),
+    [stageCodes],
+  );
 
   const entities = useQuery({ queryFn: listAdminEntities, queryKey: ["case-filter-entities"] });
   const catalog = useQuery({ queryFn: getCatalogSnapshot, queryKey: ["case-filter-catalog"] });
@@ -251,6 +257,7 @@ function CasesWorkspaceList() {
       priorityCase: booleanFilter(priorityCase),
       prReceiptMonths: prReceiptMonths.length ? prReceiptMonths : undefined,
       q: debouncedQ || undefined,
+      stageCodes: numericStageCodes.length ? numericStageCodes : undefined,
       status: selectedStatus || undefined,
       tenderTypeIds: tenderTypeIds.length ? tenderTypeIds : undefined,
       trackStatuses: trackStatuses.length ? trackStatuses : undefined,
@@ -268,6 +275,7 @@ function CasesWorkspaceList() {
       entityIds,
       loiAwarded,
       natureOfWorkIds,
+      numericStageCodes,
       ownerUserId,
       priorityCase,
       prReceiptMonths,
@@ -291,6 +299,7 @@ function CasesWorkspaceList() {
     entityIds,
     loiAwarded,
     natureOfWorkIds,
+    numericStageCodes,
     ownerUserId,
     priorityCase,
     prReceiptMonths,
@@ -326,25 +335,43 @@ function CasesWorkspaceList() {
     const nextStatus = toStatusFilter(params.get("status"));
     const nextIsDelayed = toBooleanFilter(params.get("isDelayed") ?? "");
     const nextPriorityCase = toBooleanFilter(params.get("priorityCase") ?? "");
+    const nextBudgetTypeIds = csvParam(params.get("budgetTypeIds"));
+    const nextCompletionFys = csvParam(params.get("completionFys"));
+    const nextCpcInvolved = toBooleanFilter(params.get("cpcInvolved") ?? "");
+    const nextDepartmentIds = csvParam(params.get("departmentIds"));
     const nextEntityIds = csvParam(params.get("entityIds"));
+    const nextLoiAwarded = toBooleanFilter(params.get("loiAwarded") ?? "");
+    const nextNatureOfWorkIds = csvParam(params.get("natureOfWorkIds"));
+    const nextOwnerUserId = params.get("ownerUserId") ?? csvParam(params.get("ownerUserIds"))[0] ?? "";
+    const nextPrReceiptMonths = csvParam(params.get("prReceiptMonths"));
+    const nextQ = params.get("q") ?? "";
+    const nextStageCodes = csvParam(params.get("stageCodes")).filter((value) => Number.isInteger(Number(value)));
     const nextTenderTypeIds = csvParam(params.get("tenderTypeIds"));
     const nextTrackStatuses = csvParam(params.get("trackStatuses"))
       .map(toTrackStatusFilter)
       .filter(Boolean) as TrackStatusValue[];
     const nextTrackStatus = toTrackStatusFilter(params.get("trackStatus") ?? "");
+    const nextValueSlabs = csvParam(params.get("valueSlabs")).filter(isValueSlabOption);
 
-    if (!params.has("status") && !params.has("isDelayed") && !params.has("priorityCase") && !params.has("entityIds") && !params.has("tenderTypeIds") && !params.has("trackStatus") && !params.has("trackStatuses")) return;
+    if (!hasCaseUrlFilters(params)) return;
 
+    setBudgetTypeIds(nextBudgetTypeIds);
+    setCompletionFys(nextCompletionFys);
+    setCpcInvolved(nextCpcInvolved);
+    setDepartmentIds(nextDepartmentIds);
     setStatusValues(nextStatus ? [nextStatus as StatusFilter] : []);
     setIsDelayed(nextIsDelayed);
+    setLoiAwarded(nextLoiAwarded);
+    setNatureOfWorkIds(nextNatureOfWorkIds);
+    setOwnerUserId(nextOwnerUserId);
     setPriorityCase(nextPriorityCase);
     setEntityIds(nextEntityIds);
-    if (nextEntityIds.length !== 1) {
-      setDepartmentIds([]);
-      setOwnerUserId("");
-    }
+    setPrReceiptMonths(nextPrReceiptMonths);
+    setQ(nextQ);
+    setStageCodes(nextStageCodes);
     setTenderTypeIds(nextTenderTypeIds);
     setTrackStatuses(nextTrackStatuses.length ? nextTrackStatuses : toTrackStatuses(nextTrackStatus || trackStatusFromLegacyDelay(nextIsDelayed)));
+    setValueSlabs(nextValueSlabs);
     setPageCursors([""]);
   }, [location.search]);
 
@@ -409,6 +436,7 @@ function CasesWorkspaceList() {
     ownerUserId,
     priorityCase,
     ...prReceiptMonths,
+    ...stageCodes,
     ...statusValues,
     ...tenderTypeIds,
     ...trackStatuses,
@@ -445,9 +473,10 @@ function CasesWorkspaceList() {
     if (dateTo) chips.push({ key: "dateTo", label: `To: ${dateTo}`, onClear: () => setDateTo("") });
     if (prReceiptMonths.length) chips.push({ key: "prMonths", label: `PR Month: ${prReceiptMonths.join(", ")}`, onClear: () => setPrReceiptMonths([]) });
     if (completionFys.length) chips.push({ key: "completionFy", label: `Comp. FY: ${completionFys.join(", ")}`, onClear: () => setCompletionFys([]) });
+    if (stageCodes.length) chips.push({ key: "stage", label: `Stage: ${stageCodes.map((stageCode) => formatCaseStage(Number(stageCode))).join(", ")}`, onClear: () => setStageCodes([]) });
     if (valueSlabs.length) chips.push({ key: "valueSlab", label: `Value: ${labelSelected(valueSlabs, valueSlabOptions.filter((o) => o.value) as Array<{ label: string; value: string }> )}`, onClear: () => setValueSlabs([]) });
     return chips;
-  }, [budgetTypeIds, budgetTypes, catalog.data, completionFys, cpcInvolved, dateFrom, dateTo, departmentIds, departments.data, entityIds, entities.data, loiAwarded, natureOfWork, natureOfWorkIds, ownerUserId, ownerOptions, prReceiptMonths, priorityCase, statusValues, tenderTypeIds, trackStatuses, valueSlabs]);
+  }, [budgetTypeIds, budgetTypes, catalog.data, completionFys, cpcInvolved, dateFrom, dateTo, departmentIds, departments.data, entityIds, entities.data, loiAwarded, natureOfWork, natureOfWorkIds, ownerUserId, ownerOptions, prReceiptMonths, priorityCase, stageCodes, statusValues, tenderTypeIds, trackStatuses, valueSlabs]);
   const caseRows = cases.data ?? [];
   const entityFilterOptions = useMemo(
     () => uniqueFilterOptions(caseRows, (row) => entityNameById.get(row.entityId) ?? row.entityId),
@@ -932,6 +961,7 @@ function CasesWorkspaceList() {
     setPriorityCase("");
     setPrReceiptMonths([]);
     setQ("");
+    setStageCodes([]);
     setStatusValues([]);
     setTenderTypeIds([]);
     setTrackStatuses([]);
@@ -954,6 +984,7 @@ function CasesWorkspaceList() {
       priorityCase,
       prReceiptMonths,
       q,
+      stageCodes,
       statusValues,
       tenderTypeIds,
       trackStatuses,
@@ -987,6 +1018,7 @@ function CasesWorkspaceList() {
     setPriorityCase(view.state.priorityCase);
     setPrReceiptMonths(view.state.prReceiptMonths ?? []);
     setQ(view.state.q);
+    setStageCodes(view.state.stageCodes ?? []);
     setStatusValues(view.state.statusValues ?? []);
     setTenderTypeIds(view.state.tenderTypeIds ?? []);
     setTrackStatuses(view.state.trackStatuses ?? toTrackStatuses(view.state.trackStatus ?? trackStatusFromLegacyDelay(view.state.isDelayed)));
@@ -1116,6 +1148,30 @@ function csvParam(value: string | null): string[] {
     : [];
 }
 
+function hasCaseUrlFilters(params: URLSearchParams): boolean {
+  return [
+    "budgetTypeIds",
+    "completionFys",
+    "cpcInvolved",
+    "departmentIds",
+    "entityIds",
+    "isDelayed",
+    "loiAwarded",
+    "natureOfWorkIds",
+    "ownerUserId",
+    "ownerUserIds",
+    "prReceiptMonths",
+    "priorityCase",
+    "q",
+    "stageCodes",
+    "status",
+    "tenderTypeIds",
+    "trackStatus",
+    "trackStatuses",
+    "valueSlabs",
+  ].some((key) => params.has(key));
+}
+
 function toStatusFilter(value: string | null): string {
   return value === "running" || value === "completed" ? value : "";
 }
@@ -1124,6 +1180,17 @@ function toTrackStatusFilter(value: string): TrackStatusFilter {
   return value === "delayed" || value === "off_track" || value === "on_track"
     ? value
     : "";
+}
+
+function isValueSlabOption(value: string): value is ValueSlabOption {
+  return value === "lt_2l" ||
+    value === "2l_5l" ||
+    value === "5l_10l" ||
+    value === "10l_25l" ||
+    value === "25l_50l" ||
+    value === "50l_100l" ||
+    value === "100l_200l" ||
+    value === "gte_200l";
 }
 
 function trackStatusFromLegacyDelay(value: BooleanFilter): TrackStatusFilter {

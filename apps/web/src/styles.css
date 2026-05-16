@@ -5476,12 +5476,17 @@ textarea:focus:not(:focus-visible) {
 .report-analytics-kpi {
   align-items: start;
   align-self: start;
+  appearance: none;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
+  color: inherit;
+  cursor: pointer;
   display: grid;
+  font: inherit;
   min-height: 96px;
   padding: var(--space-2-5);
+  text-align: left;
   transition:
     border-color var(--transition-fast),
     box-shadow var(--transition-fast),
@@ -5903,8 +5908,10 @@ textarea:focus:not(:focus-visible) {
 
 .report-entity-ranked-row {
   align-items: center;
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+  cursor: pointer;
   display: grid;
   gap: var(--space-2);
   grid-template-columns: 32px minmax(0, 1fr) auto;
@@ -6056,15 +6063,22 @@ textarea:focus:not(:focus-visible) {
   min-width: 0;
 }
 
-.report-entity-value-legend div {
+.report-entity-value-legend div,
+.report-entity-value-legend-row {
   align-items: center;
+  appearance: none;
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+  color: inherit;
+  cursor: pointer;
   display: grid;
+  font: inherit;
   gap: var(--space-2);
   grid-template-columns: 10px minmax(0, 1fr) auto auto;
   min-width: 0;
   padding: var(--space-1-5) var(--space-2);
+  text-align: left;
 }
 
 .report-entity-value-dot {
@@ -6126,6 +6140,7 @@ textarea:focus:not(:focus-visible) {
 
 .report-department-nature-row {
   align-items: center;
+  cursor: pointer;
   display: grid;
   gap: var(--space-3);
   grid-template-columns: minmax(180px, 0.34fr) minmax(320px, 1fr) 48px;
@@ -6166,8 +6181,12 @@ textarea:focus:not(:focus-visible) {
   overflow: hidden;
 }
 
-.report-department-nature-stack span {
+.report-department-nature-stack button {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
   min-width: 3px;
+  padding: 0;
 }
 
 .report-department-nature-total {
@@ -6403,8 +6422,12 @@ textarea:focus:not(:focus-visible) {
 }
 
 .report-status-pill {
+  appearance: none;
+  border: 0;
   border-radius: var(--radius-full);
+  cursor: pointer;
   display: inline-flex;
+  font: inherit;
   font-weight: var(--font-weight-semibold);
   justify-content: center;
   min-width: 28px;
@@ -6436,6 +6459,7 @@ textarea:focus:not(:focus-visible) {
   border: 1px solid rgba(203, 213, 225, 0.86);
   border-radius: var(--radius-lg);
   background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  cursor: pointer;
   display: grid;
   gap: var(--space-3);
   grid-template-columns: minmax(150px, 0.8fr) minmax(180px, 1fr) 72px;
@@ -6873,11 +6897,20 @@ textarea:focus:not(:focus-visible) {
   min-width: 0;
 }
 
-.report-donut-legend > div {
+.report-donut-legend > div,
+.report-donut-legend-row {
   align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
   display: grid;
+  font: inherit;
   gap: var(--space-2);
   grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 0;
+  text-align: left;
 }
 
 .report-donut-legend span:not(.report-legend-dot) {
