@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown, Filter, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown, Filter, Search, X } from "lucide-react";
 
 import { Button } from "../button/Button";
 import { Skeleton } from "../skeleton/Skeleton";
@@ -36,6 +36,7 @@ type DataTableProps<TRow> = {
   onRowClick?: (row: TRow) => void;
   pagination?: boolean | TablePaginationConfig;
   rows: TRow[];
+  searchPlaceholder?: string;
   /** Number of skeleton rows to show while loading */
   skeletonRows?: number;
 };
@@ -58,14 +59,22 @@ export function DataTable<TRow>({
   onRowClick,
   pagination = true,
   rows,
+  searchPlaceholder = "Search table",
   skeletonRows = SKELETON_COUNT_DEFAULT,
 }: DataTableProps<TRow>) {
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [filterColumnKey, setFilterColumnKey] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [sortState, setSortState] = useState<TableSortState>(null);
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(() => getPaginationConfig(pagination)?.pageSize ?? DEFAULT_PAGE_SIZE);
-  const processedRows = useProcessedTableRows(rows, columns, filters, sortState);
+  const processedRows = useProcessedTableRows(
+    rows,
+    columns,
+    filters,
+    sortState,
+    searchQuery,
+  );
   const paginationConfig = getPaginationConfig(pagination);
   const pageSizeOptions = paginationConfig?.pageSizeOptions ?? DEFAULT_PAGE_SIZE_OPTIONS;
   const totalPages = Math.max(1, Math.ceil(processedRows.length / pageSize));
@@ -87,7 +96,7 @@ export function DataTable<TRow>({
 
   useEffect(() => {
     setPageIndex(0);
-  }, [filters, rows, sortState]);
+  }, [filters, rows, searchQuery, sortState]);
 
   const setColumnFilter = (key: string, value: string) => {
     setFilters((current) => {
@@ -100,6 +109,19 @@ export function DataTable<TRow>({
 
   return (
     <div className="table-frame">
+      <div className="table-toolbar">
+        <label className="table-search-control">
+          <Search aria-hidden="true" size={15} />
+          <input
+            aria-label={searchPlaceholder}
+            disabled={isLoading}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder={searchPlaceholder}
+            type="search"
+            value={searchQuery}
+          />
+        </label>
+      </div>
       <div aria-label={ariaLabel} className="table-shell" role="region" tabIndex={0}>
         <table>
           <thead>

@@ -28,14 +28,17 @@ export function useProcessedTableRows<TRow>(
   columns: Array<TableColumnControls<TRow>>,
   filters: Record<string, string>,
   sortState: TableSortState,
+  globalSearch = "",
 ): TRow[] {
   return useMemo(() => {
     const activeFilters = Object.entries(filters)
       .map(([key, value]) => [key, value.trim().toLowerCase()] as const)
       .filter(([, value]) => value.length > 0);
+    const normalizedGlobalSearch = globalSearch.trim().toLowerCase();
     const columnByKey = new Map(columns.map((column) => [column.key, column]));
+    const searchableColumns = columns.filter(isDataColumn);
 
-    const filteredRows = activeFilters.length
+    const columnFilteredRows = activeFilters.length
       ? rows.filter((row) =>
           activeFilters.every(([key, value]) => {
             const column = columnByKey.get(key);
@@ -45,6 +48,16 @@ export function useProcessedTableRows<TRow>(
           }),
         )
       : rows;
+    const filteredRows = normalizedGlobalSearch
+      ? columnFilteredRows.filter((row) =>
+          searchableColumns.some((column) =>
+            getColumnText(row, column)
+              .trim()
+              .toLowerCase()
+              .includes(normalizedGlobalSearch),
+          ),
+        )
+      : columnFilteredRows;
 
     if (!sortState) return filteredRows;
     const sortColumn = columnByKey.get(sortState.key);
@@ -54,7 +67,7 @@ export function useProcessedTableRows<TRow>(
       const comparison = compareValues(getSortValue(left, sortColumn), getSortValue(right, sortColumn));
       return sortState.direction === "asc" ? comparison : -comparison;
     });
-  }, [columns, filters, rows, sortState]);
+  }, [columns, filters, globalSearch, rows, sortState]);
 }
 
 export function canFilterColumn<TRow>(column: TableColumnControls<TRow>): boolean {

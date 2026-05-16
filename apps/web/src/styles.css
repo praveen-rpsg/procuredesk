@@ -8363,6 +8363,46 @@ textarea:focus:not(:focus-visible) {
   overflow: hidden;
 }
 
+.table-toolbar {
+  align-items: center;
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-2);
+}
+
+.table-search-control {
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-muted);
+  display: flex;
+  gap: var(--space-2);
+  min-width: min(100%, 280px);
+  padding: 0 var(--space-2);
+}
+
+.table-search-control:focus-within {
+  border-color: var(--color-brand-400);
+  box-shadow: 0 0 0 3px var(--color-brand-100);
+  color: var(--color-ink);
+}
+
+.table-search-control input {
+  background: transparent;
+  border: 0;
+  color: var(--color-ink);
+  font: inherit;
+  min-height: 34px;
+  min-width: 0;
+  outline: 0;
+  width: 100%;
+}
+
+.table-search-control input::placeholder {
+  color: var(--color-muted);
+}
+
 .table-shell {
   contain: inline-size;
   display: block;

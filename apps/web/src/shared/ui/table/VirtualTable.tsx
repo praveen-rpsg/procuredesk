@@ -1,6 +1,6 @@
 import type { ReactNode, UIEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown, Filter, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown, Filter, Search, X } from "lucide-react";
 
 import { Button } from "../button/Button";
 import {
@@ -34,6 +34,7 @@ type VirtualTableProps<TRow> = {
   pagination?: boolean | TablePaginationConfig;
   rowHeight?: number;
   rows: TRow[];
+  searchPlaceholder?: string;
 };
 
 const DEFAULT_PAGE_SIZE = 50;
@@ -54,15 +55,23 @@ export function VirtualTable<TRow>({
   pagination = true,
   rowHeight = 48,
   rows,
+  searchPlaceholder = "Search table",
 }: VirtualTableProps<TRow>) {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [filterColumnKey, setFilterColumnKey] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [sortState, setSortState] = useState<TableSortState>(null);
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(() => getPaginationConfig(pagination)?.pageSize ?? DEFAULT_PAGE_SIZE);
-  const processedRows = useProcessedTableRows(rows, columns, filters, sortState);
+  const processedRows = useProcessedTableRows(
+    rows,
+    columns,
+    filters,
+    sortState,
+    searchQuery,
+  );
   const paginationConfig = getPaginationConfig(pagination);
   const pageSizeOptions = paginationConfig?.pageSizeOptions ?? DEFAULT_PAGE_SIZE_OPTIONS;
   const totalPages = Math.max(1, Math.ceil(processedRows.length / pageSize));
@@ -95,7 +104,7 @@ export function VirtualTable<TRow>({
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = 0;
     }
-  }, [filters, rows, sortState]);
+  }, [filters, rows, searchQuery, sortState]);
 
   const handleScroll = (event: UIEvent<HTMLDivElement>) => {
     setScrollTop(event.currentTarget.scrollTop);
@@ -118,6 +127,18 @@ export function VirtualTable<TRow>({
 
   return (
     <div className="table-frame">
+      <div className="table-toolbar">
+        <label className="table-search-control">
+          <Search aria-hidden="true" size={15} />
+          <input
+            aria-label={searchPlaceholder}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder={searchPlaceholder}
+            type="search"
+            value={searchQuery}
+          />
+        </label>
+      </div>
       <div
         aria-label={ariaLabel}
         className="table-shell virtual-table-shell"
