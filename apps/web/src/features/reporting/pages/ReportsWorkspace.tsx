@@ -1674,6 +1674,7 @@ export function ReportsWorkspace() {
                 error={data.completed.error}
                 getRowKey={(row) => row.caseId}
                 isLoading={data.completed.isLoading}
+                onRowClick={(row) => setStageAgingCaseId(row.caseId)}
               />
             ) : null}
             {reportCode === "vendor_awards" ? (
