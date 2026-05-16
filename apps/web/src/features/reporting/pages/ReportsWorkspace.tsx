@@ -1696,6 +1696,7 @@ export function ReportsWorkspace() {
                 error={data.stageTime.error}
                 getRowKey={(row) => row.caseId}
                 isLoading={data.stageTime.isLoading}
+                onRowClick={(row) => navigateToAppPath(`/cases/${row.caseId}`)}
               />
             ) : null}
             {reportCode === "rc_po_expiry" ? (
