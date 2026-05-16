@@ -326,6 +326,8 @@ export class ReportingRepository {
           e.code as entity_code,
           e.name as entity_name,
           count(*)::text as case_count,
+          count(*) filter (where f.status = 'running')::text as running_count,
+          count(*) filter (where f.status = 'completed')::text as completed_count,
           count(*) filter (
             where f.status = 'running'
               and c.tentative_completion_date is not null
@@ -1783,11 +1785,13 @@ function nullable<T>(value: T | null | undefined): T | null {
 function mapAnalyticsEntityRow(row: AnalyticsEntityRow) {
   return {
     caseCount: Number(row.case_count),
+    completedCount: Number(row.completed_count),
     delayedCount: Number(row.delayed_count),
     entityCode: row.entity_code,
     entityId: row.entity_id,
     entityName: row.entity_name,
     offTrackCount: Number(row.off_track_count),
+    runningCount: Number(row.running_count),
     totalAwardedAmount: Number(row.total_awarded_amount),
     totalPrValue: Number(row.total_pr_value),
   };
@@ -1841,11 +1845,13 @@ type AnalyticsBidderRow = {
 
 type AnalyticsEntityRow = {
   case_count: string;
+  completed_count: string;
   delayed_count: string;
   off_track_count: string;
   entity_code: string | null;
   entity_id: string;
   entity_name: string | null;
+  running_count: string;
   total_awarded_amount: string;
   total_pr_value: string;
 };

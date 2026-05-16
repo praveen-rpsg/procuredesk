@@ -53,11 +53,13 @@ export type ReportingAnalytics = {
   }>;
   byEntity: Array<{
     caseCount: number;
+    completedCount: number;
     delayedCount: number;
     offTrackCount: number;
     entityCode: string | null;
     entityId: string;
     entityName: string | null;
+    runningCount: number;
     totalAwardedAmount: number;
     totalPrValue: number;
   }>;

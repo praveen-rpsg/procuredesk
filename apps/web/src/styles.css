@@ -5980,7 +5980,7 @@ textarea:focus:not(:focus-visible) {
   align-items: center;
   display: grid;
   gap: var(--space-1);
-  grid-template-columns: repeat(4, auto);
+  grid-template-columns: repeat(3, auto);
 }
 
 .report-entity-ranked-metrics > strong {
@@ -5996,7 +5996,7 @@ textarea:focus:not(:focus-visible) {
   font-size: var(--font-size-2xs);
   font-weight: var(--font-weight-semibold);
   gap: var(--space-2);
-  grid-template-columns: 1fr repeat(4, auto);
+  grid-template-columns: 1fr repeat(3, auto);
   justify-content: end;
   padding: 0 var(--space-2);
   text-transform: uppercase;

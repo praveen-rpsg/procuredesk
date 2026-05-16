@@ -1975,11 +1975,10 @@ function ReportAnalyticsDashboard({
     },
   ];
   const entityRows = (metrics?.byEntity ?? []).map((row) => ({
-    amount: row.totalAwardedAmount,
+    completedValue: row.completedCount,
     id: row.entityId,
     label: row.entityCode ?? row.entityName ?? row.entityId,
-    secondaryValue: row.delayedCount,
-    tertiaryValue: row.offTrackCount,
+    runningValue: row.runningCount,
     value: row.caseCount,
   }));
   const entityPrRows = (metrics?.byEntity ?? []).map((row) => ({
@@ -2160,10 +2159,9 @@ function ReportAnalyticsDashboard({
           title="Cases by entity"
         />
         <ReportEntityRankedList
-          amountUnit={amountUnit}
           onEntityClick={(entityId) => onOpenCaseDrilldown({ entityIds: [entityId] })}
-          onEntityStatusClick={(entityId, trackStatus) =>
-            onOpenCaseDrilldown({ entityIds: [entityId], status: "running", trackStatuses: [trackStatus] })
+          onEntityStatusClick={(entityId, status) =>
+            onOpenCaseDrilldown({ entityIds: [entityId], status, trackStatuses: [] })
           }
           rows={entityRows}
         />
@@ -2507,23 +2505,20 @@ function ReportPremiumBarChart({
 }
 
 function ReportEntityRankedList({
-  amountUnit,
   onEntityClick,
   onEntityStatusClick,
   rows,
 }: {
-  amountUnit: AmountUnit;
   onEntityClick?: (entityId: string) => void;
   onEntityStatusClick?: (
     entityId: string,
-    trackStatus: "delayed" | "off_track" | "on_track",
+    status: "completed" | "running",
   ) => void;
   rows: Array<{
-    amount: number;
+    completedValue: number;
     id: string;
     label: string;
-    secondaryValue: number;
-    tertiaryValue?: number;
+    runningValue: number;
     value: number;
   }>;
 }) {
@@ -2536,16 +2531,13 @@ function ReportEntityRankedList({
   return (
     <div className="report-entity-ranked-list">
       {rows.map((row, index) => {
-        const delayed = row.secondaryValue;
-        const offTrack = row.tertiaryValue ?? 0;
-        const onTrack = Math.max(row.value - delayed - offTrack, 0);
         const openEntity = () => onEntityClick?.(row.id);
         const openEntityStatus = (
           event: MouseEvent<HTMLButtonElement>,
-          trackStatus: "delayed" | "off_track" | "on_track",
+          status: "completed" | "running",
         ) => {
           event.stopPropagation();
-          onEntityStatusClick?.(row.id, trackStatus);
+          onEntityStatusClick?.(row.id, status);
         };
         return (
           <article
@@ -2567,7 +2559,7 @@ function ReportEntityRankedList({
             <div className="report-entity-ranked-main">
               <div className="report-entity-ranked-title">
                 <strong>{row.label}</strong>
-                <span>{formatAmount(row.amount, amountUnit)} awarded</span>
+                <span>{row.runningValue} running / {row.completedValue} completed</span>
               </div>
               <div className="report-entity-ranked-meter">
                 <span style={{ width: `${Math.max(6, (row.value / max) * 100)}%` }} />
@@ -2576,28 +2568,20 @@ function ReportEntityRankedList({
             <div className="report-entity-ranked-metrics">
               <strong>{row.value}</strong>
               <button
-                className="report-status-pill report-status-pill-success"
-                onClick={(event) => openEntityStatus(event, "on_track")}
-                title={`Open ${row.label} on-track cases`}
-                type="button"
-              >
-                {onTrack}
-              </button>
-              <button
                 className="report-status-pill report-status-pill-warning"
-                onClick={(event) => openEntityStatus(event, "off_track")}
-                title={`Open ${row.label} off-track cases`}
+                onClick={(event) => openEntityStatus(event, "running")}
+                title={`Open ${row.label} running cases`}
                 type="button"
               >
-                {offTrack}
+                {row.runningValue}
               </button>
               <button
-                className="report-status-pill report-status-pill-danger"
-                onClick={(event) => openEntityStatus(event, "delayed")}
-                title={`Open ${row.label} delayed cases`}
+                className="report-status-pill report-status-pill-success"
+                onClick={(event) => openEntityStatus(event, "completed")}
+                title={`Open ${row.label} completed cases`}
                 type="button"
               >
-                {delayed}
+                {row.completedValue}
               </button>
             </div>
           </article>
@@ -2605,9 +2589,8 @@ function ReportEntityRankedList({
       })}
       <div className="report-entity-ranked-legend">
         <span>Total</span>
-        <span>On-Track</span>
-        <span>Off-Track</span>
-        <span>Delayed</span>
+        <span>Running</span>
+        <span>Completed</span>
       </div>
     </div>
   );
