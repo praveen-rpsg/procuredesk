@@ -29,6 +29,7 @@ type VirtualTableProps<TRow> = {
   columns: VirtualTableColumn<TRow>[];
   emptyMessage?: string;
   getRowKey: (row: TRow) => string;
+  isRowClickable?: (row: TRow) => boolean;
   maxHeight?: number;
   onRowClick?: (row: TRow) => void;
   pagination?: boolean | TablePaginationConfig;
@@ -50,6 +51,7 @@ export function VirtualTable<TRow>({
   columns,
   emptyMessage = "No records found.",
   getRowKey,
+  isRowClickable,
   maxHeight = 520,
   onRowClick,
   pagination = true,
@@ -196,29 +198,32 @@ export function VirtualTable<TRow>({
                     <td colSpan={columns.length} style={{ height: topSpacerHeight, padding: 0 }} />
                   </tr>
                 ) : null}
-                {visibleRows.map((row) => (
-                  <tr
-                    className={onRowClick ? "table-row-clickable" : undefined}
-                    key={getRowKey(row)}
-                    onClick={onRowClick ? () => onRowClick(row) : undefined}
-                    style={{ height: rowHeight }}
-                    tabIndex={onRowClick ? 0 : undefined}
-                    onKeyDown={
-                      onRowClick
-                        ? (event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              onRowClick(row);
+                {visibleRows.map((row) => {
+                  const canClickRow = Boolean(onRowClick && (isRowClickable?.(row) ?? true));
+                  return (
+                    <tr
+                      className={canClickRow ? "table-row-clickable" : undefined}
+                      key={getRowKey(row)}
+                      onClick={canClickRow ? () => onRowClick?.(row) : undefined}
+                      style={{ height: rowHeight }}
+                      tabIndex={canClickRow ? 0 : undefined}
+                      onKeyDown={
+                        canClickRow
+                          ? (event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                onRowClick?.(row);
+                              }
                             }
-                          }
-                        : undefined
-                    }
-                  >
-                    {columns.map((column) => (
-                      <td key={column.key}>{column.render(row)}</td>
-                    ))}
-                  </tr>
-                ))}
+                          : undefined
+                      }
+                    >
+                      {columns.map((column) => (
+                        <td key={column.key}>{column.render(row)}</td>
+                      ))}
+                    </tr>
+                  );
+                })}
                 {bottomSpacerHeight > 0 ? (
                   <tr aria-hidden="true">
                     <td colSpan={columns.length} style={{ height: bottomSpacerHeight, padding: 0 }} />

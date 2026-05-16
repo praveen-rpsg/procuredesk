@@ -1707,7 +1707,11 @@ export function ReportsWorkspace() {
                   emptyMessage="No RC/PO expiry rows match the current filters."
                   error={data.rcPoExpiry.error}
                   getRowKey={(row) => row.sourceId}
+                  isRowClickable={(row) => Boolean(row.sourceCaseId)}
                   isLoading={data.rcPoExpiry.isLoading}
+                  onRowClick={(row) => {
+                    if (row.sourceCaseId) navigateToAppPath(`/cases/${row.sourceCaseId}`);
+                  }}
                   pagination={false}
                 />
                 {!data.rcPoExpiry.isLoading && !data.rcPoExpiry.error ? (
@@ -4174,6 +4178,7 @@ function ReportTable<TRow>({
   emptyMessage,
   error,
   getRowKey,
+  isRowClickable,
   isLoading,
   onRowClick,
   pagination = true,
@@ -4183,6 +4188,7 @@ function ReportTable<TRow>({
   emptyMessage: string;
   error: Error | null;
   getRowKey: (row: TRow) => string;
+  isRowClickable?: (row: TRow) => boolean;
   isLoading: boolean;
   onRowClick?: (row: TRow) => void;
   pagination?: boolean;
@@ -4213,6 +4219,7 @@ function ReportTable<TRow>({
         columns={columns}
         emptyMessage={emptyMessage}
         getRowKey={getRowKey}
+        {...(isRowClickable ? { isRowClickable } : {})}
         maxHeight={520}
         {...(onRowClick ? { onRowClick } : {})}
         pagination={pagination}
