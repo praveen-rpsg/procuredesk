@@ -5,6 +5,7 @@ import {
   Download,
   FilePlus2,
   Pencil,
+  Trash2,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
@@ -34,6 +35,7 @@ import {
   navigateToAppPath,
   useAppLocation,
 } from "../../../shared/routing/appLocation";
+import { ConfirmationDialog } from "../../../shared/ui/confirmation-dialog/ConfirmationDialog";
 import { SecondaryNav } from "../../../shared/ui/secondary-nav/SecondaryNav";
 import { Skeleton } from "../../../shared/ui/skeleton/Skeleton";
 import {
@@ -142,6 +144,8 @@ export function PlanningWorkspace() {
   const [cpcInvolved, setCpcInvolved] = useState(false);
   const [createPlanModal, setCreatePlanModal] = useState<"tender" | null>(null);
   const [editingTenderPlan, setEditingTenderPlan] =
+    useState<TenderPlanCase | null>(null);
+  const [deletingTenderPlan, setDeletingTenderPlan] =
     useState<TenderPlanCase | null>(null);
   const [creatingCaseFromPlan, setCreatingCaseFromPlan] =
     useState<CreatingCaseFromPlan | null>(null);
@@ -257,6 +261,15 @@ export function PlanningWorkspace() {
     },
   });
 
+  const deleteTenderMutation = useMutation({
+    mutationFn: archiveTenderPlan,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["tender-plans"] });
+      setDeletingTenderPlan(null);
+      notify({ message: "Tender plan deleted.", tone: "success" });
+    },
+  });
+
   const tenderPlanColumns = useMemo<VirtualTableColumn<TenderPlanCase>[]>(
     () =>
       canEditPlanning
@@ -282,6 +295,14 @@ export function PlanningWorkspace() {
                   >
                     <Pencil size={16} />
                     Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    onClick={() => setDeletingTenderPlan(row)}
+                  >
+                    <Trash2 size={16} />
+                    Delete
                   </Button>
                 </div>
               ),
@@ -680,6 +701,29 @@ export function PlanningWorkspace() {
           />
         ) : null}
       </Modal>
+
+      <ConfirmationDialog
+        confirmLabel="Delete Tender Plan"
+        description={
+          deletingTenderPlan
+            ? `Delete tender plan "${deletingTenderPlan.tenderDescription ?? deletingTenderPlan.id}"? This removes it from the planning pipeline.`
+            : "Delete this tender plan?"
+        }
+        isOpen={Boolean(deletingTenderPlan)}
+        isPending={deleteTenderMutation.isPending}
+        onCancel={() => setDeletingTenderPlan(null)}
+        onConfirm={() => {
+          if (deletingTenderPlan) {
+            deleteTenderMutation.mutate(deletingTenderPlan.id);
+          }
+        }}
+        title="Delete Tender Plan"
+        tone="danger"
+      >
+        {deleteTenderMutation.error ? (
+          <p className="inline-error">{deleteTenderMutation.error.message}</p>
+        ) : null}
+      </ConfirmationDialog>
     </section>
   );
 }
