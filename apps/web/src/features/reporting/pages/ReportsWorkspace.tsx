@@ -2143,7 +2143,7 @@ function ReportAnalyticsDashboard({
         <ReportChartHeader
           eyebrow="PR value mix"
           subtitle={`${entityPrRows.length} reporting groups`}
-          title="Entity-wise PR value distribution"
+          title={`Entity-wise PR value distribution (${amountDisplayUnitLabel(amountUnit)})`}
         />
         <ReportEntityPrValueDonut
           amountUnit={amountUnit}
@@ -2296,6 +2296,15 @@ function buildDepartmentNatureChartRows(
 
 function formatInteger(value: number) {
   return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
+function amountDisplayUnitLabel(unit: AmountUnit) {
+  return unit === "rupees" ? "Rs." : "Rs. Lakhs";
+}
+
+function formatAnalyticsAmountWithUnit(value: number | null, unit: AmountUnit) {
+  const formattedValue = formatAmount(value, unit);
+  return formattedValue === "-" ? formattedValue : `${formattedValue} ${amountDisplayUnitLabel(unit)}`;
 }
 
 function formatValueSlabLabel(value: string) {
@@ -2630,7 +2639,7 @@ function ReportEntityPrValueDonut({
   return (
     <div className="report-entity-value-donut">
       <div
-        aria-label={`Entity PR value distribution total ${formatAmount(total, amountUnit)}`}
+        aria-label={`Entity PR value distribution total ${formatAnalyticsAmountWithUnit(total, amountUnit)}`}
         className="report-entity-value-donut-visual"
         role="img"
       >
@@ -2657,7 +2666,7 @@ function ReportEntityPrValueDonut({
           })}
         </svg>
         <div>
-          <strong>{formatAmount(total, amountUnit)}</strong>
+          <strong>{formatAnalyticsAmountWithUnit(total, amountUnit)}</strong>
           <span>Total PR value</span>
         </div>
       </div>
@@ -2677,7 +2686,7 @@ function ReportEntityPrValueDonut({
                 style={{ background: analyticsPaletteColor(index) }}
               />
               <strong>{row.label}</strong>
-              <span>{formatAmount(row.value, amountUnit)}</span>
+              <span>{formatAnalyticsAmountWithUnit(row.value, amountUnit)}</span>
               <em>{share.toFixed(1)}%</em>
             </button>
           );
