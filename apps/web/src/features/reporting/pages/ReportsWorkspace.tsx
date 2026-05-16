@@ -2189,7 +2189,7 @@ function ReportAnalyticsDashboard({
         <ReportChartHeader
           eyebrow="Type breakdown"
           subtitle={`${tenderTypeRows.length} tender types`}
-          title="Tender type split"
+          title="Tender Track Analysis"
         />
         <ReportTenderTypeStackedChart
           rows={tenderTypeRows}
@@ -2924,7 +2924,7 @@ function ReportTenderTypeStackedChart({
                 </div>
                 <div className="report-tender-type-x-label">
                   <strong>{row.label}</strong>
-                  <span>{share}% share</span>
+                  <span>{row.value} tender{row.value === 1 ? "" : "s"} / {share}%</span>
                 </div>
               </div>
             );
