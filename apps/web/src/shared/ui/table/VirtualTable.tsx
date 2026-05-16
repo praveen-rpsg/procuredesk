@@ -6,6 +6,7 @@ import { Button } from "../button/Button";
 import {
   canFilterColumn,
   canSortColumn,
+  formatTableRowSummary,
   nextSortState,
   useProcessedTableRows,
   type TableFilterOption,
@@ -33,9 +34,13 @@ type VirtualTableProps<TRow> = {
   maxHeight?: number;
   onRowClick?: (row: TRow) => void;
   pagination?: boolean | TablePaginationConfig;
+  resultLabel?: string | undefined;
   rowHeight?: number;
   rows: TRow[];
-  searchPlaceholder?: string;
+  searchValue?: string | undefined;
+  searchPlaceholder?: string | undefined;
+  showSearch?: boolean | undefined;
+  onSearchChange?: ((value: string) => void) | undefined;
 };
 
 const DEFAULT_PAGE_SIZE = 50;
@@ -55,18 +60,23 @@ export function VirtualTable<TRow>({
   maxHeight = 520,
   onRowClick,
   pagination = true,
+  resultLabel = "Rows",
   rowHeight = 48,
   rows,
+  searchValue,
   searchPlaceholder = "Search table",
+  showSearch = true,
+  onSearchChange,
 }: VirtualTableProps<TRow>) {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [filterColumnKey, setFilterColumnKey] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [internalSearchQuery, setInternalSearchQuery] = useState("");
   const [sortState, setSortState] = useState<TableSortState>(null);
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(() => getPaginationConfig(pagination)?.pageSize ?? DEFAULT_PAGE_SIZE);
+  const searchQuery = searchValue ?? internalSearchQuery;
   const processedRows = useProcessedTableRows(
     rows,
     columns,
@@ -126,20 +136,31 @@ export function VirtualTable<TRow>({
       return next;
     });
   };
+  const handleSearchChange = (value: string) => {
+    if (searchValue === undefined) {
+      setInternalSearchQuery(value);
+    }
+    onSearchChange?.(value);
+  };
 
   return (
     <div className="table-frame">
       <div className="table-toolbar">
-        <label className="table-search-control">
-          <Search aria-hidden="true" size={15} />
-          <input
-            aria-label={searchPlaceholder}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder={searchPlaceholder}
-            type="search"
-            value={searchQuery}
-          />
-        </label>
+        <span className="table-result-summary" aria-live="polite">
+          {formatTableRowSummary(processedRows.length, rows.length, resultLabel)}
+        </span>
+        {showSearch ? (
+          <label className="table-search-control">
+            <Search aria-hidden="true" size={15} />
+            <input
+              aria-label={searchPlaceholder}
+              onChange={(event) => handleSearchChange(event.target.value)}
+              placeholder={searchPlaceholder}
+              type="search"
+              value={searchQuery}
+            />
+          </label>
+        ) : null}
       </div>
       <div
         aria-label={ariaLabel}

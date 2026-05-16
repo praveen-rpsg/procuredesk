@@ -23,6 +23,18 @@ export type TableFilterOption = {
   value: string;
 };
 
+export function formatTableRowSummary(
+  filteredRows: number,
+  totalRows: number,
+  label = "Rows",
+): string {
+  const normalizedLabel = label.trim() || "Rows";
+  if (filteredRows === totalRows) {
+    return `${normalizedLabel}: ${formatInteger(totalRows)}`;
+  }
+  return `Filtered ${normalizedLabel.toLowerCase()}: ${formatInteger(filteredRows)} of ${formatInteger(totalRows)}`;
+}
+
 export function useProcessedTableRows<TRow>(
   rows: TRow[],
   columns: Array<TableColumnControls<TRow>>,
@@ -103,6 +115,10 @@ function getSortValue<TRow>(row: TRow, column: TableColumnControls<TRow>): strin
 function compareValues(left: string | number, right: string | number): number {
   if (typeof left === "number" && typeof right === "number") return left - right;
   return String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
+}
+
+function formatInteger(value: number): string {
+  return new Intl.NumberFormat("en-IN").format(value);
 }
 
 function textFromNode(value: ReactNode): string {

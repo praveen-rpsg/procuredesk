@@ -116,7 +116,6 @@ export class ReportingController {
   }
 
   @Patch("rc-po-expiry/:sourceType/:sourceId")
-  @RequirePermissions("planning.manage")
   updateRcPoExpiryRow(
     @CurrentUser() user: AuthenticatedUser,
     @Param("sourceType", new ZodValidationPipe(RcPoExpirySourceTypeSchema)) sourceType: RcPoExpirySourceType,

@@ -49,7 +49,10 @@ import {
   toDateOnlyInputValue,
 } from "../../../shared/utils/dateOnly";
 import { useAuth } from "../../../shared/auth/AuthProvider";
-import { canManagePlanning } from "../../../shared/auth/permissions";
+import {
+  canCreateCase,
+  canManagePlanning,
+} from "../../../shared/auth/permissions";
 
 const tenderColumns: VirtualTableColumn<TenderPlanCase>[] = [
   {
@@ -131,6 +134,7 @@ export function PlanningWorkspace() {
   const { user } = useAuth();
   const location = useAppLocation();
   const canEditPlanning = canManagePlanning(user);
+  const canCreateTenderPlan = canEditPlanning || canCreateCase(user);
   const activeSection = planningSectionFromPath(location.pathname) ?? "tenders";
   const [selectedEntityId, setSelectedEntityId] = useState("");
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
@@ -169,7 +173,7 @@ export function PlanningWorkspace() {
   }, [location.pathname]);
 
   const entities = useQuery({
-    enabled: canEditPlanning,
+    enabled: canCreateTenderPlan,
     queryFn: listEntities,
     queryKey: ["entities"],
   });
@@ -179,12 +183,12 @@ export function PlanningWorkspace() {
   );
   const entityId = selectedEntityId || activeEntities[0]?.id || "";
   const formDepartments = useQuery({
-    enabled: canEditPlanning && Boolean(entityId),
+    enabled: canCreateTenderPlan && Boolean(entityId),
     queryFn: () => listAdminDepartments(entityId),
     queryKey: ["planning-form-departments", entityId],
   });
   const catalog = useQuery({
-    enabled: canEditPlanning,
+    enabled: canCreateTenderPlan,
     queryFn: getCatalogSnapshot,
     queryKey: ["catalog-snapshot"],
   });
@@ -233,7 +237,7 @@ export function PlanningWorkspace() {
       setPlannedDate("");
       setCpcInvolved(false);
       setCreatePlanModal(null);
-      await queryClient.invalidateQueries({ queryKey: ["tender-plans"] });
+      void queryClient.invalidateQueries({ queryKey: ["tender-plans"] });
       notify({ message: "Tender plan added.", tone: "success" });
     },
   });
@@ -422,7 +426,7 @@ export function PlanningWorkspace() {
         />
       </section>
 
-      {canEditPlanning && entities.isLoading ? (
+      {canCreateTenderPlan && entities.isLoading ? (
         <section className="state-panel">
           <div style={{ display: "grid", gap: "var(--space-3)" }}>
             {[1, 2, 3, 4].map((i) => (
@@ -441,7 +445,7 @@ export function PlanningWorkspace() {
             ))}
           </div>
         </section>
-      ) : canEditPlanning && entities.error ? (
+      ) : canCreateTenderPlan && entities.error ? (
         <ErrorState
           message={entities.error.message}
           title="Could not load entities"
@@ -456,7 +460,7 @@ export function PlanningWorkspace() {
                   <h2>Upcoming Tender Plans</h2>
                 </div>
                 <div className="planning-expiry-actions">
-                  {canEditPlanning ? (
+                  {canCreateTenderPlan ? (
                     <Button
                       disabled={!entityId}
                       size="sm"

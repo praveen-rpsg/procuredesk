@@ -1,22 +1,28 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Activity,
+  AlertTriangle,
   BarChart3,
   CalendarClock,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Clock3,
   Trash2,
   Download,
   FilePlus2,
   FileSpreadsheet,
+  FileText,
   Filter,
+  Gauge,
   RefreshCw,
   Save,
   Search,
   SlidersHorizontal,
   Star,
   X,
+  Zap,
 } from "lucide-react";
 import {
   type CSSProperties,
@@ -61,6 +67,7 @@ import {
 } from "../utils/reportUtils";
 import { useAuth } from "../../../shared/auth/AuthProvider";
 import {
+  canReadCases,
   canExportReports,
   canCreateCase,
   canManagePlanning,
@@ -71,7 +78,11 @@ import {
   type CreateCaseFormInitialValues,
 } from "../../procurement-cases/components/CreateCaseForm";
 import { StageAgingModalContent } from "../../procurement-cases/components/StageAgingModalContent";
-import { getCase } from "../../procurement-cases/api/casesApi";
+import {
+  getCase,
+  getCaseSummary,
+  type CaseSummary,
+} from "../../procurement-cases/api/casesApi";
 import { formatCaseStage } from "../../../shared/utils/caseStage";
 import { Button } from "../../../shared/ui/button/Button";
 import {
@@ -122,10 +133,13 @@ export function ReportsWorkspace() {
   const canExport = canExportReports(user);
   const canCreate = canCreateCase(user);
   const canEditRcPoExpiry = canManagePlanning(user);
+  const canViewCaseSummary = canReadCases(user);
   const canViewDelay = canViewDelayFields(user);
   const reportNavigationOptions = useMemo(
     () =>
-      REPORT_OPTIONS.filter((option) => canExport || option.code !== "export_jobs"),
+      REPORT_OPTIONS.filter(
+        (option) => canExport || option.code !== "export_jobs",
+      ),
     [canExport],
   );
   const reportExportFilterOptions = useMemo(
@@ -169,6 +183,11 @@ export function ReportsWorkspace() {
     rcPoExpiryParams,
     filters.analyticsParams,
   );
+  const commandCenterSummary = useQuery({
+    enabled: isAnalyticsView && canViewCaseSummary,
+    queryFn: getCaseSummary,
+    queryKey: ["case-summary"],
+  });
   const stageAgingCase = useQuery({
     enabled: Boolean(stageAgingCaseId),
     queryFn: () => getCase(stageAgingCaseId as string),
@@ -274,7 +293,9 @@ export function ReportsWorkspace() {
   const metrics = data.analytics.data;
   const openAnalyticsDrilldown = useCallback(
     (overrides: ReportQueryParams = {}) => {
-      navigateToAppPath(buildCaseDrilldownPath(filters.analyticsParams, overrides));
+      navigateToAppPath(
+        buildCaseDrilldownPath(filters.analyticsParams, overrides),
+      );
     },
     [filters.analyticsParams],
   );
@@ -323,7 +344,11 @@ export function ReportsWorkspace() {
         label: department.name,
         value: department.id,
       })),
-    [data.filterMetadata.data?.departments, rcPoMetadata?.departments, reportCode],
+    [
+      data.filterMetadata.data?.departments,
+      rcPoMetadata?.departments,
+      reportCode,
+    ],
   );
   const tenderTypeOptions = useMemo(
     () =>
@@ -342,7 +367,11 @@ export function ReportsWorkspace() {
         label: item.name,
         value: item.id,
       })),
-    [data.filterMetadata.data?.natureOfWorks, rcPoMetadata?.natureOfWorks, reportCode],
+    [
+      data.filterMetadata.data?.natureOfWorks,
+      rcPoMetadata?.natureOfWorks,
+      reportCode,
+    ],
   );
   const budgetTypeOptions = useMemo(
     () =>
@@ -353,7 +382,11 @@ export function ReportsWorkspace() {
         label: item.name,
         value: item.id,
       })),
-    [data.filterMetadata.data?.budgetTypes, rcPoMetadata?.budgetTypes, reportCode],
+    [
+      data.filterMetadata.data?.budgetTypes,
+      rcPoMetadata?.budgetTypes,
+      reportCode,
+    ],
   );
   const stageOptions = useMemo(
     () =>
@@ -396,7 +429,11 @@ export function ReportsWorkspace() {
         label: formatValueSlabLabel(slab),
         value: slab,
       })),
-    [data.filterMetadata.data?.valueSlabs, rcPoMetadata?.valueSlabs, reportCode],
+    [
+      data.filterMetadata.data?.valueSlabs,
+      rcPoMetadata?.valueSlabs,
+      reportCode,
+    ],
   );
 
   useEffect(() => {
@@ -418,7 +455,8 @@ export function ReportsWorkspace() {
     reportCode,
   ]);
 
-  const includeCompletionFilters = reportCode !== "running" && reportCode !== "rc_po_expiry";
+  const includeCompletionFilters =
+    reportCode !== "running" && reportCode !== "rc_po_expiry";
   const includeTrackStatusFilter =
     reportCode !== "completed" &&
     reportCode !== "rc_po_expiry" &&
@@ -602,7 +640,9 @@ export function ReportsWorkspace() {
         key: "cycle",
         header: "Completed Cycle Time (Days)",
         render: (row) =>
-          row.status === "completed" ? (row.completedCycleTimeDays ?? "-") : "-",
+          row.status === "completed"
+            ? (row.completedCycleTimeDays ?? "-")
+            : "-",
       },
       {
         key: "award",
@@ -748,6 +788,14 @@ export function ReportsWorkspace() {
             : formatCaseStage(row.desiredStageCode),
       },
       {
+        key: "elapsed",
+        header: "% Time Elapsed",
+        render: (row) =>
+          row.status === "running" && row.percentTimeElapsed != null
+            ? `${row.percentTimeElapsed}%`
+            : "-",
+      },
+      {
         key: "age",
         header: "Running Tender Age",
         render: (row) => row.runningAgeDays ?? "-",
@@ -831,6 +879,11 @@ export function ReportsWorkspace() {
           formatAmount(row.estimateBenchmark, filters.amountUnit),
       },
       {
+        key: "approvedAmount",
+        header: `NFA Approved Amount (${amountUnitLabel(filters.amountUnit)}) [All Inclusive]`,
+        render: (row) => formatAmount(row.approvedAmount, filters.amountUnit),
+      },
+      {
         key: "award",
         header: `Award Value (${amountUnitLabel(filters.amountUnit)}) [All Inclusive]`,
         render: (row) =>
@@ -883,8 +936,16 @@ export function ReportsWorkspace() {
   );
   const technicalPendencyColumns = useMemo<VirtualTableColumn<ReportCaseRow>[]>(
     () => [
-      { key: "tenderNo", header: "Tender No.", render: (row) => row.tenderNo ?? row.prId },
-      { key: "tenderName", header: "Tender Name", render: (row) => row.tenderName ?? row.prDescription ?? "-" },
+      {
+        key: "tenderNo",
+        header: "Tender No.",
+        render: (row) => row.tenderNo ?? row.prId,
+      },
+      {
+        key: "tenderName",
+        header: "Tender Name",
+        render: (row) => row.tenderName ?? row.prDescription ?? "-",
+      },
       {
         key: "entity",
         filterOptions: caseColumnFilterOptions.entity,
@@ -906,11 +967,31 @@ export function ReportsWorkspace() {
         header: "Tender Owner",
         render: (row) => row.ownerFullName ?? "-",
       },
-      { key: "stage", header: "Tender Stage", render: (row) => formatCaseStage(row.stageCode) },
-      { key: "bidReceiptDate", header: "Bid Receipt Date", render: (row) => formatDateCell(row.bidReceiptDate) },
-      { key: "technicalEvaluationDate", header: "Technical Evaluation Date", render: (row) => formatDateCell(row.technicalEvaluationDate) },
-      { key: "currentStageAging", header: "Current Stage Aging", render: (row) => formatNullableDays(row.currentStageAgingDays) },
-      { key: "runningAge", header: "Running Tender Age", render: (row) => formatNullableDays(row.runningAgeDays) },
+      {
+        key: "stage",
+        header: "Tender Stage",
+        render: (row) => formatCaseStage(row.stageCode),
+      },
+      {
+        key: "bidReceiptDate",
+        header: "Bid Receipt Date",
+        render: (row) => formatDateCell(row.bidReceiptDate),
+      },
+      {
+        key: "technicalEvaluationDate",
+        header: "Technical Evaluation Date",
+        render: (row) => formatDateCell(row.technicalEvaluationDate),
+      },
+      {
+        key: "currentStageAging",
+        header: "Current Stage Aging",
+        render: (row) => formatNullableDays(row.currentStageAgingDays),
+      },
+      {
+        key: "runningAge",
+        header: "Running Tender Age",
+        render: (row) => formatNullableDays(row.runningAgeDays),
+      },
       ...(canViewDelay
         ? [
             {
@@ -925,8 +1006,16 @@ export function ReportsWorkspace() {
   );
   const technicalTimeColumns = useMemo<VirtualTableColumn<ReportCaseRow>[]>(
     () => [
-      { key: "tenderNo", header: "Tender No.", render: (row) => row.tenderNo ?? row.prId },
-      { key: "tenderName", header: "Tender Name", render: (row) => row.tenderName ?? row.prDescription ?? "-" },
+      {
+        key: "tenderNo",
+        header: "Tender No.",
+        render: (row) => row.tenderNo ?? row.prId,
+      },
+      {
+        key: "tenderName",
+        header: "Tender Name",
+        render: (row) => row.tenderName ?? row.prDescription ?? "-",
+      },
       {
         key: "entity",
         filterOptions: caseColumnFilterOptions.entity,
@@ -948,10 +1037,26 @@ export function ReportsWorkspace() {
         header: "Tender Owner",
         render: (row) => row.ownerFullName ?? "-",
       },
-      { key: "bidReceiptDate", header: "Bid Receipt Date", render: (row) => formatDateCell(row.bidReceiptDate) },
-      { key: "technicalEvaluationDate", header: "Technical Evaluation Date", render: (row) => formatDateCell(row.technicalEvaluationDate) },
-      { key: "technicalEvaluationTime", header: "Technical Evaluation Time", render: (row) => formatNullableDays(row.technicalEvaluationTimeDays) },
-      { key: "cycle", header: "Cycle Time", render: (row) => formatNullableDays(row.completedCycleTimeDays) },
+      {
+        key: "bidReceiptDate",
+        header: "Bid Receipt Date",
+        render: (row) => formatDateCell(row.bidReceiptDate),
+      },
+      {
+        key: "technicalEvaluationDate",
+        header: "Technical Evaluation Date",
+        render: (row) => formatDateCell(row.technicalEvaluationDate),
+      },
+      {
+        key: "technicalEvaluationTime",
+        header: "Technical Evaluation Time",
+        render: (row) => formatNullableDays(row.technicalEvaluationTimeDays),
+      },
+      {
+        key: "cycle",
+        header: "Cycle Time",
+        render: (row) => formatNullableDays(row.completedCycleTimeDays),
+      },
     ],
     [caseColumnFilterOptions],
   );
@@ -1203,8 +1308,7 @@ export function ReportsWorkspace() {
   };
 
   const openCreateCaseFromRcPo = useCallback((row: ContractExpiryReportRow) => {
-    const prReceiptDate =
-      row.tentativeTenderingDate ?? row.rcPoAwardDate ?? "";
+    const prReceiptDate = row.tentativeTenderingDate ?? row.rcPoAwardDate ?? "";
     setCreatingCaseFromRcPo({
       initialValues: {
         departmentId: row.departmentId ?? "",
@@ -1480,19 +1584,6 @@ export function ReportsWorkspace() {
 
       <section className="report-command-panel">
         <div className="report-command-topline">
-          <FormField label="Report">
-            <Select
-              className="report-compact-select"
-              onChange={(event) =>
-                navigateToAppPath(reportPathForKey(event.target.value as ReportViewKey))
-              }
-              options={reportNavigationOptions.map((option) => ({
-                label: option.label,
-                value: option.code,
-              }))}
-              value={activeReport}
-            />
-          </FormField>
           <SecondaryNav
             activeKey={activeReport}
             ariaLabel="Report type"
@@ -1563,7 +1654,9 @@ export function ReportsWorkspace() {
               variant="secondary"
             >
               <RefreshCw size={17} />
-              {refreshMutation.isPending ? "Refreshing..." : "Refresh Report Data"}
+              {refreshMutation.isPending
+                ? "Refreshing..."
+                : "Refresh Report Data"}
             </Button>
             <Button
               onClick={() => setIsSavedViewsOpen((value) => !value)}
@@ -1725,6 +1818,9 @@ export function ReportsWorkspace() {
             <ReportAnalyticsDashboard
               activeFilterCount={activeFilterCount}
               amountUnit={filters.amountUnit}
+              canOpenCases={canViewCaseSummary}
+              commandCenterSummary={commandCenterSummary.data}
+              commandCenterSummaryIsLoading={commandCenterSummary.isLoading}
               metrics={metrics}
               onOpenCaseDrilldown={openAnalyticsDrilldown}
               stageError={data.stageTime.error}
@@ -1750,6 +1846,7 @@ export function ReportsWorkspace() {
                   getRowKey={(row) => row.caseId}
                   isLoading={data.tenderDetails.isLoading}
                   onRowClick={(row) => setStageAgingCaseId(row.caseId)}
+                  showSearch={false}
                 />
               </>
             ) : null}
@@ -1762,6 +1859,7 @@ export function ReportsWorkspace() {
                 getRowKey={(row) => row.caseId}
                 isLoading={data.running.isLoading}
                 onRowClick={(row) => setStageAgingCaseId(row.caseId)}
+                showSearch={false}
               />
             ) : null}
             {reportCode === "completed" ? (
@@ -1773,6 +1871,7 @@ export function ReportsWorkspace() {
                 getRowKey={(row) => row.caseId}
                 isLoading={data.completed.isLoading}
                 onRowClick={(row) => setStageAgingCaseId(row.caseId)}
+                showSearch={false}
               />
             ) : null}
             {reportCode === "technical_evaluation_pendency" ? (
@@ -1784,6 +1883,7 @@ export function ReportsWorkspace() {
                 getRowKey={(row) => row.caseId}
                 isLoading={data.technicalEvaluationPendency.isLoading}
                 onRowClick={(row) => setStageAgingCaseId(row.caseId)}
+                showSearch={false}
               />
             ) : null}
             {reportCode === "technical_evaluation_time" ? (
@@ -1795,6 +1895,7 @@ export function ReportsWorkspace() {
                 getRowKey={(row) => row.caseId}
                 isLoading={data.technicalEvaluationTime.isLoading}
                 onRowClick={(row) => setStageAgingCaseId(row.caseId)}
+                showSearch={false}
               />
             ) : null}
             {reportCode === "vendor_awards" ? (
@@ -1806,6 +1907,7 @@ export function ReportsWorkspace() {
                 getRowKey={(row) => row.awardId}
                 isLoading={data.vendorAwards.isLoading}
                 onRowClick={(row) => navigateToAppPath(`/cases/${row.caseId}`)}
+                showSearch={false}
               />
             ) : null}
             {reportCode === "stage_time" ? (
@@ -1817,6 +1919,7 @@ export function ReportsWorkspace() {
                 getRowKey={(row) => row.caseId}
                 isLoading={data.stageTime.isLoading}
                 onRowClick={(row) => navigateToAppPath(`/cases/${row.caseId}`)}
+                showSearch={false}
               />
             ) : null}
             {reportCode === "rc_po_expiry" ? (
@@ -1830,9 +1933,11 @@ export function ReportsWorkspace() {
                   isRowClickable={(row) => Boolean(row.sourceCaseId)}
                   isLoading={data.rcPoExpiry.isLoading}
                   onRowClick={(row) => {
-                    if (row.sourceCaseId) navigateToAppPath(`/cases/${row.sourceCaseId}`);
+                    if (row.sourceCaseId)
+                      navigateToAppPath(`/cases/${row.sourceCaseId}`);
                   }}
                   pagination={false}
+                  showSearch={false}
                 />
                 {!data.rcPoExpiry.isLoading && !data.rcPoExpiry.error ? (
                   <RcPoExpiryPagination
@@ -1864,8 +1969,44 @@ export function ReportsWorkspace() {
           <CreateCaseForm
             initialValues={creatingCaseFromRcPo.initialValues}
             onCreated={(caseId) => {
-              setCreatingCaseFromRcPo(null);
-              navigateToAppPath(`/cases/${caseId}`);
+              const row = creatingCaseFromRcPo.row;
+              void (async () => {
+                try {
+                  if (!row.tenderFloatedOrNotRequired) {
+                    const updatedRow = await updateRcPoExpiryReportRow(
+                      row.sourceType,
+                      row.sourceId,
+                      { tenderFloatedOrNotRequired: true },
+                    );
+                    queryClient.setQueriesData<ContractExpiryReportRow[]>(
+                      { queryKey: ["report", "rc-po-expiry"] },
+                      (currentRows) =>
+                        currentRows?.map((currentRow) =>
+                          currentRow.sourceType === updatedRow.sourceType &&
+                          currentRow.sourceId === updatedRow.sourceId
+                            ? updatedRow
+                            : currentRow,
+                        ),
+                    );
+                    void queryClient.invalidateQueries({
+                      queryKey: ["report", "rc-po-expiry"],
+                    });
+                    void queryClient.invalidateQueries({
+                      queryKey: ["dashboard-rc-po-expiry"],
+                    });
+                  }
+                } catch (error) {
+                  notify({
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : "Case created, but Tender Floated could not be updated.",
+                    tone: "warning",
+                  });
+                }
+                setCreatingCaseFromRcPo(null);
+                navigateToAppPath(`/cases/${caseId}`);
+              })();
             }}
           />
         ) : null}
@@ -2035,7 +2176,10 @@ function TenderDetailsKpis({
         </span>
         <strong>{formatAmount(metrics?.savingsWrtPr ?? 0, amountUnit)}</strong>
         <small>
-          {formatSavingsPercent(metrics?.savingsWrtPr, metrics?.completedPrValue)}
+          {formatSavingsPercent(
+            metrics?.savingsWrtPr,
+            metrics?.completedPrValue,
+          )}
         </small>
       </article>
       <article className="report-tender-kpi-positive">
@@ -2060,6 +2204,9 @@ function TenderDetailsKpis({
 function ReportAnalyticsDashboard({
   activeFilterCount,
   amountUnit,
+  canOpenCases,
+  commandCenterSummary,
+  commandCenterSummaryIsLoading,
   metrics,
   onOpenCaseDrilldown,
   stageError,
@@ -2068,6 +2215,9 @@ function ReportAnalyticsDashboard({
 }: {
   activeFilterCount: number;
   amountUnit: AmountUnit;
+  canOpenCases: boolean;
+  commandCenterSummary: CaseSummary | undefined;
+  commandCenterSummaryIsLoading: boolean;
   metrics: ReportingAnalytics | undefined;
   onOpenCaseDrilldown: (overrides?: ReportQueryParams) => void;
   stageError: Error | null;
@@ -2077,19 +2227,25 @@ function ReportAnalyticsDashboard({
   const statusRows = [
     {
       label: "On-Track",
-      onClick: () => onOpenCaseDrilldown({ status: "running", trackStatuses: ["on_track"] }),
+      onClick: () =>
+        onOpenCaseDrilldown({ status: "running", trackStatuses: ["on_track"] }),
       tone: "success" as const,
       value: metrics?.onTrackCases ?? 0,
     },
     {
       label: "Off-Track",
-      onClick: () => onOpenCaseDrilldown({ status: "running", trackStatuses: ["off_track"] }),
+      onClick: () =>
+        onOpenCaseDrilldown({
+          status: "running",
+          trackStatuses: ["off_track"],
+        }),
       tone: "warning" as const,
       value: metrics?.offTrackCases ?? 0,
     },
     {
       label: "Delayed",
-      onClick: () => onOpenCaseDrilldown({ status: "running", trackStatuses: ["delayed"] }),
+      onClick: () =>
+        onOpenCaseDrilldown({ status: "running", trackStatuses: ["delayed"] }),
       tone: "danger" as const,
       value: metrics?.delayedCases ?? 0,
     },
@@ -2148,14 +2304,19 @@ function ReportAnalyticsDashboard({
     {
       label: `NFA Approved Amount (${amountUnitLabel(amountUnit)}) [All Inclusive]`,
       meta: "",
-      onClick: () => onOpenCaseDrilldown({ status: "completed", trackStatuses: [] }),
+      onClick: () =>
+        onOpenCaseDrilldown({ status: "completed", trackStatuses: [] }),
       tone: "success",
       value: formatAmount(metrics?.totalApprovedAmount ?? 0, amountUnit),
     },
     {
       label: `Savings wrt PR Value/Approved Budget (${amountUnitLabel(amountUnit)}) [All Inclusive]`,
-      meta: formatSavingsPercent(metrics?.savingsWrtPr, metrics?.completedPrValue),
-      onClick: () => onOpenCaseDrilldown({ status: "completed", trackStatuses: [] }),
+      meta: formatSavingsPercent(
+        metrics?.savingsWrtPr,
+        metrics?.completedPrValue,
+      ),
+      onClick: () =>
+        onOpenCaseDrilldown({ status: "completed", trackStatuses: [] }),
       tone: "success",
       value: formatAmount(metrics?.savingsWrtPr ?? 0, amountUnit),
     },
@@ -2165,35 +2326,44 @@ function ReportAnalyticsDashboard({
         metrics?.savingsWrtEstimate,
         metrics?.completedEstimateBenchmark,
       ),
-      onClick: () => onOpenCaseDrilldown({ status: "completed", trackStatuses: [] }),
+      onClick: () =>
+        onOpenCaseDrilldown({ status: "completed", trackStatuses: [] }),
       tone: "success",
       value: formatAmount(metrics?.savingsWrtEstimate ?? 0, amountUnit),
     },
     {
       label: "Avg Bidder Participation (Open + Limited, Completed)",
       meta: "",
-      onClick: () => onOpenCaseDrilldown({ status: "completed", trackStatuses: [] }),
+      onClick: () =>
+        onOpenCaseDrilldown({ status: "completed", trackStatuses: [] }),
       tone: "warning",
       value: formatNullableDecimal(metrics?.averageBiddersParticipated),
     },
     {
       label: "Avg Qualified Bidders Count (Open + Limited, Completed)",
       meta: "",
-      onClick: () => onOpenCaseDrilldown({ status: "completed", trackStatuses: [] }),
+      onClick: () =>
+        onOpenCaseDrilldown({ status: "completed", trackStatuses: [] }),
       tone: "brand",
       value: formatNullableDecimal(metrics?.averageQualifiedBidders),
     },
     {
       label: "Avg Cycle Time (Days)",
-      meta: metrics?.completedCases != null ? `${metrics.completedCases} completed` : "",
-      onClick: () => onOpenCaseDrilldown({ status: "completed", trackStatuses: [] }),
+      meta:
+        metrics?.completedCases != null
+          ? `${metrics.completedCases} completed`
+          : "",
+      onClick: () =>
+        onOpenCaseDrilldown({ status: "completed", trackStatuses: [] }),
       tone: delayedRatio > 0 ? "danger" : "success",
       value: formatNullableDecimal(metrics?.averageCycleTimeDays),
     },
     {
       label: "Avg Running Tender Age",
-      meta: metrics?.runningCases != null ? `${metrics.runningCases} running` : "",
-      onClick: () => onOpenCaseDrilldown({ status: "running", trackStatuses: [] }),
+      meta:
+        metrics?.runningCases != null ? `${metrics.runningCases} running` : "",
+      onClick: () =>
+        onOpenCaseDrilldown({ status: "running", trackStatuses: [] }),
       tone: "warning",
       value: formatNullableDecimal(metrics?.averageRunningCycleTimeDays),
     },
@@ -2204,6 +2374,13 @@ function ReportAnalyticsDashboard({
 
   return (
     <section className="report-analytics-dashboard">
+      <ReportAnalyticsCommandCenterTiles
+        analyticsMetrics={metrics}
+        canOpenCases={canOpenCases}
+        isLoading={commandCenterSummaryIsLoading}
+        summary={commandCenterSummary}
+      />
+
       <section className="state-panel report-analytics-overview">
         <div className="report-analytics-overview-heading">
           <div>
@@ -2266,7 +2443,9 @@ function ReportAnalyticsDashboard({
         />
         <ReportEntityPrValueDonut
           amountUnit={amountUnit}
-          onEntityClick={(entityId) => onOpenCaseDrilldown({ entityIds: [entityId] })}
+          onEntityClick={(entityId) =>
+            onOpenCaseDrilldown({ entityIds: [entityId] })
+          }
           rows={entityPrRows}
           total={metrics?.totalPrValue ?? 0}
         />
@@ -2279,9 +2458,15 @@ function ReportAnalyticsDashboard({
           title="Cases by entity"
         />
         <ReportEntityRankedList
-          onEntityClick={(entityId) => onOpenCaseDrilldown({ entityIds: [entityId] })}
+          onEntityClick={(entityId) =>
+            onOpenCaseDrilldown({ entityIds: [entityId] })
+          }
           onEntityStatusClick={(entityId, status) =>
-            onOpenCaseDrilldown({ entityIds: [entityId], status, trackStatuses: [] })
+            onOpenCaseDrilldown({
+              entityIds: [entityId],
+              status,
+              trackStatuses: [],
+            })
           }
           rows={entityRows}
         />
@@ -2294,7 +2479,9 @@ function ReportAnalyticsDashboard({
           title="User department case count by nature of work"
         />
         <ReportDepartmentNatureStackedBar
-          onDepartmentClick={(departmentId) => onOpenCaseDrilldown({ departmentIds: [departmentId] })}
+          onDepartmentClick={(departmentId) =>
+            onOpenCaseDrilldown({ departmentIds: [departmentId] })
+          }
           onNatureClick={(departmentId, natureOfWorkId) =>
             onOpenCaseDrilldown({
               ...(departmentId ? { departmentIds: [departmentId] } : {}),
@@ -2317,7 +2504,11 @@ function ReportAnalyticsDashboard({
             onOpenCaseDrilldown({ tenderTypeIds: [tenderTypeId] });
           }}
           onTenderTypeStatusClick={(tenderTypeId, trackStatus) => {
-            onOpenCaseDrilldown({ status: "running", tenderTypeIds: [tenderTypeId], trackStatuses: [trackStatus] });
+            onOpenCaseDrilldown({
+              status: "running",
+              tenderTypeIds: [tenderTypeId],
+              trackStatuses: [trackStatus],
+            });
           }}
         />
       </section>
@@ -2338,13 +2529,314 @@ function ReportAnalyticsDashboard({
           <p className="inline-error">{stageError.message}</p>
         ) : (
           <ReportStageBreakdown
-            onStageClick={(stageCode) => onOpenCaseDrilldown({ stageCodes: [stageCode] })}
+            onStageClick={(stageCode) =>
+              onOpenCaseDrilldown({ stageCodes: [stageCode] })
+            }
             rows={stageChartRows}
           />
         )}
       </section>
     </section>
   );
+}
+
+type ReportCommandMetricTarget =
+  | "all-cases"
+  | "completed-cases"
+  | "delayed-cases"
+  | "off-track-cases"
+  | "on-track-cases"
+  | "priority-cases"
+  | "running-cases";
+type ReportCommandSummaryEntity = CaseSummary["byEntity"][number];
+
+function ReportAnalyticsCommandCenterTiles({
+  analyticsMetrics,
+  canOpenCases,
+  isLoading,
+  summary,
+}: {
+  analyticsMetrics: ReportingAnalytics | undefined;
+  canOpenCases: boolean;
+  isLoading: boolean;
+  summary: CaseSummary | undefined;
+}) {
+  const total = summary?.total ?? analyticsMetrics?.totalCases ?? 0;
+  const running = summary?.running ?? analyticsMetrics?.runningCases ?? 0;
+  const completed = summary?.completed ?? analyticsMetrics?.completedCases ?? 0;
+  const delayed = summary?.delayed ?? analyticsMetrics?.delayedCases ?? 0;
+  const offTrack = summary?.offTrack ?? analyticsMetrics?.offTrackCases ?? 0;
+  const onTrack = summary?.onTrack ?? analyticsMetrics?.onTrackCases ?? 0;
+  const priority = summary?.priority ?? null;
+  const commandMetrics = [
+    {
+      group: "Volume",
+      icon: FileText,
+      label: "Total Cases",
+      progress: undefined,
+      subLabel: "All procurement records",
+      target: "all-cases",
+      tone: "neutral",
+      value: total,
+    },
+    {
+      group: "Volume",
+      icon: Activity,
+      label: "Running",
+      progress: reportPercentage(running, total),
+      subLabel: `${reportPercentage(running, total)}% of total portfolio`,
+      target: "running-cases",
+      tone: "brand",
+      value: running,
+    },
+    {
+      group: "Volume",
+      icon: CheckCircle2,
+      label: "Completed",
+      progress: reportPercentage(completed, total),
+      subLabel: `${reportPercentage(completed, total)}% completion rate`,
+      target: "completed-cases",
+      tone: "success",
+      value: completed,
+    },
+    {
+      group: "Exceptions",
+      icon: AlertTriangle,
+      label: "Delayed",
+      progress: reportPercentage(delayed, Math.max(running, 1)),
+      subLabel: "Needs intervention",
+      target: "delayed-cases",
+      tone: "danger",
+      value: delayed,
+    },
+    {
+      group: "Exceptions",
+      icon: Clock3,
+      label: "Off Track",
+      progress: reportPercentage(offTrack, Math.max(running, 1)),
+      subLabel: "Form date passed",
+      target: "off-track-cases",
+      tone: "warning",
+      value: offTrack,
+    },
+    {
+      group: "Exceptions",
+      icon: Zap,
+      label: "Priority",
+      progress:
+        priority == null
+          ? undefined
+          : reportPercentage(priority, Math.max(running, 1)),
+      subLabel: "High attention cases",
+      target: "priority-cases",
+      tone: "warning",
+      value: priority,
+    },
+    {
+      group: "Health",
+      icon: Gauge,
+      label: "On Track",
+      progress: reportPercentage(onTrack, Math.max(running, 1)),
+      subLabel: "Within form date",
+      target: "on-track-cases",
+      tone: "success",
+      value: onTrack,
+    },
+  ] satisfies Array<{
+    group: "Exceptions" | "Health" | "Volume";
+    icon: typeof FileText;
+    label: string;
+    progress: number | undefined;
+    subLabel: string;
+    target: ReportCommandMetricTarget;
+    tone: "brand" | "danger" | "neutral" | "success" | "warning";
+    value: number | null;
+  }>;
+  const commandGroups = [
+    {
+      key: "Volume",
+      label: "Case Volume",
+      metrics: commandMetrics.filter((metric) => metric.group === "Volume"),
+    },
+    {
+      key: "Exceptions",
+      label: "Exception Queue",
+      metrics: commandMetrics.filter((metric) => metric.group === "Exceptions"),
+    },
+    {
+      key: "Health",
+      label: "Delivery Health",
+      metrics: commandMetrics.filter((metric) => metric.group === "Health"),
+    },
+  ];
+
+  return (
+    <section className="state-panel report-command-center-tiles">
+      <div className="report-command-center-heading">
+        <div>
+          <p className="eyebrow">Procurement command center</p>
+          <h2>Case portfolio tiles</h2>
+        </div>
+      </div>
+      <div
+        aria-label="Case summary"
+        className="report-command-center-metric-groups"
+      >
+        {commandGroups.map((group) => (
+          <section className="dashboard-metric-group" key={group.key}>
+            <p>{group.label}</p>
+            <div className="dashboard-hero-metrics">
+              {group.metrics.map((metric) => {
+                const Icon = metric.icon;
+                const entityBreakdown = summary
+                  ? reportEntityBreakdownForMetric(
+                      summary.byEntity,
+                      metric.target,
+                    )
+                  : [];
+
+                return (
+                  <article
+                    className={`metric-card dashboard-metric-card metric-card-${metric.tone}`}
+                    key={metric.label}
+                  >
+                    <button
+                      aria-label={`Open ${metric.label} cases`}
+                      className="dashboard-metric-main-button dashboard-metric-card-clickable"
+                      disabled={!canOpenCases}
+                      onClick={() =>
+                        navigateToAppPath(
+                          reportCommandCasePathForTarget(metric.target),
+                        )
+                      }
+                      type="button"
+                    >
+                      <div className="dashboard-metric-topline">
+                        <div className="metric-card-icon">
+                          <Icon size={15} />
+                        </div>
+                        {metric.progress != null ? (
+                          <span className="dashboard-metric-percent">
+                            {metric.progress}%
+                          </span>
+                        ) : null}
+                      </div>
+                      <span>{metric.label}</span>
+                      <strong>
+                        {isLoading && !summary ? (
+                          <Skeleton height={22} width="60%" />
+                        ) : metric.value == null ? (
+                          "-"
+                        ) : (
+                          formatInteger(metric.value)
+                        )}
+                      </strong>
+                      <small>{metric.subLabel}</small>
+                      {metric.progress != null ? (
+                        <span
+                          aria-hidden="true"
+                          className="dashboard-metric-bar"
+                        >
+                          <i style={{ width: `${metric.progress}%` }} />
+                        </span>
+                      ) : null}
+                    </button>
+                    {!isLoading && entityBreakdown.length ? (
+                      <div
+                        aria-label={`${metric.label} by entity`}
+                        className="dashboard-metric-entity-breakdown"
+                      >
+                        {entityBreakdown.map(({ count, entity }) => (
+                          <button
+                            aria-label={`Open ${metric.label} cases for ${reportCommandEntityName(entity)}`}
+                            className="dashboard-metric-entity-chip"
+                            disabled={!canOpenCases}
+                            key={entity.entityId}
+                            onClick={() =>
+                              navigateToAppPath(
+                                reportCommandCasePathForTarget(
+                                  metric.target,
+                                  entity.entityId,
+                                ),
+                              )
+                            }
+                            type="button"
+                          >
+                            <span>{reportCommandEntityName(entity)}</span>
+                            <strong>{count}</strong>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function reportPercentage(value: number, total: number): number {
+  if (!total) return 0;
+  return Math.round((value / total) * 100);
+}
+
+function reportCommandCasePathForTarget(
+  target: ReportCommandMetricTarget,
+  entityId?: string,
+): string {
+  const params = new URLSearchParams();
+  if (entityId) params.set("entityIds", entityId);
+  if (target === "running-cases") params.set("status", "running");
+  if (target === "completed-cases") params.set("status", "completed");
+  if (target === "delayed-cases") params.set("trackStatus", "delayed");
+  if (target === "off-track-cases") params.set("trackStatus", "off_track");
+  if (target === "on-track-cases") params.set("trackStatus", "on_track");
+  if (target === "priority-cases") {
+    params.set("status", "running");
+    params.set("priorityCase", "true");
+  }
+  const query = params.toString();
+  return `/cases${query ? `?${query}` : ""}`;
+}
+
+function reportCommandMetricEntityCount(
+  entity: ReportCommandSummaryEntity,
+  target: ReportCommandMetricTarget,
+): number {
+  if (target === "running-cases") return entity.running;
+  if (target === "completed-cases") return entity.completed;
+  if (target === "delayed-cases") return entity.delayed;
+  if (target === "off-track-cases") return entity.offTrack;
+  if (target === "on-track-cases") return entity.onTrack;
+  if (target === "priority-cases") return entity.priority;
+  return entity.total;
+}
+
+function reportEntityBreakdownForMetric(
+  entities: ReportCommandSummaryEntity[],
+  target: ReportCommandMetricTarget,
+) {
+  return entities
+    .map((entity) => ({
+      count: reportCommandMetricEntityCount(entity, target),
+      entity,
+    }))
+    .filter((item) => item.count > 0)
+    .sort(
+      (left, right) =>
+        right.count - left.count ||
+        reportCommandEntityName(left.entity).localeCompare(
+          reportCommandEntityName(right.entity),
+        ),
+    );
+}
+
+function reportCommandEntityName(entity: ReportCommandSummaryEntity): string {
+  return entity.entityCode ?? entity.entityName ?? entity.entityId;
 }
 
 function buildStageBreakdownRows(rows: StageTimeRow[]) {
@@ -2364,12 +2856,15 @@ function buildStageBreakdownRows(rows: StageTimeRow[]) {
 function buildDepartmentNatureChartRows(
   rows: ReportingAnalytics["byDepartmentNatureOfWork"],
 ) {
-  const departments = new Map<string, {
-    departmentId: string | null;
-    departmentName: string;
-    total: number;
-    values: Map<string, { natureOfWorkId: string | null; value: number }>;
-  }>();
+  const departments = new Map<
+    string,
+    {
+      departmentId: string | null;
+      departmentName: string;
+      total: number;
+      values: Map<string, { natureOfWorkId: string | null; value: number }>;
+    }
+  >();
   const natureNames = new Set<string>();
 
   rows.forEach((row) => {
@@ -2379,7 +2874,10 @@ function buildDepartmentNatureChartRows(
       departmentId: row.departmentId,
       departmentName: row.departmentName || "Unspecified",
       total: 0,
-      values: new Map<string, { natureOfWorkId: string | null; value: number }>(),
+      values: new Map<
+        string,
+        { natureOfWorkId: string | null; value: number }
+      >(),
     };
     department.total += row.caseCount;
     const segment = department.values.get(natureName) ?? {
@@ -2394,9 +2892,15 @@ function buildDepartmentNatureChartRows(
     natureNames.add(natureName);
   });
 
-  const natures = [...natureNames].sort((left, right) => left.localeCompare(right));
+  const natures = [...natureNames].sort((left, right) =>
+    left.localeCompare(right),
+  );
   const departmentRows = [...departments.values()]
-    .sort((left, right) => right.total - left.total || left.departmentName.localeCompare(right.departmentName))
+    .sort(
+      (left, right) =>
+        right.total - left.total ||
+        left.departmentName.localeCompare(right.departmentName),
+    )
     .slice(0, 10)
     .map((department) => ({
       departmentId: department.departmentId,
@@ -2422,7 +2926,9 @@ function amountDisplayUnitLabel(unit: AmountUnit) {
 
 function formatAnalyticsAmountWithUnit(value: number | null, unit: AmountUnit) {
   const formattedValue = formatAmount(value, unit);
-  return formattedValue === "-" ? formattedValue : `${formattedValue} ${amountDisplayUnitLabel(unit)}`;
+  return formattedValue === "-"
+    ? formattedValue
+    : `${formattedValue} ${amountDisplayUnitLabel(unit)}`;
 }
 
 function formatValueSlabLabel(value: string) {
@@ -2679,10 +3185,14 @@ function ReportEntityRankedList({
             <div className="report-entity-ranked-main">
               <div className="report-entity-ranked-title">
                 <strong>{row.label}</strong>
-                <span>{row.runningValue} running / {row.completedValue} completed</span>
+                <span>
+                  {row.runningValue} running / {row.completedValue} completed
+                </span>
               </div>
               <div className="report-entity-ranked-meter">
-                <span style={{ width: `${Math.max(6, (row.value / max) * 100)}%` }} />
+                <span
+                  style={{ width: `${Math.max(6, (row.value / max) * 100)}%` }}
+                />
               </div>
             </div>
             <div className="report-entity-ranked-metrics">
@@ -2736,7 +3246,9 @@ function ReportEntityPrValueDonut({
     .slice(0, 8);
 
   if (visibleRows.length === 0) {
-    return <p className="hero-copy">No PR value data for the current filters.</p>;
+    return (
+      <p className="hero-copy">No PR value data for the current filters.</p>
+    );
   }
 
   return (
@@ -2789,7 +3301,9 @@ function ReportEntityPrValueDonut({
                 style={{ background: analyticsPaletteColor(index) }}
               />
               <strong>{row.label}</strong>
-              <span>{formatAnalyticsAmountWithUnit(row.value, amountUnit)}</span>
+              <span>
+                {formatAnalyticsAmountWithUnit(row.value, amountUnit)}
+              </span>
               <em>{share.toFixed(1)}%</em>
             </button>
           );
@@ -2809,17 +3323,29 @@ function ReportDepartmentNatureStackedBar({
   rows: Array<{
     departmentId: string | null;
     departmentName: string;
-    segments: Array<{ label: string; natureOfWorkId: string | null; value: number }>;
+    segments: Array<{
+      label: string;
+      natureOfWorkId: string | null;
+      value: number;
+    }>;
     total: number;
   }>;
 }) {
   const legend = Array.from(
-    new Set(rows.flatMap((row) => row.segments.filter((segment) => segment.value > 0).map((segment) => segment.label))),
+    new Set(
+      rows.flatMap((row) =>
+        row.segments
+          .filter((segment) => segment.value > 0)
+          .map((segment) => segment.label),
+      ),
+    ),
   );
   const max = Math.max(1, ...rows.map((row) => row.total));
 
   if (rows.length === 0) {
-    return <p className="hero-copy">No department data for the current filters.</p>;
+    return (
+      <p className="hero-copy">No department data for the current filters.</p>
+    );
   }
 
   return (
@@ -2834,66 +3360,81 @@ function ReportDepartmentNatureStackedBar({
       </div>
       <div className="report-department-nature-rows">
         {rows.map((row) => {
-          const canOpenDepartment = Boolean(row.departmentId && onDepartmentClick);
+          const canOpenDepartment = Boolean(
+            row.departmentId && onDepartmentClick,
+          );
           return (
-          <div
-            className="report-department-nature-row"
-            key={row.departmentName}
-            onClick={() => {
-              if (row.departmentId) onDepartmentClick?.(row.departmentId);
-            }}
-            onKeyDown={(event) => {
-              if (!canOpenDepartment) return;
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
+            <div
+              className="report-department-nature-row"
+              key={row.departmentName}
+              onClick={() => {
                 if (row.departmentId) onDepartmentClick?.(row.departmentId);
+              }}
+              onKeyDown={(event) => {
+                if (!canOpenDepartment) return;
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  if (row.departmentId) onDepartmentClick?.(row.departmentId);
+                }
+              }}
+              role={canOpenDepartment ? "button" : undefined}
+              tabIndex={canOpenDepartment ? 0 : undefined}
+              title={
+                canOpenDepartment
+                  ? `Open ${row.departmentName} cases`
+                  : undefined
               }
-            }}
-            role={canOpenDepartment ? "button" : undefined}
-            tabIndex={canOpenDepartment ? 0 : undefined}
-            title={canOpenDepartment ? `Open ${row.departmentName} cases` : undefined}
-          >
-            <div className="report-department-nature-label">
-              <strong>{row.departmentName}</strong>
-              <span>{row.total} case{row.total === 1 ? "" : "s"}</span>
-            </div>
-            <div className="report-department-nature-track">
-              <div
-                className="report-department-nature-stack"
-                style={{ width: `${Math.max(8, (row.total / max) * 100)}%` }}
-              >
-                {legend.map((label, index) => {
-                  const segment = row.segments.find((item) => item.label === label);
-                  const value = segment?.value ?? 0;
-                  return value > 0 ? (
-                    <button
-                      aria-label={`${row.departmentName} ${label}: ${value} case${value === 1 ? "" : "s"}`}
-                      key={label}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (segment?.natureOfWorkId) {
-                          onNatureClick?.(row.departmentId, segment.natureOfWorkId);
-                        }
-                      }}
-                      style={{
-                        background: analyticsPaletteColor(index),
-                        flexBasis: `${(value / row.total) * 100}%`,
-                      }}
-                      title={
-                        segment?.natureOfWorkId
-                          ? `Open ${row.departmentName} ${label} cases`
-                          : undefined
-                      }
-                      type="button"
-                    >
-                      <span>{value}</span>
-                    </button>
-                  ) : null;
-                })}
+            >
+              <div className="report-department-nature-label">
+                <strong>{row.departmentName}</strong>
+                <span>
+                  {row.total} case{row.total === 1 ? "" : "s"}
+                </span>
               </div>
+              <div className="report-department-nature-track">
+                <div
+                  className="report-department-nature-stack"
+                  style={{ width: `${Math.max(8, (row.total / max) * 100)}%` }}
+                >
+                  {legend.map((label, index) => {
+                    const segment = row.segments.find(
+                      (item) => item.label === label,
+                    );
+                    const value = segment?.value ?? 0;
+                    return value > 0 ? (
+                      <button
+                        aria-label={`${row.departmentName} ${label}: ${value} case${value === 1 ? "" : "s"}`}
+                        key={label}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (segment?.natureOfWorkId) {
+                            onNatureClick?.(
+                              row.departmentId,
+                              segment.natureOfWorkId,
+                            );
+                          }
+                        }}
+                        style={{
+                          background: analyticsPaletteColor(index),
+                          flexBasis: `${(value / row.total) * 100}%`,
+                        }}
+                        title={
+                          segment?.natureOfWorkId
+                            ? `Open ${row.departmentName} ${label} cases`
+                            : undefined
+                        }
+                        type="button"
+                      >
+                        <span>{value}</span>
+                      </button>
+                    ) : null;
+                  })}
+                </div>
+              </div>
+              <strong className="report-department-nature-total">
+                {row.total}
+              </strong>
             </div>
-            <strong className="report-department-nature-total">{row.total}</strong>
-          </div>
           );
         })}
       </div>
@@ -2970,7 +3511,10 @@ function ReportTenderTypeStackedChart({
           ))}
           {sortedRows.map((row) => {
             const delayed = Math.min(row.secondaryValue, row.value);
-            const offTrack = Math.min(row.tertiaryValue ?? 0, Math.max(row.value - delayed, 0));
+            const offTrack = Math.min(
+              row.tertiaryValue ?? 0,
+              Math.max(row.value - delayed, 0),
+            );
             const onTrack = Math.max(row.value - delayed - offTrack, 0);
             const share = total > 0 ? Math.round((row.value / total) * 100) : 0;
             const totalHeight = Math.max(4, (row.value / max) * 100);
@@ -3025,26 +3569,40 @@ function ReportTenderTypeStackedChart({
                       className="report-tender-type-bar-on-track"
                       onClick={(event) => drillIntoStatus(event, "on_track")}
                       title={`Open ${row.label} on-track cases`}
-                    />
+                    >
+                      <span className="report-tender-type-bar-segment-label">
+                        {onTrack}
+                      </span>
+                    </span>
                   ) : null}
                   {offTrack > 0 ? (
                     <span
                       className="report-tender-type-bar-off-track"
                       onClick={(event) => drillIntoStatus(event, "off_track")}
                       title={`Open ${row.label} off-track cases`}
-                    />
+                    >
+                      <span className="report-tender-type-bar-segment-label">
+                        {offTrack}
+                      </span>
+                    </span>
                   ) : null}
                   {delayed > 0 ? (
                     <span
                       className="report-tender-type-bar-delayed"
                       onClick={(event) => drillIntoStatus(event, "delayed")}
                       title={`Open ${row.label} delayed cases`}
-                    />
+                    >
+                      <span className="report-tender-type-bar-segment-label">
+                        {delayed}
+                      </span>
+                    </span>
                   ) : null}
                 </div>
                 <div className="report-tender-type-x-label">
                   <strong>{row.label}</strong>
-                  <span>{row.value} tender{row.value === 1 ? "" : "s"} / {share}%</span>
+                  <span>
+                    {row.value} tender{row.value === 1 ? "" : "s"} / {share}%
+                  </span>
                 </div>
               </div>
             );
@@ -3296,7 +3854,7 @@ function ReportExportStatusPanel({
   exportStatusIsLoading,
   onExportJobIdChange,
   reportLabel,
-  reportFilterOptions,
+  reportFilterValues,
 }: {
   canDownloadExport: boolean;
   exportJobId: string;
@@ -3810,13 +4368,17 @@ function ReportFilterPanel({
                 className="segmented-control"
                 role="group"
               >
-                {([
-                  ["rupees", "Rupees"],
-                  ["lakh", "Rs. Lakhs"],
-                ] as const).map(([unit, label]) => (
+                {(
+                  [
+                    ["rupees", "Rupees"],
+                    ["lakh", "Rs. Lakhs"],
+                  ] as const
+                ).map(([unit, label]) => (
                   <button
                     className={
-                      filters.amountUnit === unit ? "segmented-control-active" : ""
+                      filters.amountUnit === unit
+                        ? "segmented-control-active"
+                        : ""
                     }
                     key={unit}
                     onClick={() => filters.setAmountUnit(unit)}
@@ -3892,7 +4454,8 @@ function RcPoReportFilterPanel({
   const filteredDepartmentOptions = selectedEntityIds.size
     ? departmentOptions.filter(
         (department) =>
-          department.entityId == null || selectedEntityIds.has(department.entityId),
+          department.entityId == null ||
+          selectedEntityIds.has(department.entityId),
       )
     : departmentOptions;
 
@@ -3904,20 +4467,20 @@ function RcPoReportFilterPanel({
       departmentOptions
         .filter(
           (department) =>
-            department.entityId == null || allowedEntityIds.has(department.entityId),
+            department.entityId == null ||
+            allowedEntityIds.has(department.entityId),
         )
         .map((department) => department.value),
     );
     filters.setSelectedDepartmentIds(
-      filters.selectedDepartmentIds.filter((id) => allowedDepartmentIds.has(id)),
+      filters.selectedDepartmentIds.filter((id) =>
+        allowedDepartmentIds.has(id),
+      ),
     );
   }
 
   return (
-    <section
-      className="report-filter-panel"
-      aria-label="RC/PO expiry filters"
-    >
+    <section className="report-filter-panel" aria-label="RC/PO expiry filters">
       <div className="report-filter-panel-header">
         <div>
           <p className="eyebrow">RC/PO Filters</p>
@@ -3990,13 +4553,17 @@ function RcPoReportFilterPanel({
               className="segmented-control"
               role="group"
             >
-              {([
-                ["lakh", "Rs. Lakhs"],
-                ["rupees", "Rupees"],
-              ] as const).map(([unit, label]) => (
+              {(
+                [
+                  ["lakh", "Rs. Lakhs"],
+                  ["rupees", "Rupees"],
+                ] as const
+              ).map(([unit, label]) => (
                 <button
                   className={
-                    filters.amountUnit === unit ? "segmented-control-active" : ""
+                    filters.amountUnit === unit
+                      ? "segmented-control-active"
+                      : ""
                   }
                   key={unit}
                   onClick={() => filters.setAmountUnit(unit)}
@@ -4190,7 +4757,10 @@ function ReportMultiSelectControl({
               value={query}
             />
           ) : null}
-          <div className="multi-select-options">
+          <div
+            className="multi-select-options"
+            onMouseDown={(event) => event.preventDefault()}
+          >
             {visibleOptions.length ? (
               visibleOptions.map((option) => (
                 <Checkbox
@@ -4292,6 +4862,7 @@ function ReportTable<TRow>({
   isLoading,
   onRowClick,
   pagination = true,
+  showSearch = true,
 }: {
   columns: VirtualTableColumn<TRow>[];
   data: TRow[] | undefined;
@@ -4302,6 +4873,7 @@ function ReportTable<TRow>({
   isLoading: boolean;
   onRowClick?: (row: TRow) => void;
   pagination?: boolean;
+  showSearch?: boolean;
 }) {
   const rows = data ?? [];
 
@@ -4335,6 +4907,7 @@ function ReportTable<TRow>({
         pagination={pagination}
         rowHeight={48}
         rows={rows}
+        showSearch={showSearch}
       />
     </div>
   );
@@ -4504,7 +5077,9 @@ function buildActiveReportFilterChips(
     filters.cpcInvolved !== "any"
       ? `CPC: ${filters.cpcInvolved === "true" ? "Yes" : "No"}`
       : "",
-    !options.useBusinessFilterSet && filters.priorityCase ? "Priority cases" : "",
+    !options.useBusinessFilterSet && filters.priorityCase
+      ? "Priority cases"
+      : "",
     ...labelsForSelection(
       "Entity",
       filters.selectedEntityIds,
@@ -4580,8 +5155,14 @@ function labelsForSelection(
   return values.map((value) => `${prefix}: ${byValue.get(value) ?? value}`);
 }
 
-function toggleArrayValue<T extends string>(values: T[], value: T, checked: boolean): T[] {
-  return checked ? [...new Set([...values, value])] : values.filter((item) => item !== value);
+function toggleArrayValue<T extends string>(
+  values: T[],
+  value: T,
+  checked: boolean,
+): T[] {
+  return checked
+    ? [...new Set([...values, value])]
+    : values.filter((item) => item !== value);
 }
 
 function uniqueReportFilterOptions<TRow>(

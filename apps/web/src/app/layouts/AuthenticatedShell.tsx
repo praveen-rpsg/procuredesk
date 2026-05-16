@@ -1,14 +1,24 @@
 import {
   Activity,
+  ArchiveRestore,
   BarChart3,
+  Bell,
   Building2,
+  CalendarClock,
+  CircleAlert,
   FileText,
+  FileClock,
+  LayoutDashboard,
+  ListChecks,
   LogOut,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
   Pencil,
+  ShieldCheck,
+  Tags,
   UploadCloud,
+  UsersRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -23,6 +33,15 @@ import {
 import { useAuth, type CurrentUser } from "../../shared/auth/AuthProvider";
 import {
   canAccessWorkspace,
+  canExportReports,
+  canManageNotifications,
+  canManageRoles,
+  canManageUsers,
+  canReadAudit,
+  canReadCatalog,
+  canReadEntities,
+  canReadUsers,
+  canRestoreCase,
   type Permission,
   type WorkspaceKey,
 } from "../../shared/auth/permissions";
@@ -41,6 +60,7 @@ import { ImportExportWorkspace } from "../../features/import-export/pages/Import
 import { PlanningWorkspace } from "../../features/planning/pages/PlanningWorkspace";
 import { ProfileDrawer } from "../../features/profile/components/ProfileDrawer";
 import { CasesWorkspace } from "../../features/procurement-cases/pages/CasesWorkspace";
+import { REPORT_OPTIONS } from "../../features/reporting/utils/reportUtils";
 
 const AdminFoundation = lazy(() =>
   import("../../features/admin/AdminFoundation").then((module) => ({
@@ -68,6 +88,14 @@ type DashboardTarget =
   | "reports"
   | "running-cases"
   | "update-case";
+type SidebarSubNavigationItem = {
+  icon?: LucideIcon;
+  isActive?: (pathname: string) => boolean;
+  key: string;
+  label: string;
+  path: string;
+  visible?: (user: CurrentUser | null) => boolean;
+};
 
 const navigation = [
   { key: "cases", label: "Cases", icon: FileText, path: "/cases" },
@@ -82,6 +110,141 @@ const navigation = [
   path: string;
   permissions?: Permission[];
 }>;
+
+const reportSidebarSubNavigation: SidebarSubNavigationItem[] =
+  REPORT_OPTIONS.map((option): SidebarSubNavigationItem => {
+    const item = {
+      icon: option.icon,
+      key: option.code,
+      label: option.label,
+      path: option.path,
+    };
+
+    if (option.code === "export_jobs") {
+      return { ...item, visible: canExportReports };
+    }
+
+    return item;
+  });
+
+const sidebarSubNavigation: Partial<
+  Record<WorkspaceKey, SidebarSubNavigationItem[]>
+> = {
+  admin: [
+    {
+      icon: LayoutDashboard,
+      key: "overview",
+      label: "Overview",
+      path: "/admin/overview",
+    },
+    {
+      icon: UsersRound,
+      key: "users",
+      label: "Users",
+      path: "/admin/users",
+      visible: (user) => canReadUsers(user) || canManageUsers(user),
+    },
+    {
+      icon: ShieldCheck,
+      key: "roles",
+      label: "Roles",
+      path: "/admin/roles",
+      visible: canManageRoles,
+    },
+    {
+      icon: Building2,
+      key: "entities",
+      label: "Entities",
+      path: "/admin/entities",
+      visible: canReadEntities,
+    },
+    {
+      icon: Tags,
+      key: "catalog",
+      label: "Catalog",
+      path: "/admin/choice-lists",
+      visible: canReadCatalog,
+    },
+    {
+      icon: CalendarClock,
+      key: "tender-rules",
+      label: "Tender Rules",
+      path: "/admin/tender-types",
+      visible: canReadCatalog,
+    },
+    {
+      icon: FileClock,
+      key: "audit",
+      label: "Audit Logs",
+      path: "/admin/audit-logs",
+      visible: canReadAudit,
+    },
+    {
+      icon: Bell,
+      key: "operations",
+      label: "Operations",
+      path: "/admin/operations",
+      isActive: (pathname) =>
+        pathnameMatchesPath(pathname, "/admin/operations") ||
+        pathnameMatchesPath(pathname, "/operations"),
+      visible: (user) => canReadAudit(user) || canManageNotifications(user),
+    },
+  ],
+  cases: [
+    {
+      icon: FileText,
+      key: "active",
+      label: "Active Cases",
+      path: "/cases",
+      isActive: (pathname) =>
+        pathname === "/cases" ||
+        (pathname.startsWith("/cases/") &&
+          !pathnameMatchesPath(pathname, "/cases/recovery")),
+    },
+    {
+      icon: ArchiveRestore,
+      key: "recovery",
+      label: "Recovery",
+      path: "/cases/recovery",
+      visible: canRestoreCase,
+    },
+  ],
+  imports: [
+    {
+      icon: UploadCloud,
+      key: "upload",
+      label: "Upload",
+      path: "/imports/upload",
+      isActive: (pathname) =>
+        pathname === "/imports" ||
+        pathnameMatchesPath(pathname, "/imports/upload"),
+    },
+    {
+      icon: ListChecks,
+      key: "jobs",
+      label: "Import Jobs",
+      path: "/imports/jobs",
+    },
+  ],
+  planning: [
+    {
+      icon: CalendarClock,
+      key: "tender-plans",
+      label: "Tender Plans",
+      path: "/planning/tender-plans",
+      isActive: (pathname) =>
+        pathname === "/planning" ||
+        pathnameMatchesPath(pathname, "/planning/tender-plans"),
+    },
+    {
+      icon: CircleAlert,
+      key: "rc-po-expiry",
+      label: "RC/PO Expiry",
+      path: "/reports/rc-po-expiry",
+    },
+  ],
+  reports: reportSidebarSubNavigation,
+};
 
 const workspaceTitles: Record<WorkspaceKey, string> = {
   admin: "Administration",
@@ -136,6 +299,62 @@ const navItemClassName = (isActive: boolean) =>
 
 const drawerNavItemClassName = (isActive: boolean) =>
   `nav-item nav-item-drawer ${isActive ? "nav-item-active nav-item-drawer-active" : ""}`.trim();
+
+const sidebarSubNavItemClassName = (isActive: boolean) =>
+  `sidebar-subnav-item ${isActive ? "sidebar-subnav-item-active" : ""}`.trim();
+
+const drawerSubNavItemClassName = (isActive: boolean) =>
+  `drawer-subnav-item ${isActive ? "drawer-subnav-item-active" : ""}`.trim();
+
+function pathnameMatchesPath(pathname: string, path: string): boolean {
+  return pathname === path || pathname.startsWith(`${path}/`);
+}
+
+function isSidebarSubNavigationActive(
+  pathname: string,
+  item: SidebarSubNavigationItem,
+) {
+  return item.isActive?.(pathname) ?? pathnameMatchesPath(pathname, item.path);
+}
+
+function visibleSidebarSubNavigationItems(
+  workspace: WorkspaceKey,
+  user: CurrentUser | null,
+) {
+  return (sidebarSubNavigation[workspace] ?? []).filter(
+    (item) => item.visible?.(user) ?? true,
+  );
+}
+
+function SidebarSubNavigationLink({
+  className,
+  isActive,
+  item,
+  onClick,
+}: {
+  className: string;
+  isActive: boolean;
+  item: SidebarSubNavigationItem;
+  onClick: (event: MouseEvent<HTMLAnchorElement>, path: string) => void;
+}) {
+  const Icon = item.icon;
+
+  return (
+    <a
+      aria-current={isActive ? "page" : undefined}
+      className={className}
+      href={item.path}
+      onClick={(event) => onClick(event, item.path)}
+    >
+      {Icon ? (
+        <span aria-hidden="true" className="sidebar-subnav-icon">
+          <Icon size={13} />
+        </span>
+      ) : null}
+      <span className="sidebar-subnav-label">{item.label}</span>
+    </a>
+  );
+}
 
 function readCollapsedPref(): boolean {
   try {
@@ -268,6 +487,15 @@ export function AuthenticatedShell() {
     selectWorkspace(workspace);
   };
 
+  const onSubNavigationClick = (
+    event: MouseEvent<HTMLAnchorElement>,
+    path: string,
+  ) => {
+    event.preventDefault();
+    navigateToAppPath(path);
+    setIsMobileNavOpen(false);
+  };
+
   const handleLogout = () => {
     void logout();
   };
@@ -301,20 +529,83 @@ export function AuthenticatedShell() {
 
         {/* Primary navigation */}
         <nav aria-label="Primary navigation" className="nav-list">
-          {visibleNavigation.map((item) => (
-            <a
-              aria-current={activeWorkspace === item.key ? "page" : undefined}
-              className={navItemClassName(activeWorkspace === item.key)}
-              data-label={item.label}
-              href={item.path}
-              key={item.key}
-              onClick={(event) => onNavigationClick(event, item.key)}
-              title={isCollapsed ? item.label : undefined}
-            >
-              <item.icon size={18} />
-              <span>{item.label}</span>
-            </a>
-          ))}
+          {visibleNavigation.map((item) => {
+            const subNavigationItems = visibleSidebarSubNavigationItems(
+              item.key,
+              user,
+            );
+            const isActiveWorkspace = activeWorkspace === item.key;
+
+            return (
+              <div className="nav-group" key={item.key}>
+                <a
+                  aria-current={isActiveWorkspace ? "page" : undefined}
+                  className={navItemClassName(isActiveWorkspace)}
+                  data-label={item.label}
+                  href={item.path}
+                  onClick={(event) => onNavigationClick(event, item.key)}
+                  title={isCollapsed ? item.label : undefined}
+                >
+                  <item.icon size={18} />
+                  <span>{item.label}</span>
+                </a>
+                {!isCollapsed &&
+                isActiveWorkspace &&
+                subNavigationItems.length ? (
+                  <nav
+                    aria-label={`${item.label} sections`}
+                    className="sidebar-subnav"
+                  >
+                    {subNavigationItems.map((subItem) => {
+                      const isActive = isSidebarSubNavigationActive(
+                        location.pathname,
+                        subItem,
+                      );
+
+                      return (
+                        <SidebarSubNavigationLink
+                          className={sidebarSubNavItemClassName(isActive)}
+                          isActive={isActive}
+                          item={subItem}
+                          key={subItem.key}
+                          onClick={onSubNavigationClick}
+                        />
+                      );
+                    })}
+                  </nav>
+                ) : null}
+                {isCollapsed && subNavigationItems.length ? (
+                  <div
+                    aria-label={`${item.label} sections`}
+                    className="sidebar-subnav-flyout"
+                    role="group"
+                  >
+                    <div className="sidebar-subnav-flyout-title">
+                      {item.label}
+                    </div>
+                    <div className="sidebar-subnav-flyout-list">
+                      {subNavigationItems.map((subItem) => {
+                        const isActive = isSidebarSubNavigationActive(
+                          location.pathname,
+                          subItem,
+                        );
+
+                        return (
+                          <SidebarSubNavigationLink
+                            className={sidebarSubNavItemClassName(isActive)}
+                            isActive={isActive}
+                            item={subItem}
+                            key={subItem.key}
+                            onClick={onSubNavigationClick}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </nav>
 
         {/* Push footer to bottom */}
@@ -381,18 +672,50 @@ export function AuthenticatedShell() {
             aria-label="Mobile navigation"
             className="nav-list nav-list-drawer"
           >
-            {visibleNavigation.map((item) => (
-              <a
-                aria-current={activeWorkspace === item.key ? "page" : undefined}
-                className={drawerNavItemClassName(activeWorkspace === item.key)}
-                href={item.path}
-                key={item.key}
-                onClick={(event) => onNavigationClick(event, item.key)}
-              >
-                <item.icon size={18} />
-                <span>{item.label}</span>
-              </a>
-            ))}
+            {visibleNavigation.map((item) => {
+              const subNavigationItems = visibleSidebarSubNavigationItems(
+                item.key,
+                user,
+              );
+              const isActiveWorkspace = activeWorkspace === item.key;
+
+              return (
+                <div className="nav-drawer-group" key={item.key}>
+                  <a
+                    aria-current={isActiveWorkspace ? "page" : undefined}
+                    className={drawerNavItemClassName(isActiveWorkspace)}
+                    href={item.path}
+                    onClick={(event) => onNavigationClick(event, item.key)}
+                  >
+                    <item.icon size={18} />
+                    <span>{item.label}</span>
+                  </a>
+                  {isActiveWorkspace && subNavigationItems.length ? (
+                    <nav
+                      aria-label={`${item.label} sections`}
+                      className="drawer-subnav"
+                    >
+                      {subNavigationItems.map((subItem) => {
+                        const isActive = isSidebarSubNavigationActive(
+                          location.pathname,
+                          subItem,
+                        );
+
+                        return (
+                          <SidebarSubNavigationLink
+                            className={drawerSubNavItemClassName(isActive)}
+                            isActive={isActive}
+                            item={subItem}
+                            key={subItem.key}
+                            onClick={onSubNavigationClick}
+                          />
+                        );
+                      })}
+                    </nav>
+                  ) : null}
+                </div>
+              );
+            })}
           </nav>
           <div className="drawer-user-footer">
             <button

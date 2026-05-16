@@ -39,7 +39,7 @@ import { Button } from "../../../shared/ui/button/Button";
 import { Drawer } from "../../../shared/ui/drawer/Drawer";
 import { ErrorState } from "../../../shared/ui/error-state/ErrorState";
 import { Checkbox } from "../../../shared/ui/form/Checkbox";
-import { FormField, TextInput } from "../../../shared/ui/form/FormField";
+import { FormField, TextInput, useFormFieldContext } from "../../../shared/ui/form/FormField";
 import { IconButton } from "../../../shared/ui/icon-button/IconButton";
 import { Select } from "../../../shared/ui/form/Select";
 import { Modal } from "../../../shared/ui/modal/Modal";
@@ -859,11 +859,13 @@ function CasesWorkspaceList() {
             getRowKey={(row) => row.id}
             onRowClick={(row) => navigateToAppPath(`/cases/${row.id}`)}
             pagination={false}
+            resultLabel="Cases"
             rows={cases.data ?? []}
+            showSearch={false}
           />
           <div className="pagination-bar">
             <span className="pagination-info">
-              Showing {(cases.data ?? []).length} cases
+              Current page: {(cases.data ?? []).length} cases
             </span>
             <Button
               variant="secondary"
@@ -920,6 +922,7 @@ function CasesWorkspaceList() {
               emptyMessage="No deleted cases available for restore."
               getRowKey={(row) => row.id}
               maxHeight={360}
+              resultLabel="Deleted cases"
               rows={deletedCases.data ?? []}
             />
           )}
@@ -1046,12 +1049,39 @@ function MultiSelectFilter({
   options,
   value,
 }: {
-  disabled?: boolean;
+  disabled?: boolean | undefined;
   label: string;
   onChange: (value: string[]) => void;
   options: FilterOption[];
   value: string[];
 }) {
+  return (
+    <FormField label={label}>
+      <CaseMultiSelectControl
+        disabled={disabled}
+        label={label}
+        onChange={onChange}
+        options={options}
+        value={value}
+      />
+    </FormField>
+  );
+}
+
+function CaseMultiSelectControl({
+  disabled,
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  disabled?: boolean | undefined;
+  label: string;
+  onChange: (value: string[]) => void;
+  options: FilterOption[];
+  value: string[];
+}) {
+  const fieldContext = useFormFieldContext();
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const selectedLabel = selectedFilterLabel(value, options);
@@ -1067,68 +1097,69 @@ function MultiSelectFilter({
   }, [isOpen]);
 
   return (
-    <FormField label={label}>
-      <div className="multi-select-dropdown">
-        <button
-          aria-expanded={isOpen}
-          className="multi-select-trigger"
-          disabled={disabled}
+    <div className="multi-select-dropdown">
+      <button
+        aria-describedby={fieldContext?.describedBy}
+        aria-expanded={isOpen}
+        aria-invalid={fieldContext?.hasError ? "true" : undefined}
+        className="multi-select-trigger"
+        disabled={disabled}
+        id={fieldContext?.inputId}
+        onBlur={(event) => {
+          if (!event.currentTarget.parentElement?.contains(event.relatedTarget as Node | null)) {
+            setIsOpen(false);
+          }
+        }}
+        onClick={() => setIsOpen((open) => !open)}
+        type="button"
+      >
+        <span>{selectedLabel}</span>
+        <ChevronDown size={16} />
+      </button>
+      {isOpen ? (
+        <div
+          className="multi-select-menu"
           onBlur={(event) => {
             if (!event.currentTarget.parentElement?.contains(event.relatedTarget as Node | null)) {
               setIsOpen(false);
             }
           }}
-          onClick={() => setIsOpen((open) => !open)}
-          type="button"
         >
-          <span>{selectedLabel}</span>
-          <ChevronDown size={16} />
-        </button>
-        {isOpen ? (
-          <div
-            className="multi-select-menu"
-            onBlur={(event) => {
-              if (!event.currentTarget.parentElement?.contains(event.relatedTarget as Node | null)) {
-                setIsOpen(false);
-              }
-            }}
-          >
-            <div className="multi-select-menu-actions">
-              <button disabled={options.length === 0} onClick={() => onChange(options.map((option) => option.value))} type="button">
-                Select all
-              </button>
-              <button disabled={value.length === 0} onClick={() => onChange([])} type="button">
-                Clear
-              </button>
-              <span>{value.length ? `${value.length} selected` : "All"}</span>
-            </div>
-            {options.length > 6 ? (
-              <TextInput
-                autoFocus
-                aria-label={`Search ${label}`}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search..."
-                value={query}
-              />
-            ) : null}
-            <div className="multi-select-options">
-              {visibleOptions.length ? (
-                visibleOptions.map((option) => (
-                  <Checkbox
-                    checked={value.includes(option.value)}
-                    key={option.value}
-                    label={option.label}
-                    onChange={(event) => onChange(toggleArrayValue(value, option.value, event.target.checked))}
-                  />
-                ))
-              ) : (
-                <span className="multi-select-empty">No options found.</span>
-              )}
-            </div>
+          <div className="multi-select-menu-actions">
+            <button disabled={options.length === 0} onClick={() => onChange(options.map((option) => option.value))} type="button">
+              Select all
+            </button>
+            <button disabled={value.length === 0} onClick={() => onChange([])} type="button">
+              Clear
+            </button>
+            <span>{value.length ? `${value.length} selected` : "All"}</span>
           </div>
-        ) : null}
-      </div>
-    </FormField>
+          {options.length > 6 ? (
+            <TextInput
+              autoFocus
+              aria-label={`Search ${label}`}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search..."
+              value={query}
+            />
+          ) : null}
+          <div className="multi-select-options" onMouseDown={(event) => event.preventDefault()}>
+            {visibleOptions.length ? (
+              visibleOptions.map((option) => (
+                <Checkbox
+                  checked={value.includes(option.value)}
+                  key={option.value}
+                  label={option.label}
+                  onChange={(event) => onChange(toggleArrayValue(value, option.value, event.target.checked))}
+                />
+              ))
+            ) : (
+              <span className="multi-select-empty">No options found.</span>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

@@ -7,7 +7,10 @@ import {
 } from "@nestjs/common";
 
 import { hasExpandedPermission } from "../../../common/auth/permission-utils.js";
-import { addDaysToDateOnly } from "../../../common/utils/date-only.js";
+import {
+  addDaysToDateOnly,
+  todayDateOnlyString,
+} from "../../../common/utils/date-only.js";
 import { DatabaseService } from "../../../database/database.service.js";
 import { AuditWriterService } from "../../audit/application/audit-writer.service.js";
 import { CatalogService } from "../../catalog/application/catalog.service.js";
@@ -78,6 +81,7 @@ export class ProcurementCaseService {
   async createCase(actor: AuthenticatedUser, command: CreateCaseCommand) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "case.create");
+    this.assertPrReceiptDateNotFuture(command.prReceiptDate ?? null);
 
     const ownerUserId = command.ownerUserId ?? actor.id;
     await this.catalog.assertProcurementCaseSelections({
@@ -640,6 +644,15 @@ export class ProcurementCaseService {
       throw new BadRequestException("Tenant context is required.");
     }
     return actor.tenantId;
+  }
+
+  private assertPrReceiptDateNotFuture(prReceiptDate: string | null) {
+    if (prReceiptDate && prReceiptDate > todayDateOnlyString()) {
+      throw new BadRequestException({
+        errors: ["PR Receipt Date cannot be in the future."],
+        message: "Case validation failed.",
+      });
+    }
   }
 
   private normalizeMilestonesForTenderType(

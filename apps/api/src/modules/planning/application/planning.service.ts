@@ -34,18 +34,18 @@ export class PlanningService {
 
   listTenderPlans(actor: AuthenticatedUser, filters: ListPlanningFilters) {
     const tenantId = this.requireTenant(actor);
+    this.requireTenderPlanReadPermission(actor);
     return this.repository.listTenderPlans({
       filters: this.limitFilters(filters),
-      scope: this.scope(actor),
+      scope: this.tenderPlanScope(actor),
       tenantId,
     });
   }
 
   async createTenderPlan(actor: AuthenticatedUser, input: TenderPlanInput) {
     const tenantId = this.requireTenant(actor);
-    this.requirePermission(actor, "planning.manage");
-    this.assertPlanningAccessLevel(actor);
-    this.assertEntityWriteAllowed(actor, input.entityId);
+    this.requireTenderPlanCreatePermission(actor);
+    this.assertTenderPlanCreateAllowed(actor, input.entityId);
     return this.db.transaction(async () => {
       const result = await this.repository.createTenderPlan({
         ...input,
@@ -228,6 +228,18 @@ export class PlanningService {
     return effectivePlanningScope(actor);
   }
 
+  private tenderPlanScope(actor: AuthenticatedUser) {
+    if (actor.isPlatformSuperAdmin || actor.accessLevel === "GROUP") {
+      return effectivePlanningScope(actor);
+    }
+    return {
+      actorUserId: actor.id,
+      assignedOnly: false,
+      entityIds: actor.entityIds,
+      tenantWide: false,
+    };
+  }
+
   private limitFilters(filters: ListPlanningFilters): ListPlanningFilters {
     return {
       ...filters,
@@ -245,6 +257,18 @@ export class PlanningService {
     );
   }
 
+  private assertTenderPlanCreateAllowed(
+    actor: AuthenticatedUser,
+    entityId: string,
+  ) {
+    if (actor.isPlatformSuperAdmin) return;
+    if (actor.accessLevel === "GROUP") return;
+    if (actor.entityIds.includes(entityId)) return;
+    throw new ForbiddenException(
+      "Tender plan creation is restricted to mapped entities.",
+    );
+  }
+
   private assertPlanningAccessLevel(actor: AuthenticatedUser) {
     if (actor.isPlatformSuperAdmin || actor.accessLevel !== "USER") return;
     throw new ForbiddenException(
@@ -256,6 +280,39 @@ export class PlanningService {
     if (!hasExpandedPermission(actor, permission)) {
       throw new ForbiddenException("Missing required permission.");
     }
+  }
+
+  private requireTenderPlanReadPermission(actor: AuthenticatedUser) {
+    if (
+      actor.isPlatformSuperAdmin ||
+      this.hasAnyPermission(actor, [
+        "case.create",
+        "case.read.all",
+        "case.read.assigned",
+        "case.read.entity",
+        "planning.manage",
+        "report.read",
+      ])
+    ) {
+      return;
+    }
+    throw new ForbiddenException("Missing tender plan read permission.");
+  }
+
+  private requireTenderPlanCreatePermission(actor: AuthenticatedUser) {
+    if (
+      actor.isPlatformSuperAdmin ||
+      this.hasAnyPermission(actor, ["case.create", "planning.manage"])
+    ) {
+      return;
+    }
+    throw new ForbiddenException("Missing tender plan create permission.");
+  }
+
+  private hasAnyPermission(actor: AuthenticatedUser, permissions: string[]) {
+    return permissions.some((permission) =>
+      hasExpandedPermission(actor, permission),
+    );
   }
 
   private requireTenant(actor: AuthenticatedUser): string {

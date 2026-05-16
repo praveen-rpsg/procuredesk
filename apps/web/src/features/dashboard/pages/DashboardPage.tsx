@@ -329,6 +329,8 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const hasPlanningAccess = hasTenantContext && canAccessPlanning(user);
   const hasPlanningManageAccess = hasTenantContext && canManagePlanning(user);
   const hasReportAccess = hasTenantContext && canReadReports(user);
+  const hasExpiryAccess =
+    hasCaseAccess && (hasPlanningManageAccess || hasReportAccess);
   const summary = useQuery({
     enabled: hasCaseAccess,
     queryFn: getCaseSummary,
@@ -358,7 +360,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     queryKey: ["dashboard-stage-aging-case", stageAgingCaseId],
   });
   const expiryRows = useQuery({
-    enabled: hasCaseAccess && hasPlanningManageAccess,
+    enabled: hasExpiryAccess,
     queryFn: () =>
       listRcPoExpiry({ days: 90, limit: DASHBOARD_TABLE_FETCH_LIMIT }),
     queryKey: ["dashboard-rc-po-expiry"],
@@ -513,7 +515,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         "Open the case list and update milestones, allocations, or awards.",
       icon: FilePenLine,
       isVisible: hasCaseAccess,
-      label: "Update Existing Case",
+      label: "Update / View Existing Case",
       target: "update-case",
       tone: "neutral",
     },
@@ -849,7 +851,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       ) : null}
 
       {/* RC/PO expiry */}
-      {hasCaseAccess && hasPlanningManageAccess ? (
+      {hasExpiryAccess ? (
         <section className="state-panel dashboard-expiry-panel">
           <div className="detail-header">
             <div>

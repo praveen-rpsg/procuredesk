@@ -1,4 +1,4 @@
-import { ForbiddenException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AuditWriterService } from "../../audit/application/audit-writer.service.js";
@@ -37,6 +37,18 @@ const baseCommand: CreateCaseCommand = {
 };
 
 describe("ProcurementCaseService tentative completion date", () => {
+  it("rejects future PR receipt dates", async () => {
+    const { repository, service } = createService();
+
+    await expect(
+      service.createCase(baseActor, {
+        ...baseCommand,
+        prReceiptDate: "2999-01-01",
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(repository.createCase).not.toHaveBeenCalled();
+  });
+
   it("rejects tender-owner create requests that tamper with a derived target date", async () => {
     const { repository, service } = createService();
 

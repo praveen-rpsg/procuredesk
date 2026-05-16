@@ -117,10 +117,21 @@ export class ReportingService {
     },
   ) {
     const tenantId = this.requireTenant(actor);
-    this.requirePermission(actor, "planning.manage");
+    const canManagePlanning = hasExpandedPermission(actor, "planning.manage");
+    const canMarkFromCreateCase = this.canMarkRcPoFloatedFromCreateCase(
+      actor,
+      input,
+    );
+    if (!canManagePlanning && !canMarkFromCreateCase) {
+      throw new ForbiddenException("Missing RC/PO expiry update permission.");
+    }
     const target = await this.repository.rcPoExpiryEditTarget(tenantId, sourceType, sourceId);
     if (!target) throw new NotFoundException("RC/PO expiry row not found.");
-    this.assertRcPoEditAllowed(actor, target.entityId);
+    if (canManagePlanning) {
+      this.assertRcPoEditAllowed(actor, target.entityId);
+    } else {
+      this.assertRcPoFloatedMarkAllowed(actor, target.entityId);
+    }
     const row = await this.repository.updateRcPoExpiryRow({
       ...input,
       actorUserId: actor.id,
@@ -360,6 +371,31 @@ export class ReportingService {
     if (actor.accessLevel === "GROUP" && hasExpandedPermission(actor, "case.update.all")) return;
     if (actor.accessLevel === "ENTITY" && actor.entityIds.includes(entityId)) return;
     throw new ForbiddenException("RC/PO expiry updates are restricted to mapped entities.");
+  }
+
+  private canMarkRcPoFloatedFromCreateCase(
+    actor: AuthenticatedUser,
+    input: {
+      tenderFloatedOrNotRequired?: boolean | undefined;
+      tentativeTenderingDate?: string | null | undefined;
+    },
+  ) {
+    return (
+      hasExpandedPermission(actor, "case.create") &&
+      input.tenderFloatedOrNotRequired === true &&
+      input.tentativeTenderingDate === undefined
+    );
+  }
+
+  private assertRcPoFloatedMarkAllowed(
+    actor: AuthenticatedUser,
+    entityId: string,
+  ) {
+    if (actor.isPlatformSuperAdmin || actor.accessLevel === "GROUP") return;
+    if (actor.entityIds.includes(entityId)) return;
+    throw new ForbiddenException(
+      "RC/PO expiry updates are restricted to mapped entities.",
+    );
   }
 
   private requireTenant(actor: AuthenticatedUser): string {

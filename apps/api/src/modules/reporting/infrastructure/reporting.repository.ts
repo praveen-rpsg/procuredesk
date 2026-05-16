@@ -464,7 +464,30 @@ export class ReportingRepository {
       "dep.name",
       "tt.name",
       "owner.full_name",
-      ...(input.includeDelayFields ? ["d.delay_reason"] : []),
+      "f.status",
+      "f.stage_code::text",
+      "f.current_stage_aging_days::text",
+      "f.running_age_days::text",
+      "f.completed_age_days::text",
+      "f.completion_fy",
+      "f.pr_value::text",
+      "f.estimate_benchmark::text",
+      "f.approved_amount::text",
+      "f.total_awarded_amount::text",
+      "f.savings_wrt_pr::text",
+      "f.savings_wrt_estimate::text",
+      "f.pr_receipt_date::text",
+      "f.rc_po_award_date::text",
+      "m.nit_publish_date::text",
+      "m.bid_receipt_date::text",
+      "m.technical_evaluation_date::text",
+      "m.bidders_participated::text",
+      "m.qualified_bidders::text",
+      "m.loi_issued::text",
+      "c.pr_remarks",
+      "c.tm_remarks",
+      "d.delay_reason",
+      "d.delay_external_days::text",
     ]);
     if (input.status) {
       values.push(input.status);
@@ -494,16 +517,16 @@ export class ReportingRepository {
           f.stage_code,
           case
             when f.status <> 'running' then null
-            when f.pr_receipt_date is null or c.tentative_completion_date is null then null
-            when c.tentative_completion_date <= f.pr_receipt_date then null
-            when ((current_date - f.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 8 then 0
-            when ((current_date - f.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 13 then 1
-            when ((current_date - f.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 17 then 2
-            when ((current_date - f.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 52 then 3
-            when ((current_date - f.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 68 then 4
-            when ((current_date - f.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 88 then 5
-            when ((current_date - f.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 97 then 6
-            when ((current_date - f.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 100 then 7
+            when f.pr_receipt_date is null or target.tentative_completion_date is null then null
+            when target.tentative_completion_date <= f.pr_receipt_date then null
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((target.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 8 then 0
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((target.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 13 then 1
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((target.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 17 then 2
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((target.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 52 then 3
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((target.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 68 then 4
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((target.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 88 then 5
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((target.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 97 then 6
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((target.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 100 then 7
             else 8
           end as desired_stage_code,
           f.is_delayed,
@@ -521,9 +544,9 @@ export class ReportingRepository {
           f.savings_wrt_estimate,
           case
             when f.status <> 'running' then null
-            when c.tentative_completion_date is null or f.pr_receipt_date is null then null
-            when c.tentative_completion_date <= f.pr_receipt_date then null
-            else round(((current_date - f.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - f.pr_receipt_date), 0)) * 100)
+            when target.tentative_completion_date is null or f.pr_receipt_date is null then null
+            when target.tentative_completion_date <= f.pr_receipt_date then null
+            else round(((current_date - f.pr_receipt_date)::numeric / nullif((target.tentative_completion_date - f.pr_receipt_date), 0)) * 100)
           end as percent_time_elapsed,
           m.nit_publish_date,
           m.bid_receipt_date,
@@ -548,6 +571,17 @@ export class ReportingRepository {
         left join iam.users owner on owner.id = f.owner_user_id and owner.tenant_id = f.tenant_id
         left join procurement.case_milestones m on m.case_id = f.case_id and m.tenant_id = f.tenant_id
         left join procurement.case_delays d on d.case_id = f.case_id and d.tenant_id = f.tenant_id
+        left join catalog.tender_type_completion_rules tcr on tcr.tender_type_id = f.tender_type_id and tcr.tenant_id = f.tenant_id
+        left join lateral (
+          select coalesce(
+            c.tentative_completion_date,
+            case
+              when f.pr_receipt_date is not null and tcr.completion_days is not null
+              then f.pr_receipt_date + tcr.completion_days
+              else null
+            end
+          ) as tentative_completion_date
+        ) target on true
         where ${where.join(" and ")}
         order by f.updated_at desc
         limit $${limitPosition}
@@ -652,6 +686,9 @@ export class ReportingRepository {
       "a.vendor_code",
       "a.vendor_name",
       "a.po_number",
+      "a.po_value::text",
+      "a.po_award_date::text",
+      "a.po_validity_date::text",
     ]);
     values.push(input.filters.limit ?? 50);
     const limitPosition = values.length;
@@ -724,6 +761,21 @@ export class ReportingRepository {
       "e.name",
       "tt.name",
       "owner.full_name",
+      "f.stage_code::text",
+      "f.current_stage_aging_days::text",
+      "f.running_age_days::text",
+      "f.completed_age_days::text",
+      "f.priority_case::text",
+      "m.nit_initiation_date::text",
+      "m.nit_approval_date::text",
+      "m.nit_publish_date::text",
+      "m.bid_receipt_date::text",
+      "m.commercial_evaluation_date::text",
+      "m.technical_evaluation_date::text",
+      "m.nfa_submission_date::text",
+      "m.nfa_approval_date::text",
+      "m.rc_po_award_date::text",
+      "m.loi_issued::text",
     ]);
     values.push(filters.limit ?? 50);
     const limitPosition = values.length;
@@ -840,6 +892,14 @@ export class ReportingRepository {
       "ent.name",
       "dep.name",
       "owner.full_name",
+      "rv_nature.label",
+      "e.source_type",
+      "case when e.source_type = 'manual_plan' then 'bulk upload' else 'tenderdb' end",
+      "e.rc_po_amount::text",
+      "e.rc_po_award_date::text",
+      "e.rc_po_validity_date::text",
+      "e.tentative_tendering_date::text",
+      "e.tender_floated_or_not_required::text",
     ]);
     values.push(input.filters.limit ?? 50);
     const limitPosition = values.length;

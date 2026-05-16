@@ -1275,21 +1275,42 @@ function appendDelayedStatusFilter(
 }
 
 function applyCaseSearchFilter(where: string[], values: unknown[], query: string | undefined): void {
-  if (!query) return;
+  const trimmed = query?.trim();
+  if (!trimmed) return;
+  const searchColumns = [
+    "c.pr_id",
+    "c.pr_description",
+    "c.tender_name",
+    "c.tender_no",
+    "c.status",
+    "c.stage_code::text",
+    "c.pr_remarks",
+    "c.tm_remarks",
+    "ent.code",
+    "ent.name",
+    "dep.name",
+    "owner.full_name",
+    "tt.name",
+    "f.pr_value::text",
+    "f.estimate_benchmark::text",
+    "f.approved_amount::text",
+    "f.savings_wrt_pr::text",
+    "f.savings_wrt_estimate::text",
+    "m.loi_issued::text",
+  ];
   appendWhere(
     where,
     values,
-    query,
-    (position) => `
-        to_tsvector(
-          'english',
-          coalesce(c.pr_id, '') || ' ' ||
-          coalesce(c.pr_description, '') || ' ' ||
-          coalesce(c.tender_name, '') || ' ' ||
-          coalesce(c.tender_no, '')
-        ) @@ plainto_tsquery('english', $${position})
-      `,
+    `%${escapeLikePattern(trimmed)}%`,
+    (position) =>
+      `(${searchColumns
+        .map((column) => `coalesce(${column}, '') ilike $${position} escape '\\'`)
+        .join(" or ")})`,
   );
+}
+
+function escapeLikePattern(value: string): string {
+  return value.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
 }
 
 function appendOptionalScalarFilter(

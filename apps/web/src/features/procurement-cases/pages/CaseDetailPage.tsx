@@ -222,7 +222,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
   const fy = completionFY(kase.tentativeCompletionDate);
   const showHeaderFinancials = activeTab !== "overview";
   const trackStatus = caseTrackStatus(kase);
-  const milestoneInfoRows = buildMilestoneInfoRows(kase.milestones);
+  const milestoneInfoRows = buildMilestoneInfoRows(kase);
 
   return (
     <div className="case-page">
@@ -752,22 +752,24 @@ function milestoneDate(kase: CaseDetail, key: string) {
   return typeof value === "string" ? toDateOnlyInputValue(value) || null : null;
 }
 
-function buildMilestoneInfoRows(milestones: CaseDetail["milestones"]): Array<{ label: string; value: string }> {
+function buildMilestoneInfoRows(kase: CaseDetail): Array<{ label: string; value: string }> {
+  const { milestones } = kase;
   return [
+    dateInfoRow("PR Receipt Date", kase.prReceiptDate),
     dateInfoRow("NIT Initiation Date", milestones.nitInitiationDate),
     dateInfoRow("NIT Approval Date", milestones.nitApprovalDate),
     dateInfoRow("NIT Publish Date", milestones.nitPublishDate),
     dateInfoRow("Bid Receipt Date", milestones.bidReceiptDate),
     numberInfoRow("Bidder Participated Count", milestones.biddersParticipated),
-    dateInfoRow("Technical Evaluation Date", milestones.technicalEvaluationDate),
     dateInfoRow("Commercial Evaluation Date", milestones.commercialEvaluationDate),
+    dateInfoRow("Technical Evaluation Date", milestones.technicalEvaluationDate),
     numberInfoRow("Qualified Bidders Count", milestones.qualifiedBidders),
     dateInfoRow("NFA Submission Date", milestones.nfaSubmissionDate),
     dateInfoRow("NFA Approval Date", milestones.nfaApprovalDate),
     milestones.loiIssued ? { label: "LOI Issued", value: "Yes" } : null,
     dateInfoRow("LOI Issued Date", milestones.loiIssuedDate),
     dateInfoRow("RC/PO Award Date", milestones.rcPoAwardDate),
-    dateInfoRow("RC/PO Validity", milestones.rcPoValidity),
+    dateInfoRow("RC/PO Validity Date", milestones.rcPoValidity),
   ].filter((row): row is { label: string; value: string } => row != null);
 }
 

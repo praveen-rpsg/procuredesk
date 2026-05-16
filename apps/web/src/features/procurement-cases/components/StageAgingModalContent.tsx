@@ -1,3 +1,5 @@
+import { ExternalLink } from "lucide-react";
+
 import { navigateToAppPath } from "../../../shared/routing/appLocation";
 import { Button } from "../../../shared/ui/button/Button";
 import { StatusBadge } from "../../../shared/ui/status/StatusBadge";
@@ -61,6 +63,16 @@ export function StageAgingModalContent({ kase }: { kase: CaseDetail }) {
 
   return (
     <div className="dashboard-stage-aging-modal">
+      <div className="dashboard-stage-aging-toolbar">
+        <div>
+          <span>Case</span>
+          <strong>{kase.prId}</strong>
+        </div>
+        <Button onClick={() => navigateToAppPath(`/cases/${kase.id}`)}>
+          <ExternalLink aria-hidden="true" size={16} />
+          Open Case
+        </Button>
+      </div>
       <div className="dashboard-stage-aging-summary">
         <div>
           <span>Entity</span>
@@ -85,11 +97,6 @@ export function StageAgingModalContent({ kase }: { kase: CaseDetail }) {
         getRowKey={(row) => row.stage}
         rows={rows}
       />
-      <div className="modal-actions">
-        <Button onClick={() => navigateToAppPath(`/cases/${kase.id}`)} variant="secondary">
-          Open Case
-        </Button>
-      </div>
     </div>
   );
 }
