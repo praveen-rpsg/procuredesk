@@ -476,7 +476,20 @@ export class ReportingRepository {
           owner.full_name as owner_full_name,
           f.status,
           f.stage_code,
-          f.desired_stage_code,
+          case
+            when f.status <> 'running' then null
+            when f.pr_receipt_date is null or c.tentative_completion_date is null then null
+            when c.tentative_completion_date <= f.pr_receipt_date then null
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 8 then 0
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 13 then 1
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 17 then 2
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 52 then 3
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 68 then 4
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 88 then 5
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 97 then 6
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 100 then 7
+            else 8
+          end as desired_stage_code,
           f.is_delayed,
           f.pr_receipt_date,
           f.rc_po_award_date,
@@ -493,9 +506,8 @@ export class ReportingRepository {
           case
             when f.status <> 'running' then null
             when c.tentative_completion_date is null or f.pr_receipt_date is null then null
-            when coalesce(f.completed_age_days, f.running_age_days) is null then null
-            when greatest((c.tentative_completion_date - f.pr_receipt_date), 1) = 0 then null
-            else round((coalesce(f.completed_age_days, f.running_age_days)::numeric / greatest((c.tentative_completion_date - f.pr_receipt_date), 1)) * 100)
+            when c.tentative_completion_date <= f.pr_receipt_date then null
+            else round(((current_date - f.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - f.pr_receipt_date), 0)) * 100)
           end as percent_time_elapsed,
           m.nit_publish_date,
           m.bidders_participated,

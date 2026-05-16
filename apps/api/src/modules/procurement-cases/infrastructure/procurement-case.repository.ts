@@ -444,7 +444,20 @@ export class ProcurementCaseRepository {
             else null
           end as current_stage_aging_days,
           dep.name as department_name,
-          c.desired_stage_code,
+          case
+            when c.status <> 'running' then null
+            when c.pr_receipt_date is null or c.tentative_completion_date is null then null
+            when c.tentative_completion_date <= c.pr_receipt_date then null
+            when ((current_date - c.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - c.pr_receipt_date), 0)) * 100 < 8 then 0
+            when ((current_date - c.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - c.pr_receipt_date), 0)) * 100 < 13 then 1
+            when ((current_date - c.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - c.pr_receipt_date), 0)) * 100 < 17 then 2
+            when ((current_date - c.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - c.pr_receipt_date), 0)) * 100 < 52 then 3
+            when ((current_date - c.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - c.pr_receipt_date), 0)) * 100 < 68 then 4
+            when ((current_date - c.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - c.pr_receipt_date), 0)) * 100 < 88 then 5
+            when ((current_date - c.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - c.pr_receipt_date), 0)) * 100 < 97 then 6
+            when ((current_date - c.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - c.pr_receipt_date), 0)) * 100 < 100 then 7
+            else 8
+          end as desired_stage_code,
           ent.code as entity_code,
           c.entity_id,
           ent.name as entity_name,
