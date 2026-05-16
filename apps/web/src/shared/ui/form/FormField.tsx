@@ -9,6 +9,10 @@ type FormFieldContextValue = {
 
 const FormFieldContext = createContext<FormFieldContextValue | null>(null);
 
+export function useFormFieldContext() {
+  return useContext(FormFieldContext);
+}
+
 type FormFieldProps = {
   children: ReactNode;
   error?: string | undefined;

@@ -77,7 +77,11 @@ import {
 } from "../../../shared/routing/appLocation";
 import { ErrorState } from "../../../shared/ui/error-state/ErrorState";
 import { Checkbox } from "../../../shared/ui/form/Checkbox";
-import { FormField, TextInput } from "../../../shared/ui/form/FormField";
+import {
+  FormField,
+  TextInput,
+  useFormFieldContext,
+} from "../../../shared/ui/form/FormField";
 import { Modal } from "../../../shared/ui/modal/Modal";
 import { Select } from "../../../shared/ui/form/Select";
 import { PageHeader } from "../../../shared/ui/page-header/PageHeader";
@@ -3689,12 +3693,39 @@ function ReportMultiSelectFilter({
   options,
   value,
 }: {
-  disabled?: boolean;
+  disabled?: boolean | undefined;
   label: string;
   onChange: (value: string[]) => void;
   options: ReportOption[];
   value: string[];
 }) {
+  return (
+    <FormField label={label}>
+      <ReportMultiSelectControl
+        disabled={disabled}
+        label={label}
+        onChange={onChange}
+        options={options}
+        value={value}
+      />
+    </FormField>
+  );
+}
+
+function ReportMultiSelectControl({
+  disabled,
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  disabled?: boolean | undefined;
+  label: string;
+  onChange: (value: string[]) => void;
+  options: ReportOption[];
+  value: string[];
+}) {
+  const fieldContext = useFormFieldContext();
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const selectedLabel = selectedReportFilterLabel(value, options);
@@ -3715,12 +3746,32 @@ function ReportMultiSelectFilter({
   }, [isOpen]);
 
   return (
-    <FormField label={label}>
-      <div className="multi-select-dropdown report-filter-dropdown">
-        <button
-          aria-expanded={isOpen}
-          className="multi-select-trigger"
-          disabled={disabled}
+    <div className="multi-select-dropdown report-filter-dropdown">
+      <button
+        aria-expanded={isOpen}
+        aria-describedby={fieldContext?.describedBy}
+        aria-invalid={fieldContext?.hasError ? "true" : undefined}
+        className="multi-select-trigger"
+        disabled={disabled}
+        id={fieldContext?.inputId}
+        onBlur={(event) => {
+          if (
+            !event.currentTarget.parentElement?.contains(
+              event.relatedTarget as Node | null,
+            )
+          ) {
+            setIsOpen(false);
+          }
+        }}
+        onClick={() => setIsOpen((open) => !open)}
+        type="button"
+      >
+        <span>{selectedLabel}</span>
+        <ChevronDown size={16} />
+      </button>
+      {isOpen ? (
+        <div
+          className="multi-select-menu report-filter-dropdown-menu"
           onBlur={(event) => {
             if (
               !event.currentTarget.parentElement?.contains(
@@ -3730,77 +3781,58 @@ function ReportMultiSelectFilter({
               setIsOpen(false);
             }
           }}
-          onClick={() => setIsOpen((open) => !open)}
-          type="button"
         >
-          <span>{selectedLabel}</span>
-          <ChevronDown size={16} />
-        </button>
-        {isOpen ? (
-          <div
-            className="multi-select-menu report-filter-dropdown-menu"
-            onBlur={(event) => {
-              if (
-                !event.currentTarget.parentElement?.contains(
-                  event.relatedTarget as Node | null,
-                )
-              ) {
-                setIsOpen(false);
-              }
-            }}
-          >
-            <div className="multi-select-menu-actions">
-              <button
-                disabled={options.length === 0}
-                onClick={() => onChange(options.map((option) => option.value))}
-                type="button"
-              >
-                Select all
-              </button>
-              <button
-                disabled={value.length === 0}
-                onClick={() => onChange([])}
-                type="button"
-              >
-                Clear
-              </button>
-              <span>{value.length ? `${value.length} selected` : "All"}</span>
-            </div>
-            {options.length > 6 ? (
-              <TextInput
-                autoFocus
-                aria-label={`Search ${label}`}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={`Search ${label.toLowerCase()}...`}
-                value={query}
-              />
-            ) : null}
-            <div className="multi-select-options">
-              {visibleOptions.length ? (
-                visibleOptions.map((option) => (
-                  <Checkbox
-                    checked={value.includes(option.value)}
-                    key={option.value}
-                    label={option.label}
-                    onChange={(event) =>
-                      onChange(
-                        toggleReportFilterValue(
-                          value,
-                          option.value,
-                          event.target.checked,
-                        ),
-                      )
-                    }
-                  />
-                ))
-              ) : (
-                <span className="multi-select-empty">No options found.</span>
-              )}
-            </div>
+          <div className="multi-select-menu-actions">
+            <button
+              disabled={options.length === 0}
+              onClick={() => onChange(options.map((option) => option.value))}
+              type="button"
+            >
+              Select all
+            </button>
+            <button
+              disabled={value.length === 0}
+              onClick={() => onChange([])}
+              type="button"
+            >
+              Clear
+            </button>
+            <span>{value.length ? `${value.length} selected` : "All"}</span>
           </div>
-        ) : null}
-      </div>
-    </FormField>
+          {options.length > 6 ? (
+            <TextInput
+              autoFocus
+              aria-label={`Search ${label}`}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={`Search ${label.toLowerCase()}...`}
+              value={query}
+            />
+          ) : null}
+          <div className="multi-select-options">
+            {visibleOptions.length ? (
+              visibleOptions.map((option) => (
+                <Checkbox
+                  checked={value.includes(option.value)}
+                  key={option.value}
+                  label={option.label}
+                  onChange={(event) =>
+                    onChange(
+                      toggleReportFilterValue(
+                        value,
+                        option.value,
+                        event.target.checked,
+                      ),
+                    )
+                  }
+                />
+              ))
+            ) : (
+              <span className="multi-select-empty">No options found.</span>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
