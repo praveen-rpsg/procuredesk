@@ -222,6 +222,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
   const fy = completionFY(kase.tentativeCompletionDate);
   const showHeaderFinancials = activeTab !== "overview";
   const trackStatus = caseTrackStatus(kase);
+  const milestoneInfoRows = buildMilestoneInfoRows(kase.milestones);
 
   return (
     <div className="case-page">
@@ -391,6 +392,16 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
                   {kase.prDescription && <InfoRow label="Description" value={kase.prDescription} />}
                 </div>
               </SectionCard>
+
+              {milestoneInfoRows.length > 0 ? (
+                <SectionCard title="Milestone Details">
+                  <div className="case-info-list">
+                    {milestoneInfoRows.map((row) => (
+                      <InfoRow key={row.label} label={row.label} value={row.value} />
+                    ))}
+                  </div>
+                </SectionCard>
+              ) : null}
             </div>
 
             <aside className="case-overview-side">
@@ -739,6 +750,35 @@ function savingsTone(value: number | null | undefined): KpiTone {
 function milestoneDate(kase: CaseDetail, key: string) {
   const value = kase.milestones[key];
   return typeof value === "string" ? toDateOnlyInputValue(value) || null : null;
+}
+
+function buildMilestoneInfoRows(milestones: CaseDetail["milestones"]): Array<{ label: string; value: string }> {
+  return [
+    dateInfoRow("NIT Initiation Date", milestones.nitInitiationDate),
+    dateInfoRow("NIT Approval Date", milestones.nitApprovalDate),
+    dateInfoRow("NIT Publish Date", milestones.nitPublishDate),
+    dateInfoRow("Bid Receipt Date", milestones.bidReceiptDate),
+    numberInfoRow("Bidder Participated Count", milestones.biddersParticipated),
+    dateInfoRow("Technical Evaluation Date", milestones.technicalEvaluationDate),
+    dateInfoRow("Commercial Evaluation Date", milestones.commercialEvaluationDate),
+    numberInfoRow("Qualified Bidders Count", milestones.qualifiedBidders),
+    dateInfoRow("NFA Submission Date", milestones.nfaSubmissionDate),
+    dateInfoRow("NFA Approval Date", milestones.nfaApprovalDate),
+    milestones.loiIssued ? { label: "LOI Issued", value: "Yes" } : null,
+    dateInfoRow("LOI Issued Date", milestones.loiIssuedDate),
+    dateInfoRow("RC/PO Award Date", milestones.rcPoAwardDate),
+    dateInfoRow("RC/PO Validity", milestones.rcPoValidity),
+  ].filter((row): row is { label: string; value: string } => row != null);
+}
+
+function dateInfoRow(label: string, value: string | null | undefined): { label: string; value: string } | null {
+  if (!value) return null;
+  return { label, value: formatDate(value) };
+}
+
+function numberInfoRow(label: string, value: number | null | undefined): { label: string; value: string } | null {
+  if (value == null) return null;
+  return { label, value: String(value) };
 }
 
 function activityTone(action: string): "danger" | "neutral" | "success" | "warning" {
