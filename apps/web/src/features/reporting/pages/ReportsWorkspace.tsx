@@ -123,6 +123,18 @@ export function ReportsWorkspace() {
   const canCreate = canCreateCase(user);
   const canEditRcPoExpiry = canManagePlanning(user);
   const canViewDelay = canViewDelayFields(user);
+  const reportNavigationOptions = useMemo(
+    () =>
+      REPORT_OPTIONS.filter((option) => canExport || option.code !== "export_jobs"),
+    [canExport],
+  );
+  const reportExportFilterOptions = useMemo(
+    () =>
+      reportNavigationOptions
+        .filter((option) => option.code !== "analytics")
+        .map((option) => option.label),
+    [reportNavigationOptions],
+  );
 
   const [savedViewName, setSavedViewName] = useState("");
   const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
@@ -869,6 +881,80 @@ export function ReportsWorkspace() {
     ],
     [canViewDelay, caseColumnFilterOptions, filters.amountUnit],
   );
+  const technicalPendencyColumns = useMemo<VirtualTableColumn<ReportCaseRow>[]>(
+    () => [
+      { key: "tenderNo", header: "Tender No.", render: (row) => row.tenderNo ?? row.prId },
+      { key: "tenderName", header: "Tender Name", render: (row) => row.tenderName ?? row.prDescription ?? "-" },
+      {
+        key: "entity",
+        filterOptions: caseColumnFilterOptions.entity,
+        filterValue: (row) => row.entityCode ?? row.entityName ?? row.entityId,
+        header: "Entity",
+        render: (row) => row.entityCode ?? row.entityName ?? row.entityId,
+      },
+      {
+        key: "department",
+        filterOptions: caseColumnFilterOptions.department,
+        filterValue: (row) => row.departmentName ?? "-",
+        header: "User Department",
+        render: (row) => row.departmentName ?? "-",
+      },
+      {
+        key: "owner",
+        filterOptions: caseColumnFilterOptions.owner,
+        filterValue: (row) => row.ownerFullName ?? "-",
+        header: "Tender Owner",
+        render: (row) => row.ownerFullName ?? "-",
+      },
+      { key: "stage", header: "Tender Stage", render: (row) => formatCaseStage(row.stageCode) },
+      { key: "bidReceiptDate", header: "Bid Receipt Date", render: (row) => formatDateCell(row.bidReceiptDate) },
+      { key: "technicalEvaluationDate", header: "Technical Evaluation Date", render: (row) => formatDateCell(row.technicalEvaluationDate) },
+      { key: "currentStageAging", header: "Current Stage Aging", render: (row) => formatNullableDays(row.currentStageAgingDays) },
+      { key: "runningAge", header: "Running Tender Age", render: (row) => formatNullableDays(row.runningAgeDays) },
+      ...(canViewDelay
+        ? [
+            {
+              key: "delayReason",
+              header: "Reasons for Delay",
+              render: (row) => row.delayReason ?? "-",
+            } satisfies VirtualTableColumn<ReportCaseRow>,
+          ]
+        : []),
+    ],
+    [canViewDelay, caseColumnFilterOptions],
+  );
+  const technicalTimeColumns = useMemo<VirtualTableColumn<ReportCaseRow>[]>(
+    () => [
+      { key: "tenderNo", header: "Tender No.", render: (row) => row.tenderNo ?? row.prId },
+      { key: "tenderName", header: "Tender Name", render: (row) => row.tenderName ?? row.prDescription ?? "-" },
+      {
+        key: "entity",
+        filterOptions: caseColumnFilterOptions.entity,
+        filterValue: (row) => row.entityCode ?? row.entityName ?? row.entityId,
+        header: "Entity",
+        render: (row) => row.entityCode ?? row.entityName ?? row.entityId,
+      },
+      {
+        key: "department",
+        filterOptions: caseColumnFilterOptions.department,
+        filterValue: (row) => row.departmentName ?? "-",
+        header: "User Department",
+        render: (row) => row.departmentName ?? "-",
+      },
+      {
+        key: "owner",
+        filterOptions: caseColumnFilterOptions.owner,
+        filterValue: (row) => row.ownerFullName ?? "-",
+        header: "Tender Owner",
+        render: (row) => row.ownerFullName ?? "-",
+      },
+      { key: "bidReceiptDate", header: "Bid Receipt Date", render: (row) => formatDateCell(row.bidReceiptDate) },
+      { key: "technicalEvaluationDate", header: "Technical Evaluation Date", render: (row) => formatDateCell(row.technicalEvaluationDate) },
+      { key: "technicalEvaluationTime", header: "Technical Evaluation Time", render: (row) => formatNullableDays(row.technicalEvaluationTimeDays) },
+      { key: "cycle", header: "Cycle Time", render: (row) => formatNullableDays(row.completedCycleTimeDays) },
+    ],
+    [caseColumnFilterOptions],
+  );
   const vendorColumns = useMemo<
     VirtualTableColumn<VendorAwardReportRow>[]
   >(() => {
@@ -1394,12 +1480,23 @@ export function ReportsWorkspace() {
 
       <section className="report-command-panel">
         <div className="report-command-topline">
+          <FormField label="Report">
+            <Select
+              className="report-compact-select"
+              onChange={(event) =>
+                navigateToAppPath(reportPathForKey(event.target.value as ReportViewKey))
+              }
+              options={reportNavigationOptions.map((option) => ({
+                label: option.label,
+                value: option.code,
+              }))}
+              value={activeReport}
+            />
+          </FormField>
           <SecondaryNav
             activeKey={activeReport}
             ariaLabel="Report type"
-            items={REPORT_OPTIONS.filter(
-              (option) => canExport || option.code !== "export_jobs",
-            ).map((option) => ({
+            items={reportNavigationOptions.map((option) => ({
               description: option.description,
               icon: option.icon,
               key: option.code,
@@ -1599,6 +1696,7 @@ export function ReportsWorkspace() {
             exportStatusError={exportState.exportStatus.error}
             exportStatusIsLoading={exportState.exportStatus.isLoading}
             onExportJobIdChange={exportState.setExportJobId}
+            reportFilterValues={reportExportFilterOptions}
             reportLabel="any report"
           />
         </section>
@@ -1674,6 +1772,28 @@ export function ReportsWorkspace() {
                 error={data.completed.error}
                 getRowKey={(row) => row.caseId}
                 isLoading={data.completed.isLoading}
+                onRowClick={(row) => setStageAgingCaseId(row.caseId)}
+              />
+            ) : null}
+            {reportCode === "technical_evaluation_pendency" ? (
+              <ReportTable
+                columns={technicalPendencyColumns}
+                data={data.technicalEvaluationPendency.data}
+                emptyMessage="No technical evaluation pendency rows match the current filters."
+                error={data.technicalEvaluationPendency.error}
+                getRowKey={(row) => row.caseId}
+                isLoading={data.technicalEvaluationPendency.isLoading}
+                onRowClick={(row) => setStageAgingCaseId(row.caseId)}
+              />
+            ) : null}
+            {reportCode === "technical_evaluation_time" ? (
+              <ReportTable
+                columns={technicalTimeColumns}
+                data={data.technicalEvaluationTime.data}
+                emptyMessage="No technical evaluation time rows match the current filters."
+                error={data.technicalEvaluationTime.error}
+                getRowKey={(row) => row.caseId}
+                isLoading={data.technicalEvaluationTime.isLoading}
                 onRowClick={(row) => setStageAgingCaseId(row.caseId)}
               />
             ) : null}
@@ -3176,6 +3296,7 @@ function ReportExportStatusPanel({
   exportStatusIsLoading,
   onExportJobIdChange,
   reportLabel,
+  reportFilterOptions,
 }: {
   canDownloadExport: boolean;
   exportJobId: string;
@@ -3186,6 +3307,7 @@ function ReportExportStatusPanel({
   exportStatusError: Error | null;
   exportStatusIsLoading: boolean;
   onExportJobIdChange: (jobId: string) => void;
+  reportFilterValues: string[];
   reportLabel: string;
 }) {
   const [isExportDetailsOpen, setIsExportDetailsOpen] = useState(false);
@@ -3200,14 +3322,7 @@ function ReportExportStatusPanel({
       {
         enableFilter: true,
         enableSort: true,
-        filterOptions: reportFilterOptions([
-          "Tender Details",
-          "Running Tender",
-          "Completed Tender",
-          "Vendor Awards",
-          "Stage-Time Lapsed",
-          "RC/PO Expiry",
-        ]),
+        filterOptions: reportFilterOptions(reportFilterValues),
         filterValue: (job) => getReportLabel(job.reportCode),
         header: "Report",
         key: "report",

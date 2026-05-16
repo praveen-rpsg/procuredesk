@@ -14,6 +14,8 @@ type ReportCode =
   | "rc_po_expiry"
   | "running"
   | "stage_time"
+  | "technical_evaluation_pendency"
+  | "technical_evaluation_time"
   | "tender_details"
   | "vendor_awards";
 type ReportFilters = {
@@ -315,11 +317,17 @@ async function queryExportRows(input: {
   }
 
   const statusClause =
-    input.reportCode === "running"
+    input.reportCode === "running" ||
+    input.reportCode === "technical_evaluation_pendency"
       ? "and f.status = 'running'"
-      : input.reportCode === "completed"
+      : input.reportCode === "completed" ||
+          input.reportCode === "technical_evaluation_time"
         ? "and f.status = 'completed'"
         : "";
+  const technicalEvaluationPendencyClause =
+    input.reportCode === "technical_evaluation_pendency"
+      ? "and f.stage_code = 4 and m.technical_evaluation_date is null"
+      : "";
   const values: unknown[] = [input.tenantId];
   const where = [
     "f.tenant_id = $1",
@@ -367,6 +375,12 @@ async function queryExportRows(input: {
         f.running_age_days,
         f.current_stage_aging_days,
         f.pr_receipt_date,
+        m.bid_receipt_date,
+        m.technical_evaluation_date,
+        case
+          when m.technical_evaluation_date is null or m.bid_receipt_date is null then null
+          else m.technical_evaluation_date - m.bid_receipt_date
+        end as technical_evaluation_time_days,
         m.nit_publish_date,
         m.bidders_participated,
         m.qualified_bidders,
@@ -392,11 +406,44 @@ async function queryExportRows(input: {
       left join procurement.case_delays d on d.case_id = f.case_id and d.tenant_id = f.tenant_id
       where ${where.join(" and ")}
       ${statusClause}
+      ${technicalEvaluationPendencyClause}
       order by f.updated_at desc
       limit $${limitPosition}
     `,
     values,
   );
+  if (input.reportCode === "technical_evaluation_pendency") {
+    return result.rows.map((row) => ({
+      "Tender No.": row.tender_no ?? row.pr_id ?? null,
+      "Tender Name": row.tender_name ?? row.pr_description ?? null,
+      Entity: row.entity ?? null,
+      "User Department": row.department ?? null,
+      "Tender Owner": row.tender_owner ?? null,
+      "Tender Stage": formatExportStage(row.stage_code),
+      "Bid Receipt Date": formatExportDate(row.bid_receipt_date),
+      "Technical Evaluation Date": formatExportDate(row.technical_evaluation_date),
+      "Current Stage Aging": row.current_stage_aging_days ?? null,
+      "Running Tender Age": row.running_age_days ?? null,
+      ...(input.scope.canViewDelay
+        ? {
+            "Reasons for Delay": row.delay_reason ?? null,
+          }
+        : {}),
+    }));
+  }
+  if (input.reportCode === "technical_evaluation_time") {
+    return result.rows.map((row) => ({
+      "Tender No.": row.tender_no ?? row.pr_id ?? null,
+      "Tender Name": row.tender_name ?? row.pr_description ?? null,
+      Entity: row.entity ?? null,
+      "User Department": row.department ?? null,
+      "Tender Owner": row.tender_owner ?? null,
+      "Bid Receipt Date": formatExportDate(row.bid_receipt_date),
+      "Technical Evaluation Date": formatExportDate(row.technical_evaluation_date),
+      "Technical Evaluation Time": row.technical_evaluation_time_days ?? null,
+      "Cycle Time": row.completed_cycle_time_days ?? null,
+    }));
+  }
   if (input.reportCode === "running") {
     return result.rows.map((row) => ({
       "Tender No.": row.tender_no ?? row.pr_id ?? null,

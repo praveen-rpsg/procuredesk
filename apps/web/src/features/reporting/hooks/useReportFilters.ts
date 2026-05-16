@@ -91,12 +91,16 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 350);
 
   const includeStatus = reportCode === "tender_details" || reportCode === "stage_time";
-  const includeCompletionFilters = reportCode !== "running" && reportCode !== "rc_po_expiry";
+  const includeCompletionFilters =
+    reportCode !== "running" &&
+    reportCode !== "rc_po_expiry" &&
+    reportCode !== "technical_evaluation_pendency";
   const isRcPoExpiry = reportCode === "rc_po_expiry";
   const includeCaseWorkflowFilters = !isRcPoExpiry;
   const includeWorkflowHealthFilters =
     includeCaseWorkflowFilters &&
     reportCode !== "completed" &&
+    reportCode !== "technical_evaluation_time" &&
     reportCode !== "vendor_awards";
   const expiryHorizonDaysParam = isRcPoExpiry
     ? normalizeExpiryHorizonDays(expiryHorizonDays)

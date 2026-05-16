@@ -77,6 +77,26 @@ export class ReportingService {
     return this.repository.stageTime(tenantId, this.scope(actor), this.limitFilters(filters));
   }
 
+  technicalEvaluationPendency(actor: AuthenticatedUser, filters: ReportFilters) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "report.read");
+    return this.repository.technicalEvaluationPendency({
+      filters: this.limitFilters(filters),
+      scope: this.scope(actor),
+      tenantId,
+    });
+  }
+
+  technicalEvaluationTime(actor: AuthenticatedUser, filters: ReportFilters) {
+    const tenantId = this.requireTenant(actor);
+    this.requirePermission(actor, "report.read");
+    return this.repository.technicalEvaluationTime({
+      filters: this.limitFilters(filters),
+      scope: this.scope(actor),
+      tenantId,
+    });
+  }
+
   rcPoExpiry(actor: AuthenticatedUser, filters: ReportFilters) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "report.read");

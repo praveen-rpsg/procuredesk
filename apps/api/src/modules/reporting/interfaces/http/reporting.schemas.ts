@@ -5,6 +5,8 @@ export const ReportCodeSchema = z.enum([
   "rc_po_expiry",
   "running",
   "stage_time",
+  "technical_evaluation_pendency",
+  "technical_evaluation_time",
   "tender_details",
   "vendor_awards",
 ]);

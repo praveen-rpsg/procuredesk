@@ -443,6 +443,7 @@ export class ReportingRepository {
   }
 
   async caseReport(input: {
+    extraWhere?: string[];
     includeDelayFields?: boolean;
     filters: ReportFilters;
     scope: ReportScope;
@@ -468,6 +469,9 @@ export class ReportingRepository {
     if (input.status) {
       values.push(input.status);
       where.push(`f.status = $${values.length}`);
+    }
+    if (input.extraWhere?.length) {
+      where.push(...input.extraWhere);
     }
     values.push(input.filters.limit ?? 50);
     const limitPosition = values.length;
@@ -522,6 +526,12 @@ export class ReportingRepository {
             else round(((current_date - f.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - f.pr_receipt_date), 0)) * 100)
           end as percent_time_elapsed,
           m.nit_publish_date,
+          m.bid_receipt_date,
+          m.technical_evaluation_date,
+          case
+            when m.technical_evaluation_date is null or m.bid_receipt_date is null then null
+            else m.technical_evaluation_date - m.bid_receipt_date
+          end as technical_evaluation_time_days,
           m.bidders_participated,
           m.qualified_bidders,
           m.loi_issued,
@@ -547,6 +557,7 @@ export class ReportingRepository {
 
     return result.rows.map((row) => ({
       approvedAmount: this.numberOrNull(row.approved_amount),
+      bidReceiptDate: this.dateOnly(row.bid_receipt_date),
       biddersParticipated: row.bidders_participated,
       caseId: row.case_id,
       completedCycleTimeDays: row.completed_age_days,
@@ -580,10 +591,44 @@ export class ReportingRepository {
       tenderName: row.tender_name,
       tenderNo: row.tender_no,
       tenderTypeName: row.tender_type_name,
+      technicalEvaluationDate: this.dateOnly(row.technical_evaluation_date),
+      technicalEvaluationTimeDays: row.technical_evaluation_time_days,
       tmRemarks: row.tm_remarks,
       totalAwardedAmount: this.numberOrNull(row.total_awarded_amount),
       uncontrollableDelayDays: row.delay_external_days,
     }));
+  }
+
+  async technicalEvaluationPendency(input: {
+    filters: ReportFilters;
+    scope: ReportScope;
+    tenantId: string;
+  }): Promise<ReportCaseRow[]> {
+    return this.caseReport({
+      extraWhere: [
+        "f.stage_code = 4",
+        "m.technical_evaluation_date is null",
+      ],
+      filters: input.filters,
+      includeDelayFields: true,
+      scope: input.scope,
+      status: "running",
+      tenantId: input.tenantId,
+    });
+  }
+
+  async technicalEvaluationTime(input: {
+    filters: ReportFilters;
+    scope: ReportScope;
+    tenantId: string;
+  }): Promise<ReportCaseRow[]> {
+    return this.caseReport({
+      filters: input.filters,
+      includeDelayFields: true,
+      scope: input.scope,
+      status: "completed",
+      tenantId: input.tenantId,
+    });
   }
 
   async vendorAwards(input: {
@@ -1885,6 +1930,7 @@ type AnalyticsTenderTypeRow = {
 
 type CaseReportRow = {
   approved_amount: string | null;
+  bid_receipt_date: Date | null;
   bidders_participated: number | null;
   case_id: string;
   completed_age_days: number | null;
@@ -1918,6 +1964,8 @@ type CaseReportRow = {
   tender_name: string | null;
   tender_no: string | null;
   tender_type_name: string | null;
+  technical_evaluation_date: Date | null;
+  technical_evaluation_time_days: number | null;
   tm_remarks: string | null;
   total_awarded_amount: string | null;
   delay_external_days: number | null;
