@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BarChart3,
   CalendarClock,
@@ -70,6 +70,8 @@ import {
   CreateCaseForm,
   type CreateCaseFormInitialValues,
 } from "../../procurement-cases/components/CreateCaseForm";
+import { StageAgingModalContent } from "../../procurement-cases/components/StageAgingModalContent";
+import { getCase } from "../../procurement-cases/api/casesApi";
 import { formatCaseStage } from "../../../shared/utils/caseStage";
 import { Button } from "../../../shared/ui/button/Button";
 import {
@@ -132,6 +134,7 @@ export function ReportsWorkspace() {
   const [rcPoPageSize, setRcPoPageSize] = useState(25);
   const [creatingCaseFromRcPo, setCreatingCaseFromRcPo] =
     useState<CreatingCaseFromRcPo | null>(null);
+  const [stageAgingCaseId, setStageAgingCaseId] = useState<string | null>(null);
   const initialExportJobId = useMemo(
     () => new URLSearchParams(location.search).get("jobId") ?? "",
     [location.search],
@@ -154,6 +157,11 @@ export function ReportsWorkspace() {
     rcPoExpiryParams,
     filters.analyticsParams,
   );
+  const stageAgingCase = useQuery({
+    enabled: Boolean(stageAgingCaseId),
+    queryFn: () => getCase(stageAgingCaseId as string),
+    queryKey: ["report-stage-aging-case", stageAgingCaseId],
+  });
   const exportState = useReportExport(
     reportCode,
     filters.exportFilters,
@@ -1643,6 +1651,7 @@ export function ReportsWorkspace() {
                   error={data.tenderDetails.error}
                   getRowKey={(row) => row.caseId}
                   isLoading={data.tenderDetails.isLoading}
+                  onRowClick={(row) => setStageAgingCaseId(row.caseId)}
                 />
               </>
             ) : null}
@@ -1731,6 +1740,29 @@ export function ReportsWorkspace() {
               navigateToAppPath(`/cases/${caseId}`);
             }}
           />
+        ) : null}
+      </Modal>
+      <Modal
+        isOpen={Boolean(stageAgingCaseId)}
+        onClose={() => setStageAgingCaseId(null)}
+        size="wide"
+        title="Stage Wise Aging"
+      >
+        {stageAgingCase.isLoading ? (
+          <div className="report-table-skeleton">
+            {[1, 2, 3, 4].map((item) => (
+              <div key={item}>
+                <Skeleton height={13} width="24%" />
+                <Skeleton height={13} width="18%" />
+                <Skeleton height={13} width="18%" />
+                <Skeleton height={13} width="14%" />
+              </div>
+            ))}
+          </div>
+        ) : stageAgingCase.error ? (
+          <p className="inline-error">{stageAgingCase.error.message}</p>
+        ) : stageAgingCase.data ? (
+          <StageAgingModalContent kase={stageAgingCase.data} />
         ) : null}
       </Modal>
     </section>
@@ -4139,6 +4171,7 @@ function ReportTable<TRow>({
   error,
   getRowKey,
   isLoading,
+  onRowClick,
   pagination = true,
 }: {
   columns: VirtualTableColumn<TRow>[];
@@ -4147,6 +4180,7 @@ function ReportTable<TRow>({
   error: Error | null;
   getRowKey: (row: TRow) => string;
   isLoading: boolean;
+  onRowClick?: (row: TRow) => void;
   pagination?: boolean;
 }) {
   const rows = data ?? [];
@@ -4176,6 +4210,7 @@ function ReportTable<TRow>({
         emptyMessage={emptyMessage}
         getRowKey={getRowKey}
         maxHeight={520}
+        {...(onRowClick ? { onRowClick } : {})}
         pagination={pagination}
         rowHeight={48}
         rows={rows}
