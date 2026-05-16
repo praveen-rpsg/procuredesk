@@ -117,7 +117,7 @@ const expiryColumns: DataTableColumn<RcPoExpiryRow>[] = [
   },
   {
     key: "contractType",
-    header: "Contract Type",
+    header: "Source",
     render: (row) => formatContractType(row.sourceOrigin),
   },
   {
@@ -147,7 +147,7 @@ const expiryColumns: DataTableColumn<RcPoExpiryRow>[] = [
   },
   {
     key: "amount",
-    header: "NFA Approved (Contract) Amount (Rs.) [All Inclusive]",
+    header: "Contract Amount (Rs.) [All Inclusive]",
     render: (row) => formatRupees(row.rcPoAmount),
   },
   {
