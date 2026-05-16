@@ -3,11 +3,14 @@ export type ReportCode =
   | "rc_po_expiry"
   | "running"
   | "stage_time"
+  | "technical_evaluation_pendency"
+  | "technical_evaluation_time"
   | "tender_details"
   | "vendor_awards";
 
 export type ReportCaseRow = {
   approvedAmount: number | null;
+  bidReceiptDate: string | null;
   biddersParticipated: number | null;
   completedCycleTimeDays: number | null;
   completionFy: string | null;
@@ -41,6 +44,8 @@ export type ReportCaseRow = {
   tenderName: string | null;
   tenderNo: string | null;
   tenderTypeName: string | null;
+  technicalEvaluationDate: string | null;
+  technicalEvaluationTimeDays: number | null;
   tmRemarks: string | null;
   totalAwardedAmount: number | null;
   uncontrollableDelayDays: number | null;

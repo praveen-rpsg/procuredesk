@@ -49,7 +49,6 @@ export class PlanningController {
   }
 
   @Post("tender-plans")
-  @RequirePermissions("planning.manage")
   createTenderPlan(
     @CurrentUser() user: AuthenticatedUser,
     @Body(new ZodValidationPipe(CreateTenderPlanRequestSchema))
@@ -116,7 +115,6 @@ export class PlanningController {
   }
 
   @Get("rc-po-expiry")
-  @RequirePermissions("planning.manage")
   listExpiryRows(
     @CurrentUser() user: AuthenticatedUser,
     @Query(new ZodValidationPipe(ExpiryQuerySchema)) query: ExpiryQuery,

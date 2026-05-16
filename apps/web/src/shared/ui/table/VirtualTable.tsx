@@ -1,11 +1,12 @@
 import type { ReactNode, UIEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown, Filter, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown, Filter, Search, X } from "lucide-react";
 
 import { Button } from "../button/Button";
 import {
   canFilterColumn,
   canSortColumn,
+  formatTableRowSummary,
   nextSortState,
   useProcessedTableRows,
   type TableFilterOption,
@@ -29,11 +30,17 @@ type VirtualTableProps<TRow> = {
   columns: VirtualTableColumn<TRow>[];
   emptyMessage?: string;
   getRowKey: (row: TRow) => string;
+  isRowClickable?: (row: TRow) => boolean;
   maxHeight?: number;
   onRowClick?: (row: TRow) => void;
   pagination?: boolean | TablePaginationConfig;
+  resultLabel?: string | undefined;
   rowHeight?: number;
   rows: TRow[];
+  searchValue?: string | undefined;
+  searchPlaceholder?: string | undefined;
+  showSearch?: boolean | undefined;
+  onSearchChange?: ((value: string) => void) | undefined;
 };
 
 const DEFAULT_PAGE_SIZE = 50;
@@ -49,20 +56,34 @@ export function VirtualTable<TRow>({
   columns,
   emptyMessage = "No records found.",
   getRowKey,
+  isRowClickable,
   maxHeight = 520,
   onRowClick,
   pagination = true,
+  resultLabel = "Rows",
   rowHeight = 48,
   rows,
+  searchValue,
+  searchPlaceholder = "Search table",
+  showSearch = true,
+  onSearchChange,
 }: VirtualTableProps<TRow>) {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [filterColumnKey, setFilterColumnKey] = useState<string | null>(null);
+  const [internalSearchQuery, setInternalSearchQuery] = useState("");
   const [sortState, setSortState] = useState<TableSortState>(null);
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(() => getPaginationConfig(pagination)?.pageSize ?? DEFAULT_PAGE_SIZE);
-  const processedRows = useProcessedTableRows(rows, columns, filters, sortState);
+  const searchQuery = searchValue ?? internalSearchQuery;
+  const processedRows = useProcessedTableRows(
+    rows,
+    columns,
+    filters,
+    sortState,
+    searchQuery,
+  );
   const paginationConfig = getPaginationConfig(pagination);
   const pageSizeOptions = paginationConfig?.pageSizeOptions ?? DEFAULT_PAGE_SIZE_OPTIONS;
   const totalPages = Math.max(1, Math.ceil(processedRows.length / pageSize));
@@ -95,7 +116,7 @@ export function VirtualTable<TRow>({
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = 0;
     }
-  }, [filters, rows, sortState]);
+  }, [filters, rows, searchQuery, sortState]);
 
   const handleScroll = (event: UIEvent<HTMLDivElement>) => {
     setScrollTop(event.currentTarget.scrollTop);
@@ -115,9 +136,32 @@ export function VirtualTable<TRow>({
       return next;
     });
   };
+  const handleSearchChange = (value: string) => {
+    if (searchValue === undefined) {
+      setInternalSearchQuery(value);
+    }
+    onSearchChange?.(value);
+  };
 
   return (
     <div className="table-frame">
+      <div className="table-toolbar">
+        <span className="table-result-summary" aria-live="polite">
+          {formatTableRowSummary(processedRows.length, rows.length, resultLabel)}
+        </span>
+        {showSearch ? (
+          <label className="table-search-control">
+            <Search aria-hidden="true" size={15} />
+            <input
+              aria-label={searchPlaceholder}
+              onChange={(event) => handleSearchChange(event.target.value)}
+              placeholder={searchPlaceholder}
+              type="search"
+              value={searchQuery}
+            />
+          </label>
+        ) : null}
+      </div>
       <div
         aria-label={ariaLabel}
         className="table-shell virtual-table-shell"
@@ -175,29 +219,32 @@ export function VirtualTable<TRow>({
                     <td colSpan={columns.length} style={{ height: topSpacerHeight, padding: 0 }} />
                   </tr>
                 ) : null}
-                {visibleRows.map((row) => (
-                  <tr
-                    className={onRowClick ? "table-row-clickable" : undefined}
-                    key={getRowKey(row)}
-                    onClick={onRowClick ? () => onRowClick(row) : undefined}
-                    style={{ height: rowHeight }}
-                    tabIndex={onRowClick ? 0 : undefined}
-                    onKeyDown={
-                      onRowClick
-                        ? (event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              onRowClick(row);
+                {visibleRows.map((row) => {
+                  const canClickRow = Boolean(onRowClick && (isRowClickable?.(row) ?? true));
+                  return (
+                    <tr
+                      className={canClickRow ? "table-row-clickable" : undefined}
+                      key={getRowKey(row)}
+                      onClick={canClickRow ? () => onRowClick?.(row) : undefined}
+                      style={{ height: rowHeight }}
+                      tabIndex={canClickRow ? 0 : undefined}
+                      onKeyDown={
+                        canClickRow
+                          ? (event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                onRowClick?.(row);
+                              }
                             }
-                          }
-                        : undefined
-                    }
-                  >
-                    {columns.map((column) => (
-                      <td key={column.key}>{column.render(row)}</td>
-                    ))}
-                  </tr>
-                ))}
+                          : undefined
+                      }
+                    >
+                      {columns.map((column) => (
+                        <td key={column.key}>{column.render(row)}</td>
+                      ))}
+                    </tr>
+                  );
+                })}
                 {bottomSpacerHeight > 0 ? (
                   <tr aria-hidden="true">
                     <td colSpan={columns.length} style={{ height: bottomSpacerHeight, padding: 0 }} />

@@ -9,7 +9,12 @@ import {
 import { listEntities } from "../../planning/api/planningApi";
 import { createCase } from "../api/casesApi";
 import { useAuth } from "../../../shared/auth/AuthProvider";
-import { addDaysToDateOnly, isDateOnlyString } from "../../../shared/utils/dateOnly";
+import { canEditEntityManagedCaseFields } from "../../../shared/auth/permissions";
+import {
+  addDaysToDateOnly,
+  isDateOnlyString,
+  todayDateOnlyString,
+} from "../../../shared/utils/dateOnly";
 import { Button } from "../../../shared/ui/button/Button";
 import { ComboboxSelect } from "../../../shared/ui/form/ComboboxSelect";
 import { FormField, TextInput } from "../../../shared/ui/form/FormField";
@@ -58,7 +63,10 @@ const createCaseFormSchema = {
   maxTextLength: 5000,
 };
 
-export function CreateCaseForm({ initialValues, onCreated }: CreateCaseFormProps) {
+export function CreateCaseForm({
+  initialValues,
+  onCreated,
+}: CreateCaseFormProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const { user } = useAuth();
@@ -76,6 +84,7 @@ export function CreateCaseForm({ initialValues, onCreated }: CreateCaseFormProps
   const [tentativeCompletionDate, setTentativeCompletionDate] = useState("");
   const [prValue, setPrValue] = useState("");
   const [formErrors, setFormErrors] = useState<CreateCaseFormErrors>({});
+  const todayDate = todayDateOnlyString();
 
   useEffect(() => {
     if (!initialValues) return;
@@ -132,13 +141,20 @@ export function CreateCaseForm({ initialValues, onCreated }: CreateCaseFormProps
     (tenderType) => tenderType.isActive,
   );
   const selectedEntity = useMemo(
-    () => (entities.data ?? []).find((entity) => entity.id === entityId) ?? null,
+    () =>
+      (entities.data ?? []).find((entity) => entity.id === entityId) ?? null,
     [entities.data, entityId],
   );
-  const singleMappedEntityId = user?.entityIds.length === 1 ? user.entityIds[0] : "";
+  const canEditTentativeCompletionDate = Boolean(
+    entityId && canEditEntityManagedCaseFields(user, { entityId }),
+  );
+  const singleMappedEntityId =
+    user?.entityIds.length === 1 ? user.entityIds[0] : "";
   const isSingleEntityMapped = Boolean(singleMappedEntityId);
   const entityOptions = useMemo(() => {
-    const activeEntities = (entities.data ?? []).filter((entity) => entity.isActive);
+    const activeEntities = (entities.data ?? []).filter(
+      (entity) => entity.isActive,
+    );
     if (!user || user.isPlatformSuperAdmin || user.accessLevel === "GROUP") {
       return activeEntities;
     }
@@ -147,7 +163,9 @@ export function CreateCaseForm({ initialValues, onCreated }: CreateCaseFormProps
   }, [entities.data, user]);
 
   useEffect(() => {
-    setPrId(selectedEntity?.code ? buildGeneratedCaseId(selectedEntity.code) : "");
+    setPrId(
+      selectedEntity?.code ? buildGeneratedCaseId(selectedEntity.code) : "",
+    );
   }, [selectedEntity?.code]);
 
   useEffect(() => {
@@ -175,12 +193,19 @@ export function CreateCaseForm({ initialValues, onCreated }: CreateCaseFormProps
       selectedTenderType?.completionDays === null ||
       selectedTenderType?.completionDays === undefined
     ) {
+      if (!canEditTentativeCompletionDate) {
+        setTentativeCompletionDate("");
+      }
       return;
     }
     setTentativeCompletionDate(
       addDaysToDateOnly(prReceiptDate, selectedTenderType.completionDays),
     );
-  }, [prReceiptDate, selectedTenderType?.completionDays]);
+  }, [
+    canEditTentativeCompletionDate,
+    prReceiptDate,
+    selectedTenderType?.completionDays,
+  ]);
 
   const mutation = useMutation({
     mutationFn: createCase,
@@ -332,6 +357,7 @@ export function CreateCaseForm({ initialValues, onCreated }: CreateCaseFormProps
             label="PR Receipt Date"
           >
             <TextInput
+              max={todayDate}
               onChange={(event) => setPrReceiptDate(event.target.value)}
               required
               type="date"
@@ -402,13 +428,20 @@ export function CreateCaseForm({ initialValues, onCreated }: CreateCaseFormProps
           </FormField>
           <FormField
             error={formErrors.tentativeCompletionDate ?? ""}
-            helperText="Defaults from PR receipt date plus the selected tender type days."
+            helperText={
+              canEditTentativeCompletionDate
+                ? "Defaults from PR receipt date plus the selected tender type days. Entity-level users may override it."
+                : "Auto-calculated from PR receipt date plus the selected tender type days."
+            }
             label="Tentative Completion Date"
           >
             <TextInput
-              onChange={(event) =>
-                setTentativeCompletionDate(event.target.value)
-              }
+              disabled={!canEditTentativeCompletionDate}
+              onChange={(event) => {
+                if (canEditTentativeCompletionDate) {
+                  setTentativeCompletionDate(event.target.value);
+                }
+              }}
               required
               type="date"
               value={tentativeCompletionDate}
@@ -429,7 +462,10 @@ export function CreateCaseForm({ initialValues, onCreated }: CreateCaseFormProps
               ))}
             </select>
           </FormField>
-          <FormField error={formErrors.natureOfWorkId ?? ""} label="Nature Of Work">
+          <FormField
+            error={formErrors.natureOfWorkId ?? ""}
+            label="Nature Of Work"
+          >
             <select
               className="text-input"
               onChange={(event) => setNatureOfWorkId(event.target.value)}
@@ -499,6 +535,8 @@ function validateCreateCaseForm(
     errors.prReceiptDate = "PR receipt date is required.";
   } else if (!isDateOnlyString(values.prReceiptDate)) {
     errors.prReceiptDate = "Use a valid PR receipt date.";
+  } else if (values.prReceiptDate > todayDateOnlyString()) {
+    errors.prReceiptDate = "PR receipt date cannot be in the future.";
   }
   if (!values.tentativeCompletionDate) {
     errors.tentativeCompletionDate = "Tentative completion date is required.";
@@ -560,7 +598,10 @@ function formatCurrencyInput(value: string) {
 }
 
 function buildGeneratedCaseId(entityCode: string, date = new Date()): string {
-  const normalizedEntityCode = entityCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const normalizedEntityCode = entityCode
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
   const pad = (value: number): string => String(value).padStart(2, "0");
   const day = pad(date.getDate());
   const month = pad(date.getMonth() + 1);

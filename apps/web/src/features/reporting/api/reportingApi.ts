@@ -5,6 +5,8 @@ export type ReportCode =
   | "rc_po_expiry"
   | "running"
   | "stage_time"
+  | "technical_evaluation_pendency"
+  | "technical_evaluation_time"
   | "tender_details"
   | "vendor_awards";
 
@@ -53,11 +55,13 @@ export type ReportingAnalytics = {
   }>;
   byEntity: Array<{
     caseCount: number;
+    completedCount: number;
     delayedCount: number;
     offTrackCount: number;
     entityCode: string | null;
     entityId: string;
     entityName: string | null;
+    runningCount: number;
     totalAwardedAmount: number;
     totalPrValue: number;
   }>;
@@ -130,6 +134,7 @@ export type ReportFilterMetadata = {
 
 export type ReportCaseRow = {
   approvedAmount: number | null;
+  bidReceiptDate: string | null;
   biddersParticipated: number | null;
   caseId: string;
   completedCycleTimeDays: number | null;
@@ -163,6 +168,8 @@ export type ReportCaseRow = {
   tenderName: string | null;
   tenderNo: string | null;
   tenderTypeName: string | null;
+  technicalEvaluationDate: string | null;
+  technicalEvaluationTimeDays: number | null;
   tmRemarks: string | null;
   totalAwardedAmount: number | null;
   uncontrollableDelayDays: number | null;
@@ -291,6 +298,14 @@ export function listVendorAwardsReport(params: ReportQueryParams = {}) {
 
 export function listStageTimeReport(params: ReportQueryParams = {}) {
   return apiRequest<StageTimeRow[]>(`/reports/stage-time${buildReportQuery(params)}`);
+}
+
+export function listTechnicalEvaluationPendencyReport(params: ReportQueryParams = {}) {
+  return apiRequest<ReportCaseRow[]>(`/reports/technical-evaluation-pendency${buildReportQuery(params)}`);
+}
+
+export function listTechnicalEvaluationTimeReport(params: ReportQueryParams = {}) {
+  return apiRequest<ReportCaseRow[]>(`/reports/technical-evaluation-time${buildReportQuery(params)}`);
 }
 
 export function listRcPoExpiryReport(params: ReportQueryParams = {}) {

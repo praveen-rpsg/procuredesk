@@ -25,6 +25,7 @@ export type CaseListFilters = {
   priorityCase?: boolean;
   prReceiptMonths?: string[];
   q?: string;
+  stageCodes?: number[];
   status?: "running" | "completed";
   tenderTypeIds?: string[];
   trackStatus?: "delayed" | "off_track" | "on_track";
@@ -444,7 +445,20 @@ export class ProcurementCaseRepository {
             else null
           end as current_stage_aging_days,
           dep.name as department_name,
-          c.desired_stage_code,
+          case
+            when c.status <> 'running' then null
+            when c.pr_receipt_date is null or c.tentative_completion_date is null then null
+            when c.tentative_completion_date <= c.pr_receipt_date then null
+            when ((current_date - c.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - c.pr_receipt_date), 0)) * 100 < 8 then 0
+            when ((current_date - c.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - c.pr_receipt_date), 0)) * 100 < 13 then 1
+            when ((current_date - c.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - c.pr_receipt_date), 0)) * 100 < 17 then 2
+            when ((current_date - c.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - c.pr_receipt_date), 0)) * 100 < 52 then 3
+            when ((current_date - c.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - c.pr_receipt_date), 0)) * 100 < 68 then 4
+            when ((current_date - c.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - c.pr_receipt_date), 0)) * 100 < 88 then 5
+            when ((current_date - c.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - c.pr_receipt_date), 0)) * 100 < 97 then 6
+            when ((current_date - c.pr_receipt_date)::numeric / nullif((c.tentative_completion_date - c.pr_receipt_date), 0)) * 100 < 100 then 7
+            else 8
+          end as desired_stage_code,
           ent.code as entity_code,
           c.entity_id,
           ent.name as entity_name,
@@ -627,8 +641,8 @@ export class ProcurementCaseRepository {
 
   async summary(tenantId: string, scope: CaseListScope) {
     const values: unknown[] = [tenantId];
-    const where = ["tenant_id = $1", "deleted_at is null"];
-    applyCaseScope(where, values, scope, "entity_id", "owner_user_id");
+    const where = ["c.tenant_id = $1", "c.deleted_at is null"];
+    applyCaseScope(where, values, scope, "c.entity_id", "c.owner_user_id");
     const row = await this.db.one<
       QueryResultRow & {
         completed_count: string;
@@ -644,47 +658,106 @@ export class ProcurementCaseRepository {
       `
         select
           count(*)::text as total_count,
-          count(*) filter (where status = 'running')::text as running_count,
-          count(*) filter (where status = 'completed')::text as completed_count,
+          count(*) filter (where c.status = 'running')::text as running_count,
+          count(*) filter (where c.status = 'completed')::text as completed_count,
           count(*) filter (
-            where status = 'running'
-              and tentative_completion_date is not null
-              and tentative_completion_date < current_date
+            where c.status = 'running'
+              and c.tentative_completion_date is not null
+              and c.tentative_completion_date < current_date
           )::text as delayed_count,
           count(*) filter (
-            where status = 'running'
-              and (tentative_completion_date is null or tentative_completion_date >= current_date)
-              and desired_stage_code is not null
-              and stage_code < desired_stage_code
+            where c.status = 'running'
+              and (c.tentative_completion_date is null or c.tentative_completion_date >= current_date)
+              and c.desired_stage_code is not null
+              and c.stage_code < c.desired_stage_code
           )::text as off_track_count,
           count(*) filter (
-            where status = 'running'
-              and (tentative_completion_date is null or tentative_completion_date >= current_date)
-              and (desired_stage_code is null or stage_code >= desired_stage_code)
+            where c.status = 'running'
+              and (c.tentative_completion_date is null or c.tentative_completion_date >= current_date)
+              and (c.desired_stage_code is null or c.stage_code >= c.desired_stage_code)
           )::text as on_track_count,
-          count(*) filter (where status = 'running' and priority_case)::text as priority_count,
+          count(*) filter (where c.status = 'running' and c.priority_case)::text as priority_count,
           count(*) filter (
-            where status = 'running'
+            where c.status = 'running'
               and (
                 (
-                  tentative_completion_date is not null
-                  and tentative_completion_date < current_date
+                  c.tentative_completion_date is not null
+                  and c.tentative_completion_date < current_date
                 )
-                or priority_case
+                or c.priority_case
                 or (
-                  (tentative_completion_date is null or tentative_completion_date >= current_date)
-                  and desired_stage_code is not null
-                  and stage_code < desired_stage_code
+                  (c.tentative_completion_date is null or c.tentative_completion_date >= current_date)
+                  and c.desired_stage_code is not null
+                  and c.stage_code < c.desired_stage_code
                 )
               )
           )::text as risk_count
-        from procurement.cases
+        from procurement.cases c
         where ${where.join(" and ")}
+      `,
+      values,
+    );
+    const entityRows = await this.db.query<
+      QueryResultRow & {
+        completed_count: string;
+        delayed_count: string;
+        entity_code: string | null;
+        entity_id: string;
+        entity_name: string | null;
+        off_track_count: string;
+        on_track_count: string;
+        priority_count: string;
+        running_count: string;
+        total_count: string;
+      }
+    >(
+      `
+        select
+          c.entity_id,
+          e.code as entity_code,
+          e.name as entity_name,
+          count(*)::text as total_count,
+          count(*) filter (where c.status = 'running')::text as running_count,
+          count(*) filter (where c.status = 'completed')::text as completed_count,
+          count(*) filter (
+            where c.status = 'running'
+              and c.tentative_completion_date is not null
+              and c.tentative_completion_date < current_date
+          )::text as delayed_count,
+          count(*) filter (
+            where c.status = 'running'
+              and (c.tentative_completion_date is null or c.tentative_completion_date >= current_date)
+              and c.desired_stage_code is not null
+              and c.stage_code < c.desired_stage_code
+          )::text as off_track_count,
+          count(*) filter (
+            where c.status = 'running'
+              and (c.tentative_completion_date is null or c.tentative_completion_date >= current_date)
+              and (c.desired_stage_code is null or c.stage_code >= c.desired_stage_code)
+          )::text as on_track_count,
+          count(*) filter (where c.status = 'running' and c.priority_case)::text as priority_count
+        from procurement.cases c
+        left join org.entities e on e.id = c.entity_id and e.tenant_id = c.tenant_id
+        where ${where.join(" and ")}
+        group by c.entity_id, e.code, e.name
+        order by count(*) desc, e.code asc nulls last, e.name asc nulls last
       `,
       values,
     );
 
     return {
+      byEntity: entityRows.rows.map((entityRow) => ({
+        completed: Number(entityRow.completed_count ?? 0),
+        delayed: Number(entityRow.delayed_count ?? 0),
+        entityCode: entityRow.entity_code,
+        entityId: entityRow.entity_id,
+        entityName: entityRow.entity_name,
+        offTrack: Number(entityRow.off_track_count ?? 0),
+        onTrack: Number(entityRow.on_track_count ?? 0),
+        priority: Number(entityRow.priority_count ?? 0),
+        running: Number(entityRow.running_count ?? 0),
+        total: Number(entityRow.total_count ?? 0),
+      })),
       completed: Number(row?.completed_count ?? 0),
       delayed: Number(row?.delayed_count ?? 0),
       offTrack: Number(row?.off_track_count ?? 0),
@@ -1123,6 +1196,10 @@ function applyCaseListFilters(where: string[], values: unknown[], filters: CaseL
   for (const filter of arrayFilters) {
     appendOptionalArrayFilter(where, values, filter);
   }
+  if (filters.stageCodes?.length) {
+    values.push(filters.stageCodes);
+    where.push(`c.stage_code = any($${values.length}::int[])`);
+  }
   if (filters.prReceiptMonths?.length) {
     values.push(filters.prReceiptMonths);
     where.push(`to_char(c.pr_receipt_date, 'YYYY-MM') = any($${values.length}::text[])`);
@@ -1198,21 +1275,42 @@ function appendDelayedStatusFilter(
 }
 
 function applyCaseSearchFilter(where: string[], values: unknown[], query: string | undefined): void {
-  if (!query) return;
+  const trimmed = query?.trim();
+  if (!trimmed) return;
+  const searchColumns = [
+    "c.pr_id",
+    "c.pr_description",
+    "c.tender_name",
+    "c.tender_no",
+    "c.status",
+    "c.stage_code::text",
+    "c.pr_remarks",
+    "c.tm_remarks",
+    "ent.code",
+    "ent.name",
+    "dep.name",
+    "owner.full_name",
+    "tt.name",
+    "f.pr_value::text",
+    "f.estimate_benchmark::text",
+    "f.approved_amount::text",
+    "f.savings_wrt_pr::text",
+    "f.savings_wrt_estimate::text",
+    "m.loi_issued::text",
+  ];
   appendWhere(
     where,
     values,
-    query,
-    (position) => `
-        to_tsvector(
-          'english',
-          coalesce(c.pr_id, '') || ' ' ||
-          coalesce(c.pr_description, '') || ' ' ||
-          coalesce(c.tender_name, '') || ' ' ||
-          coalesce(c.tender_no, '')
-        ) @@ plainto_tsquery('english', $${position})
-      `,
+    `%${escapeLikePattern(trimmed)}%`,
+    (position) =>
+      `(${searchColumns
+        .map((column) => `coalesce(${column}, '') ilike $${position} escape '\\'`)
+        .join(" or ")})`,
   );
+}
+
+function escapeLikePattern(value: string): string {
+  return value.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
 }
 
 function appendOptionalScalarFilter(

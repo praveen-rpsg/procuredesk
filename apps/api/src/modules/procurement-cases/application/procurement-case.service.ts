@@ -7,7 +7,10 @@ import {
 } from "@nestjs/common";
 
 import { hasExpandedPermission } from "../../../common/auth/permission-utils.js";
-import { addDaysToDateOnly } from "../../../common/utils/date-only.js";
+import {
+  addDaysToDateOnly,
+  todayDateOnlyString,
+} from "../../../common/utils/date-only.js";
 import { DatabaseService } from "../../../database/database.service.js";
 import { AuditWriterService } from "../../audit/application/audit-writer.service.js";
 import { CatalogService } from "../../catalog/application/catalog.service.js";
@@ -78,6 +81,7 @@ export class ProcurementCaseService {
   async createCase(actor: AuthenticatedUser, command: CreateCaseCommand) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "case.create");
+    this.assertPrReceiptDateNotFuture(command.prReceiptDate ?? null);
 
     const ownerUserId = command.ownerUserId ?? actor.id;
     await this.catalog.assertProcurementCaseSelections({
@@ -87,13 +91,29 @@ export class ProcurementCaseService {
       tenderTypeId: command.tenderTypeId ?? null,
       tenantId,
     });
-    const tentativeCompletionDate =
-      command.tentativeCompletionDate ??
-      (await this.deriveTentativeCompletionDate({
+    const requestedTentativeCompletionDate =
+      command.tentativeCompletionDate ?? null;
+    const derivedTentativeCompletionDate =
+      await this.deriveTentativeCompletionDate({
         prReceiptDate: command.prReceiptDate ?? null,
         tenderTypeId: command.tenderTypeId ?? null,
         tenantId,
-      }));
+      });
+    const canOverrideTentativeCompletionDate =
+      this.canUpdateEntityManagedFields(actor, command.entityId);
+    if (
+      !canOverrideTentativeCompletionDate &&
+      derivedTentativeCompletionDate &&
+      requestedTentativeCompletionDate &&
+      requestedTentativeCompletionDate !== derivedTentativeCompletionDate
+    ) {
+      throw new ForbiddenException(
+        "Tentative Completion Date is auto-calculated for tender owners.",
+      );
+    }
+    const tentativeCompletionDate = canOverrideTentativeCompletionDate
+      ? (requestedTentativeCompletionDate ?? derivedTentativeCompletionDate)
+      : (derivedTentativeCompletionDate ?? requestedTentativeCompletionDate);
     await this.assertOwnerAssignmentAllowed(
       actor,
       command.entityId,
@@ -535,21 +555,28 @@ export class ProcurementCaseService {
     actor: AuthenticatedUser,
     entityId: string,
   ) {
-    if (actor.isPlatformSuperAdmin) return;
-    if (
-      actor.accessLevel === "GROUP" &&
-      hasExpandedPermission(actor, "case.update.all")
-    )
-      return;
-    if (
-      actor.accessLevel === "ENTITY" &&
-      hasExpandedPermission(actor, "case.update.entity") &&
-      actor.entityIds.includes(entityId)
-    ) {
+    if (this.canUpdateEntityManagedFields(actor, entityId)) {
       return;
     }
     throw new ForbiddenException(
       "Only group-level case managers or entity-level users for this entity can update Tender Owner or Tentative Completion Date.",
+    );
+  }
+
+  private canUpdateEntityManagedFields(
+    actor: AuthenticatedUser,
+    entityId: string,
+  ): boolean {
+    if (actor.isPlatformSuperAdmin) return true;
+    if (
+      actor.accessLevel === "GROUP" &&
+      hasExpandedPermission(actor, "case.update.all")
+    )
+      return true;
+    return (
+      actor.accessLevel === "ENTITY" &&
+      hasExpandedPermission(actor, "case.update.entity") &&
+      actor.entityIds.includes(entityId)
     );
   }
 
@@ -617,6 +644,15 @@ export class ProcurementCaseService {
       throw new BadRequestException("Tenant context is required.");
     }
     return actor.tenantId;
+  }
+
+  private assertPrReceiptDateNotFuture(prReceiptDate: string | null) {
+    if (prReceiptDate && prReceiptDate > todayDateOnlyString()) {
+      throw new BadRequestException({
+        errors: ["PR Receipt Date cannot be in the future."],
+        message: "Case validation failed.",
+      });
+    }
   }
 
   private normalizeMilestonesForTenderType(

@@ -146,7 +146,17 @@ export class ReportingRepository {
             else null
           end,
           case
-            when c.pr_receipt_date is not null then current_date - c.pr_receipt_date
+            when c.status <> 'running' then null
+            when c.stage_code = 0 and c.pr_receipt_date is not null then current_date - c.pr_receipt_date
+            when c.stage_code = 1 and m.nit_initiation_date is not null then current_date - m.nit_initiation_date
+            when c.stage_code = 2 and m.nit_approval_date is not null then current_date - m.nit_approval_date
+            when c.stage_code = 3 and m.nit_publish_date is not null then current_date - m.nit_publish_date
+            when c.stage_code = 4 and m.bid_receipt_date is not null then current_date - m.bid_receipt_date
+            when c.stage_code = 5 and coalesce(greatest(m.commercial_evaluation_date, m.technical_evaluation_date), m.commercial_evaluation_date, m.technical_evaluation_date) is not null
+              then current_date - coalesce(greatest(m.commercial_evaluation_date, m.technical_evaluation_date), m.commercial_evaluation_date, m.technical_evaluation_date)
+            when c.stage_code = 6 and m.nfa_submission_date is not null then current_date - m.nfa_submission_date
+            when c.stage_code = 7 and m.nfa_approval_date is not null then current_date - m.nfa_approval_date
+            when c.stage_code = 8 and m.rc_po_award_date is not null then current_date - m.rc_po_award_date
             else null
           end,
           f.pr_value,
@@ -326,6 +336,8 @@ export class ReportingRepository {
           e.code as entity_code,
           e.name as entity_name,
           count(*)::text as case_count,
+          count(*) filter (where f.status = 'running')::text as running_count,
+          count(*) filter (where f.status = 'completed')::text as completed_count,
           count(*) filter (
             where f.status = 'running'
               and c.tentative_completion_date is not null
@@ -431,6 +443,7 @@ export class ReportingRepository {
   }
 
   async caseReport(input: {
+    extraWhere?: string[];
     includeDelayFields?: boolean;
     filters: ReportFilters;
     scope: ReportScope;
@@ -451,11 +464,37 @@ export class ReportingRepository {
       "dep.name",
       "tt.name",
       "owner.full_name",
-      ...(input.includeDelayFields ? ["d.delay_reason"] : []),
+      "f.status",
+      "f.stage_code::text",
+      "f.current_stage_aging_days::text",
+      "f.running_age_days::text",
+      "f.completed_age_days::text",
+      "f.completion_fy",
+      "f.pr_value::text",
+      "f.estimate_benchmark::text",
+      "f.approved_amount::text",
+      "f.total_awarded_amount::text",
+      "f.savings_wrt_pr::text",
+      "f.savings_wrt_estimate::text",
+      "f.pr_receipt_date::text",
+      "f.rc_po_award_date::text",
+      "m.nit_publish_date::text",
+      "m.bid_receipt_date::text",
+      "m.technical_evaluation_date::text",
+      "m.bidders_participated::text",
+      "m.qualified_bidders::text",
+      "m.loi_issued::text",
+      "c.pr_remarks",
+      "c.tm_remarks",
+      "d.delay_reason",
+      "d.delay_external_days::text",
     ]);
     if (input.status) {
       values.push(input.status);
       where.push(`f.status = $${values.length}`);
+    }
+    if (input.extraWhere?.length) {
+      where.push(...input.extraWhere);
     }
     values.push(input.filters.limit ?? 50);
     const limitPosition = values.length;
@@ -476,7 +515,20 @@ export class ReportingRepository {
           owner.full_name as owner_full_name,
           f.status,
           f.stage_code,
-          f.desired_stage_code,
+          case
+            when f.status <> 'running' then null
+            when f.pr_receipt_date is null or target.tentative_completion_date is null then null
+            when target.tentative_completion_date <= f.pr_receipt_date then null
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((target.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 8 then 0
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((target.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 13 then 1
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((target.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 17 then 2
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((target.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 52 then 3
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((target.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 68 then 4
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((target.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 88 then 5
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((target.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 97 then 6
+            when ((current_date - f.pr_receipt_date)::numeric / nullif((target.tentative_completion_date - f.pr_receipt_date), 0)) * 100 < 100 then 7
+            else 8
+          end as desired_stage_code,
           f.is_delayed,
           f.pr_receipt_date,
           f.rc_po_award_date,
@@ -492,12 +544,17 @@ export class ReportingRepository {
           f.savings_wrt_estimate,
           case
             when f.status <> 'running' then null
-            when c.tentative_completion_date is null or f.pr_receipt_date is null then null
-            when coalesce(f.completed_age_days, f.running_age_days) is null then null
-            when greatest((c.tentative_completion_date - f.pr_receipt_date), 1) = 0 then null
-            else round((coalesce(f.completed_age_days, f.running_age_days)::numeric / greatest((c.tentative_completion_date - f.pr_receipt_date), 1)) * 100)
+            when target.tentative_completion_date is null or f.pr_receipt_date is null then null
+            when target.tentative_completion_date <= f.pr_receipt_date then null
+            else round(((current_date - f.pr_receipt_date)::numeric / nullif((target.tentative_completion_date - f.pr_receipt_date), 0)) * 100)
           end as percent_time_elapsed,
           m.nit_publish_date,
+          m.bid_receipt_date,
+          m.technical_evaluation_date,
+          case
+            when m.technical_evaluation_date is null or m.bid_receipt_date is null then null
+            else m.technical_evaluation_date - m.bid_receipt_date
+          end as technical_evaluation_time_days,
           m.bidders_participated,
           m.qualified_bidders,
           m.loi_issued,
@@ -514,6 +571,17 @@ export class ReportingRepository {
         left join iam.users owner on owner.id = f.owner_user_id and owner.tenant_id = f.tenant_id
         left join procurement.case_milestones m on m.case_id = f.case_id and m.tenant_id = f.tenant_id
         left join procurement.case_delays d on d.case_id = f.case_id and d.tenant_id = f.tenant_id
+        left join catalog.tender_type_completion_rules tcr on tcr.tender_type_id = f.tender_type_id and tcr.tenant_id = f.tenant_id
+        left join lateral (
+          select coalesce(
+            c.tentative_completion_date,
+            case
+              when f.pr_receipt_date is not null and tcr.completion_days is not null
+              then f.pr_receipt_date + tcr.completion_days
+              else null
+            end
+          ) as tentative_completion_date
+        ) target on true
         where ${where.join(" and ")}
         order by f.updated_at desc
         limit $${limitPosition}
@@ -523,6 +591,7 @@ export class ReportingRepository {
 
     return result.rows.map((row) => ({
       approvedAmount: this.numberOrNull(row.approved_amount),
+      bidReceiptDate: this.dateOnly(row.bid_receipt_date),
       biddersParticipated: row.bidders_participated,
       caseId: row.case_id,
       completedCycleTimeDays: row.completed_age_days,
@@ -556,10 +625,44 @@ export class ReportingRepository {
       tenderName: row.tender_name,
       tenderNo: row.tender_no,
       tenderTypeName: row.tender_type_name,
+      technicalEvaluationDate: this.dateOnly(row.technical_evaluation_date),
+      technicalEvaluationTimeDays: row.technical_evaluation_time_days,
       tmRemarks: row.tm_remarks,
       totalAwardedAmount: this.numberOrNull(row.total_awarded_amount),
       uncontrollableDelayDays: row.delay_external_days,
     }));
+  }
+
+  async technicalEvaluationPendency(input: {
+    filters: ReportFilters;
+    scope: ReportScope;
+    tenantId: string;
+  }): Promise<ReportCaseRow[]> {
+    return this.caseReport({
+      extraWhere: [
+        "f.stage_code = 4",
+        "m.technical_evaluation_date is null",
+      ],
+      filters: input.filters,
+      includeDelayFields: true,
+      scope: input.scope,
+      status: "running",
+      tenantId: input.tenantId,
+    });
+  }
+
+  async technicalEvaluationTime(input: {
+    filters: ReportFilters;
+    scope: ReportScope;
+    tenantId: string;
+  }): Promise<ReportCaseRow[]> {
+    return this.caseReport({
+      filters: input.filters,
+      includeDelayFields: true,
+      scope: input.scope,
+      status: "completed",
+      tenantId: input.tenantId,
+    });
   }
 
   async vendorAwards(input: {
@@ -583,6 +686,9 @@ export class ReportingRepository {
       "a.vendor_code",
       "a.vendor_name",
       "a.po_number",
+      "a.po_value::text",
+      "a.po_award_date::text",
+      "a.po_validity_date::text",
     ]);
     values.push(input.filters.limit ?? 50);
     const limitPosition = values.length;
@@ -655,6 +761,21 @@ export class ReportingRepository {
       "e.name",
       "tt.name",
       "owner.full_name",
+      "f.stage_code::text",
+      "f.current_stage_aging_days::text",
+      "f.running_age_days::text",
+      "f.completed_age_days::text",
+      "f.priority_case::text",
+      "m.nit_initiation_date::text",
+      "m.nit_approval_date::text",
+      "m.nit_publish_date::text",
+      "m.bid_receipt_date::text",
+      "m.commercial_evaluation_date::text",
+      "m.technical_evaluation_date::text",
+      "m.nfa_submission_date::text",
+      "m.nfa_approval_date::text",
+      "m.rc_po_award_date::text",
+      "m.loi_issued::text",
     ]);
     values.push(filters.limit ?? 50);
     const limitPosition = values.length;
@@ -771,6 +892,14 @@ export class ReportingRepository {
       "ent.name",
       "dep.name",
       "owner.full_name",
+      "rv_nature.label",
+      "e.source_type",
+      "case when e.source_type = 'manual_plan' then 'bulk upload' else 'tenderdb' end",
+      "e.rc_po_amount::text",
+      "e.rc_po_award_date::text",
+      "e.rc_po_validity_date::text",
+      "e.tentative_tendering_date::text",
+      "e.tender_floated_or_not_required::text",
     ]);
     values.push(input.filters.limit ?? 50);
     const limitPosition = values.length;
@@ -1771,11 +1900,13 @@ function nullable<T>(value: T | null | undefined): T | null {
 function mapAnalyticsEntityRow(row: AnalyticsEntityRow) {
   return {
     caseCount: Number(row.case_count),
+    completedCount: Number(row.completed_count),
     delayedCount: Number(row.delayed_count),
     entityCode: row.entity_code,
     entityId: row.entity_id,
     entityName: row.entity_name,
     offTrackCount: Number(row.off_track_count),
+    runningCount: Number(row.running_count),
     totalAwardedAmount: Number(row.total_awarded_amount),
     totalPrValue: Number(row.total_pr_value),
   };
@@ -1829,11 +1960,13 @@ type AnalyticsBidderRow = {
 
 type AnalyticsEntityRow = {
   case_count: string;
+  completed_count: string;
   delayed_count: string;
   off_track_count: string;
   entity_code: string | null;
   entity_id: string;
   entity_name: string | null;
+  running_count: string;
   total_awarded_amount: string;
   total_pr_value: string;
 };
@@ -1857,6 +1990,7 @@ type AnalyticsTenderTypeRow = {
 
 type CaseReportRow = {
   approved_amount: string | null;
+  bid_receipt_date: Date | null;
   bidders_participated: number | null;
   case_id: string;
   completed_age_days: number | null;
@@ -1890,6 +2024,8 @@ type CaseReportRow = {
   tender_name: string | null;
   tender_no: string | null;
   tender_type_name: string | null;
+  technical_evaluation_date: Date | null;
+  technical_evaluation_time_days: number | null;
   tm_remarks: string | null;
   total_awarded_amount: string | null;
   delay_external_days: number | null;

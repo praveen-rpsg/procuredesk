@@ -88,6 +88,24 @@ export class ReportingController {
     return this.reporting.stageTime(user, stripUndefined(query));
   }
 
+  @Get("technical-evaluation-pendency")
+  @RequirePermissions("report.read")
+  technicalEvaluationPendency(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query(new ZodValidationPipe(ReportQuerySchema)) query: ReportQuery,
+  ) {
+    return this.reporting.technicalEvaluationPendency(user, stripUndefined(query));
+  }
+
+  @Get("technical-evaluation-time")
+  @RequirePermissions("report.read")
+  technicalEvaluationTime(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query(new ZodValidationPipe(ReportQuerySchema)) query: ReportQuery,
+  ) {
+    return this.reporting.technicalEvaluationTime(user, stripUndefined(query));
+  }
+
   @Get("rc-po-expiry")
   @RequirePermissions("report.read")
   rcPoExpiry(
@@ -98,7 +116,6 @@ export class ReportingController {
   }
 
   @Patch("rc-po-expiry/:sourceType/:sourceId")
-  @RequirePermissions("planning.manage")
   updateRcPoExpiryRow(
     @CurrentUser() user: AuthenticatedUser,
     @Param("sourceType", new ZodValidationPipe(RcPoExpirySourceTypeSchema)) sourceType: RcPoExpirySourceType,

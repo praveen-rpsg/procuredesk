@@ -8,6 +8,8 @@ import {
   listRunningReport,
   listSavedViews,
   listStageTimeReport,
+  listTechnicalEvaluationPendencyReport,
+  listTechnicalEvaluationTimeReport,
   listTenderDetails,
   listVendorAwardsReport,
   type ReportCode,
@@ -58,6 +60,18 @@ export function useReportData(
     queryKey: ["report", "stage-time", analyticsParams],
   });
 
+  const technicalEvaluationPendency = useQuery({
+    enabled: reportCode === "technical_evaluation_pendency",
+    queryFn: () => listTechnicalEvaluationPendencyReport(reportParams),
+    queryKey: ["report", "technical-evaluation-pendency", reportParams],
+  });
+
+  const technicalEvaluationTime = useQuery({
+    enabled: reportCode === "technical_evaluation_time",
+    queryFn: () => listTechnicalEvaluationTimeReport(reportParams),
+    queryKey: ["report", "technical-evaluation-time", reportParams],
+  });
+
   const rcPoExpiry = useQuery({
     enabled: reportCode === "rc_po_expiry",
     queryFn: () => listRcPoExpiryReport(reportParams),
@@ -83,6 +97,8 @@ export function useReportData(
     running,
     savedViews,
     stageTime,
+    technicalEvaluationPendency,
+    technicalEvaluationTime,
     tenderDetails,
     vendorAwards,
   };

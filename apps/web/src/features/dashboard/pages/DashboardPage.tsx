@@ -20,9 +20,10 @@ import {
   getCase,
   getCaseSummary,
   listCases,
-  type CaseDetail,
+  type CaseSummary,
   type CaseListItem,
 } from "../../procurement-cases/api/casesApi";
+import { StageAgingModalContent } from "../../procurement-cases/components/StageAgingModalContent";
 import {
   listRcPoExpiry,
   type RcPoExpiryRow,
@@ -36,9 +37,7 @@ import {
   canReadReports,
 } from "../../../shared/auth/permissions";
 import {
-  dateOnlyToLocalDate,
   formatDateOnly,
-  todayDateOnlyString,
 } from "../../../shared/utils/dateOnly";
 import { formatCaseStage } from "../../../shared/utils/caseStage";
 import { navigateToAppPath } from "../../../shared/routing/appLocation";
@@ -73,6 +72,17 @@ type DashboardPageProps = {
 };
 
 type FocusCaseMode = "delayed" | "priority";
+type DashboardMetricTarget = Extract<
+  DashboardTarget,
+  | "all-cases"
+  | "completed-cases"
+  | "delayed-cases"
+  | "off-track-cases"
+  | "on-track-cases"
+  | "priority-cases"
+  | "running-cases"
+>;
+type CaseSummaryEntity = CaseSummary["byEntity"][number];
 
 const DASHBOARD_TABLE_FETCH_LIMIT = 100;
 const DASHBOARD_TABLE_PAGE_SIZE = 10;
@@ -105,7 +115,7 @@ const expiryColumns: DataTableColumn<RcPoExpiryRow>[] = [
   },
   {
     key: "contractType",
-    header: "Contract Type",
+    header: "Source",
     render: (row) => formatContractType(row.sourceOrigin),
   },
   {
@@ -135,7 +145,7 @@ const expiryColumns: DataTableColumn<RcPoExpiryRow>[] = [
   },
   {
     key: "amount",
-    header: "NFA Approved (Contract) Amount (Rs.) [All Inclusive]",
+    header: "Contract Amount (Rs.) [All Inclusive]",
     render: (row) => formatRupees(row.rcPoAmount),
   },
   {
@@ -213,6 +223,57 @@ function percentage(value: number, total: number): number {
   return Math.round((value / total) * 100);
 }
 
+function dashboardCasePathForTarget(
+  target: DashboardMetricTarget,
+  entityId?: string,
+): string {
+  const params = new URLSearchParams();
+  if (entityId) params.set("entityIds", entityId);
+  if (target === "running-cases") params.set("status", "running");
+  if (target === "completed-cases") params.set("status", "completed");
+  if (target === "delayed-cases") params.set("trackStatus", "delayed");
+  if (target === "off-track-cases") params.set("trackStatus", "off_track");
+  if (target === "on-track-cases") params.set("trackStatus", "on_track");
+  if (target === "priority-cases") {
+    params.set("status", "running");
+    params.set("priorityCase", "true");
+  }
+  const query = params.toString();
+  return `/cases${query ? `?${query}` : ""}`;
+}
+
+function metricEntityCount(
+  entity: CaseSummaryEntity,
+  target: DashboardMetricTarget,
+): number {
+  if (target === "running-cases") return entity.running;
+  if (target === "completed-cases") return entity.completed;
+  if (target === "delayed-cases") return entity.delayed;
+  if (target === "off-track-cases") return entity.offTrack;
+  if (target === "on-track-cases") return entity.onTrack;
+  if (target === "priority-cases") return entity.priority;
+  return entity.total;
+}
+
+function entityBreakdownForMetric(
+  entities: CaseSummaryEntity[],
+  target: DashboardMetricTarget,
+) {
+  return entities
+    .map((entity) => ({
+      count: metricEntityCount(entity, target),
+      entity,
+    }))
+    .filter((item) => item.count > 0)
+    .sort(
+      (left, right) =>
+        right.count - left.count ||
+        entityDisplayName(left.entity).localeCompare(
+          entityDisplayName(right.entity),
+        ),
+    );
+}
+
 function caseFlagLabel(row: CaseListItem): string {
   if (row.isDelayed) return "Delayed";
   if (isCaseOffTrack(row)) return "Off Track";
@@ -268,6 +329,8 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const hasPlanningAccess = hasTenantContext && canAccessPlanning(user);
   const hasPlanningManageAccess = hasTenantContext && canManagePlanning(user);
   const hasReportAccess = hasTenantContext && canReadReports(user);
+  const hasExpiryAccess =
+    hasCaseAccess && (hasPlanningManageAccess || hasReportAccess);
   const summary = useQuery({
     enabled: hasCaseAccess,
     queryFn: getCaseSummary,
@@ -297,7 +360,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     queryKey: ["dashboard-stage-aging-case", stageAgingCaseId],
   });
   const expiryRows = useQuery({
-    enabled: hasCaseAccess && hasPlanningManageAccess,
+    enabled: hasExpiryAccess,
     queryFn: () =>
       listRcPoExpiry({ days: 90, limit: DASHBOARD_TABLE_FETCH_LIMIT }),
     queryKey: ["dashboard-rc-po-expiry"],
@@ -313,6 +376,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   }
 
   const metrics = summary.data ?? {
+    byEntity: [],
     completed: 0,
     delayed: 0,
     offTrack: 0,
@@ -451,7 +515,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         "Open the case list and update milestones, allocations, or awards.",
       icon: FilePenLine,
       isVisible: hasCaseAccess,
-      label: "Update Existing Case",
+      label: "Update / View Existing Case",
       target: "update-case",
       tone: "neutral",
     },
@@ -595,43 +659,78 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                 <div className="dashboard-hero-metrics">
                   {group.metrics.map((metric) => {
                     const Icon = metric.icon;
+                    const entityBreakdown = entityBreakdownForMetric(
+                      metrics.byEntity,
+                      metric.target,
+                    );
                     return (
-                      <button
-                        aria-label={`Open ${metric.label} cases`}
-                        className={`metric-card dashboard-metric-card dashboard-metric-card-clickable metric-card-${metric.tone}`}
-                        disabled={!hasCaseAccess}
+                      <article
+                        className={`metric-card dashboard-metric-card metric-card-${metric.tone}`}
                         key={metric.label}
-                        onClick={() => onNavigate?.(metric.target)}
-                        type="button"
                       >
-                        <div className="dashboard-metric-topline">
-                          <div className="metric-card-icon">
-                            <Icon size={15} />
+                        <button
+                          aria-label={`Open ${metric.label} cases`}
+                          className="dashboard-metric-main-button dashboard-metric-card-clickable"
+                          disabled={!hasCaseAccess}
+                          onClick={() => onNavigate?.(metric.target)}
+                          type="button"
+                        >
+                          <div className="dashboard-metric-topline">
+                            <div className="metric-card-icon">
+                              <Icon size={15} />
+                            </div>
+                            {metric.progress != null ? (
+                              <span className="dashboard-metric-percent">
+                                {metric.progress}%
+                              </span>
+                            ) : null}
                           </div>
+                          <span>{metric.label}</span>
+                          <strong>
+                            {summary.isLoading ? (
+                              <Skeleton height={22} width="60%" />
+                            ) : (
+                              metric.value
+                            )}
+                          </strong>
+                          <small>{metric.subLabel}</small>
                           {metric.progress != null ? (
-                            <span className="dashboard-metric-percent">
-                              {metric.progress}%
+                            <span
+                              aria-hidden="true"
+                              className="dashboard-metric-bar"
+                            >
+                              <i style={{ width: `${metric.progress}%` }} />
                             </span>
                           ) : null}
-                        </div>
-                        <span>{metric.label}</span>
-                        <strong>
-                          {summary.isLoading ? (
-                            <Skeleton height={22} width="60%" />
-                          ) : (
-                            metric.value
-                          )}
-                        </strong>
-                        <small>{metric.subLabel}</small>
-                        {metric.progress != null ? (
-                          <span
-                            aria-hidden="true"
-                            className="dashboard-metric-bar"
+                        </button>
+                        {!summary.isLoading && entityBreakdown.length ? (
+                          <div
+                            aria-label={`${metric.label} by entity`}
+                            className="dashboard-metric-entity-breakdown"
                           >
-                            <i style={{ width: `${metric.progress}%` }} />
-                          </span>
+                            {entityBreakdown.map(({ count, entity }) => (
+                              <button
+                                aria-label={`Open ${metric.label} cases for ${entityDisplayName(entity)}`}
+                                className="dashboard-metric-entity-chip"
+                                disabled={!hasCaseAccess}
+                                key={entity.entityId}
+                                onClick={() =>
+                                  navigateToAppPath(
+                                    dashboardCasePathForTarget(
+                                      metric.target,
+                                      entity.entityId,
+                                    ),
+                                  )
+                                }
+                                type="button"
+                              >
+                                <span>{entityDisplayName(entity)}</span>
+                                <strong>{count}</strong>
+                              </button>
+                            ))}
+                          </div>
                         ) : null}
-                      </button>
+                      </article>
                     );
                   })}
                 </div>
@@ -752,7 +851,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       ) : null}
 
       {/* RC/PO expiry */}
-      {hasCaseAccess && hasPlanningManageAccess ? (
+      {hasExpiryAccess ? (
         <section className="state-panel dashboard-expiry-panel">
           <div className="detail-header">
             <div>
@@ -806,132 +905,6 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   );
 }
 
-type StageAgingRow = {
-  agingDays: number | null;
-  endDate: string | null;
-  stage: string;
-  startDate: string | null;
-  status: "Active" | "Completed" | "Pending";
-};
-
-function StageAgingModalContent({ kase }: { kase: CaseDetail }) {
-  const rows = buildStageAgingRows(kase);
-  const columns: DataTableColumn<StageAgingRow>[] = [
-    { key: "stage", header: "Stage", render: (row) => row.stage },
-    {
-      key: "start",
-      header: "Start Date",
-      render: (row) => formatDateOnly(row.startDate),
-    },
-    {
-      key: "end",
-      header: "End Date / Current",
-      render: (row) => (row.endDate ? formatDateOnly(row.endDate) : row.status),
-    },
-    {
-      key: "aging",
-      header: "Aging Days",
-      render: (row) => formatDays(row.agingDays),
-    },
-    {
-      key: "status",
-      header: "Status",
-      render: (row) => (
-        <StatusBadge
-          tone={
-            row.status === "Active"
-              ? "warning"
-              : row.status === "Completed"
-                ? "success"
-                : "neutral"
-          }
-        >
-          {row.status}
-        </StatusBadge>
-      ),
-    },
-  ];
-
-  return (
-    <div className="dashboard-stage-aging-modal">
-      <div className="dashboard-stage-aging-summary">
-        <div>
-          <span>Entity</span>
-          <strong>{entityDisplayName(kase)}</strong>
-        </div>
-        <div>
-          <span>PR Description</span>
-          <strong>{kase.prDescription ?? "-"}</strong>
-        </div>
-        <div>
-          <span>Tender Type</span>
-          <strong>{kase.tenderTypeName ?? "-"}</strong>
-        </div>
-        <div>
-          <span>Tender Owner</span>
-          <strong>{kase.ownerFullName ?? "-"}</strong>
-        </div>
-      </div>
-      <DataTable
-        columns={columns}
-        emptyMessage="No stage aging data available."
-        getRowKey={(row) => row.stage}
-        rows={rows}
-      />
-      <div className="modal-actions">
-        <Button
-          onClick={() => {
-            navigateToAppPath(`/cases/${kase.id}`);
-          }}
-          variant="secondary"
-        >
-          Open Case
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function buildStageAgingRows(kase: CaseDetail): StageAgingRow[] {
-  const today = todayDateOnlyString();
-  const milestones = kase.milestones;
-  const starts = [
-    kase.prReceiptDate,
-    milestones.nitInitiationDate ?? null,
-    milestones.nitApprovalDate ?? null,
-    milestones.nitPublishDate ?? null,
-    milestones.bidReceiptDate ?? null,
-    latestDateOnly(
-      milestones.commercialEvaluationDate,
-      milestones.technicalEvaluationDate,
-    ),
-    milestones.nfaSubmissionDate ?? null,
-    milestones.nfaApprovalDate ?? null,
-    milestones.rcPoAwardDate ?? null,
-  ];
-
-  return starts.map((rawStartDate, stageCode) => {
-    const startDate = rawStartDate ?? null;
-    const nextStartDate = starts.slice(stageCode + 1).find(Boolean) ?? null;
-    const status =
-      stageCode === kase.stageCode && kase.status === "running"
-        ? "Active"
-        : stageCode < kase.stageCode || (stageCode === 8 && Boolean(startDate))
-          ? "Completed"
-          : "Pending";
-    const endDate =
-      status === "Active" ? today : status === "Completed" ? nextStartDate : null;
-    return {
-      agingDays:
-        startDate && endDate ? diffDateOnlyDays(endDate, startDate) : null,
-      endDate,
-      stage: formatCaseStage(stageCode),
-      startDate,
-      status,
-    };
-  });
-}
-
 function entityDisplayName(row: {
   entityCode?: string | null;
   entityId: string;
@@ -942,23 +915,4 @@ function entityDisplayName(row: {
 
 function formatDays(value: number | null | undefined) {
   return value == null ? "-" : `${value} days`;
-}
-
-function latestDateOnly(
-  left: string | null | undefined,
-  right: string | null | undefined,
-) {
-  if (!left) return right ?? null;
-  if (!right) return left;
-  return left > right ? left : right;
-}
-
-function diffDateOnlyDays(to: string, from: string) {
-  const toDate = dateOnlyToLocalDate(to);
-  const fromDate = dateOnlyToLocalDate(from);
-  if (!toDate || !fromDate) return null;
-  return Math.max(
-    0,
-    Math.round((toDate.getTime() - fromDate.getTime()) / 86_400_000),
-  );
 }

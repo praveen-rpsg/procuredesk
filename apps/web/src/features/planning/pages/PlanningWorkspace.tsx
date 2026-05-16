@@ -5,6 +5,7 @@ import {
   Download,
   FilePlus2,
   Pencil,
+  Trash2,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
@@ -34,6 +35,7 @@ import {
   navigateToAppPath,
   useAppLocation,
 } from "../../../shared/routing/appLocation";
+import { ConfirmationDialog } from "../../../shared/ui/confirmation-dialog/ConfirmationDialog";
 import { SecondaryNav } from "../../../shared/ui/secondary-nav/SecondaryNav";
 import { Skeleton } from "../../../shared/ui/skeleton/Skeleton";
 import {
@@ -47,7 +49,10 @@ import {
   toDateOnlyInputValue,
 } from "../../../shared/utils/dateOnly";
 import { useAuth } from "../../../shared/auth/AuthProvider";
-import { canManagePlanning } from "../../../shared/auth/permissions";
+import {
+  canCreateCase,
+  canManagePlanning,
+} from "../../../shared/auth/permissions";
 
 const tenderColumns: VirtualTableColumn<TenderPlanCase>[] = [
   {
@@ -129,6 +134,7 @@ export function PlanningWorkspace() {
   const { user } = useAuth();
   const location = useAppLocation();
   const canEditPlanning = canManagePlanning(user);
+  const canCreateTenderPlan = canEditPlanning || canCreateCase(user);
   const activeSection = planningSectionFromPath(location.pathname) ?? "tenders";
   const [selectedEntityId, setSelectedEntityId] = useState("");
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
@@ -142,6 +148,8 @@ export function PlanningWorkspace() {
   const [cpcInvolved, setCpcInvolved] = useState(false);
   const [createPlanModal, setCreatePlanModal] = useState<"tender" | null>(null);
   const [editingTenderPlan, setEditingTenderPlan] =
+    useState<TenderPlanCase | null>(null);
+  const [deletingTenderPlan, setDeletingTenderPlan] =
     useState<TenderPlanCase | null>(null);
   const [creatingCaseFromPlan, setCreatingCaseFromPlan] =
     useState<CreatingCaseFromPlan | null>(null);
@@ -165,7 +173,7 @@ export function PlanningWorkspace() {
   }, [location.pathname]);
 
   const entities = useQuery({
-    enabled: canEditPlanning,
+    enabled: canCreateTenderPlan,
     queryFn: listEntities,
     queryKey: ["entities"],
   });
@@ -175,12 +183,12 @@ export function PlanningWorkspace() {
   );
   const entityId = selectedEntityId || activeEntities[0]?.id || "";
   const formDepartments = useQuery({
-    enabled: canEditPlanning && Boolean(entityId),
+    enabled: canCreateTenderPlan && Boolean(entityId),
     queryFn: () => listAdminDepartments(entityId),
     queryKey: ["planning-form-departments", entityId],
   });
   const catalog = useQuery({
-    enabled: canEditPlanning,
+    enabled: canCreateTenderPlan,
     queryFn: getCatalogSnapshot,
     queryKey: ["catalog-snapshot"],
   });
@@ -229,7 +237,7 @@ export function PlanningWorkspace() {
       setPlannedDate("");
       setCpcInvolved(false);
       setCreatePlanModal(null);
-      await queryClient.invalidateQueries({ queryKey: ["tender-plans"] });
+      void queryClient.invalidateQueries({ queryKey: ["tender-plans"] });
       notify({ message: "Tender plan added.", tone: "success" });
     },
   });
@@ -254,6 +262,15 @@ export function PlanningWorkspace() {
     mutationFn: archiveTenderPlan,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["tender-plans"] });
+    },
+  });
+
+  const deleteTenderMutation = useMutation({
+    mutationFn: archiveTenderPlan,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["tender-plans"] });
+      setDeletingTenderPlan(null);
+      notify({ message: "Tender plan deleted.", tone: "success" });
     },
   });
 
@@ -282,6 +299,14 @@ export function PlanningWorkspace() {
                   >
                     <Pencil size={16} />
                     Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    onClick={() => setDeletingTenderPlan(row)}
+                  >
+                    <Trash2 size={16} />
+                    Delete
                   </Button>
                 </div>
               ),
@@ -401,7 +426,7 @@ export function PlanningWorkspace() {
         />
       </section>
 
-      {canEditPlanning && entities.isLoading ? (
+      {canCreateTenderPlan && entities.isLoading ? (
         <section className="state-panel">
           <div style={{ display: "grid", gap: "var(--space-3)" }}>
             {[1, 2, 3, 4].map((i) => (
@@ -420,7 +445,7 @@ export function PlanningWorkspace() {
             ))}
           </div>
         </section>
-      ) : canEditPlanning && entities.error ? (
+      ) : canCreateTenderPlan && entities.error ? (
         <ErrorState
           message={entities.error.message}
           title="Could not load entities"
@@ -435,7 +460,7 @@ export function PlanningWorkspace() {
                   <h2>Upcoming Tender Plans</h2>
                 </div>
                 <div className="planning-expiry-actions">
-                  {canEditPlanning ? (
+                  {canCreateTenderPlan ? (
                     <Button
                       disabled={!entityId}
                       size="sm"
@@ -551,7 +576,7 @@ export function PlanningWorkspace() {
             />
           </FormField>
           <div className="two-column">
-            <FormField label="Value">
+            <FormField label="Value (Rs.) [All Inclusive]">
               <TextInput
                 min="0"
                 onChange={(event) => setTenderValue(event.target.value)}
@@ -616,7 +641,7 @@ export function PlanningWorkspace() {
             />
           </FormField>
           <div className="two-column">
-            <FormField label="Value">
+            <FormField label="Value (Rs.) [All Inclusive]">
               <TextInput
                 min="0"
                 onChange={(event) => setEditTenderValue(event.target.value)}
@@ -680,6 +705,29 @@ export function PlanningWorkspace() {
           />
         ) : null}
       </Modal>
+
+      <ConfirmationDialog
+        confirmLabel="Delete Tender Plan"
+        description={
+          deletingTenderPlan
+            ? `Delete tender plan "${deletingTenderPlan.tenderDescription ?? deletingTenderPlan.id}"? This removes it from the planning pipeline.`
+            : "Delete this tender plan?"
+        }
+        isOpen={Boolean(deletingTenderPlan)}
+        isPending={deleteTenderMutation.isPending}
+        onCancel={() => setDeletingTenderPlan(null)}
+        onConfirm={() => {
+          if (deletingTenderPlan) {
+            deleteTenderMutation.mutate(deletingTenderPlan.id);
+          }
+        }}
+        title="Delete Tender Plan"
+        tone="danger"
+      >
+        {deleteTenderMutation.error ? (
+          <p className="inline-error">{deleteTenderMutation.error.message}</p>
+        ) : null}
+      </ConfirmationDialog>
     </section>
   );
 }

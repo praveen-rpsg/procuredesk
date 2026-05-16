@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, CheckCircle2, ChevronDown, ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Building2, CheckCircle2, ChevronDown, ChevronRight, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import {
@@ -26,6 +26,7 @@ import { Modal } from "../../../shared/ui/modal/Modal";
 import { PageHeader } from "../../../shared/ui/page-header/PageHeader";
 import { Skeleton } from "../../../shared/ui/skeleton/Skeleton";
 import { StatusBadge } from "../../../shared/ui/status/StatusBadge";
+import { formatTableRowSummary } from "../../../shared/ui/table/tableControls";
 import { useToast } from "../../../shared/ui/toast/ToastProvider";
 
 type EntitiesAdminPageProps = {
@@ -48,6 +49,8 @@ export function EntitiesAdminPage({ focusEntityId = "" }: EntitiesAdminPageProps
   const [departmentToEdit, setDepartmentToEdit] = useState<AdminDepartment | null>(null);
   const [newEntity, setNewEntity] = useState({ code: "", departmentsText: "", name: "" });
   const [newDepartmentName, setNewDepartmentName] = useState("");
+  const [departmentSearch, setDepartmentSearch] = useState("");
+  const [entitySearch, setEntitySearch] = useState("");
   const [expandedEntityId, setExpandedEntityId] = useState("");
   const [selectedEntityId, setSelectedEntityId] = useState("");
   const [editDepartment, setEditDepartment] = useState({ isActive: true, name: "" });
@@ -58,6 +61,10 @@ export function EntitiesAdminPage({ focusEntityId = "" }: EntitiesAdminPageProps
       setExpandedEntityId(focusEntityId);
     }
   }, [focusEntityId]);
+
+  useEffect(() => {
+    setDepartmentSearch("");
+  }, [expandedEntityId]);
 
   const expandedDepartments = useQuery({
     enabled: Boolean(expandedEntityId),
@@ -79,6 +86,18 @@ export function EntitiesAdminPage({ focusEntityId = "" }: EntitiesAdminPageProps
       tenders: rows.reduce((total, entity) => total + entity.tenderCount, 0),
     };
   }, [entities.data]);
+  const filteredEntities = useMemo(() => {
+    const rows = entities.data ?? [];
+    const query = normalizeSearch(entitySearch);
+    if (!query) return rows;
+    return rows.filter((entity) => matchesEntitySearch(entity, query));
+  }, [entities.data, entitySearch]);
+  const filteredExpandedDepartments = useMemo(() => {
+    const rows = expandedDepartments.data ?? [];
+    const query = normalizeSearch(departmentSearch);
+    if (!query) return rows;
+    return rows.filter((department) => matchesDepartmentSearch(department, query));
+  }, [departmentSearch, expandedDepartments.data]);
 
   useEffect(() => {
     if (selectedEntity) {
@@ -273,168 +292,216 @@ export function EntitiesAdminPage({ focusEntityId = "" }: EntitiesAdminPageProps
           ) : entities.error ? (
             <p className="inline-error">{entities.error.message}</p>
           ) : (entities.data ?? []).length > 0 ? (
-            <div aria-label="Entities and departments" className="table-shell entity-tree-table" role="region" tabIndex={0}>
-              <table>
-                <thead>
-                  <tr>
-                    <th aria-label="Expand departments" />
-                    <th scope="col">Code</th>
-                    <th scope="col">Entity / Department</th>
-                    <th scope="col">Status</th>
-                    <th scope="col">Tenders</th>
-                    <th scope="col">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(entities.data ?? []).map((entity) => {
-                    const isExpanded = expandedEntityId === entity.id;
-                    return (
-                      <Fragment key={entity.id}>
-                        <tr className={isExpanded ? "entity-tree-row entity-tree-row-expanded" : "entity-tree-row"}>
-                          <td className="entity-tree-toggle-cell">
-                            <IconButton
-                              aria-label={`${isExpanded ? "Collapse" : "Expand"} departments for ${entity.name}`}
-                              onClick={() => setExpandedEntityId((currentId) => (currentId === entity.id ? "" : entity.id))}
-                              tooltip={isExpanded ? "Collapse departments" : "Show departments"}
-                            >
-                              {isExpanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
-                            </IconButton>
-                          </td>
-                          <td className="col-mono">{entity.code}</td>
-                          <td>
-                            <div className="entity-tree-title">
-                              <strong>{entity.name}</strong>
-                              <span>{formatDepartmentSummary(entity.departments, entity.departmentCount)}</span>
-                            </div>
-                          </td>
-                          <td>
-                            <StatusBadge tone={entity.isActive ? "success" : "neutral"}>
-                              {entity.isActive ? "Active" : "Inactive"}
-                            </StatusBadge>
-                          </td>
-                          <td>{entity.tenderCount}</td>
-                          <td>
-                            <div className="row-actions">
-                              {canManage ? (
+            <>
+              <div className="table-toolbar">
+                <span className="table-result-summary" aria-live="polite">
+                  {formatTableRowSummary(filteredEntities.length, (entities.data ?? []).length, "Entities")}
+                </span>
+                <label className="table-search-control">
+                  <Search aria-hidden="true" size={15} />
+                  <input
+                    aria-label="Search entities and departments"
+                    onChange={(event) => setEntitySearch(event.target.value)}
+                    placeholder="Search entities, departments"
+                    type="search"
+                    value={entitySearch}
+                  />
+                </label>
+              </div>
+              {filteredEntities.length > 0 ? (
+                <div aria-label="Entities and departments" className="table-shell entity-tree-table" role="region" tabIndex={0}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th aria-label="Expand departments" />
+                        <th scope="col">Code</th>
+                        <th scope="col">Entity / Department</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Tenders</th>
+                        <th scope="col">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredEntities.map((entity) => {
+                        const isExpanded = expandedEntityId === entity.id;
+                        return (
+                          <Fragment key={entity.id}>
+                            <tr className={isExpanded ? "entity-tree-row entity-tree-row-expanded" : "entity-tree-row"}>
+                              <td className="entity-tree-toggle-cell">
                                 <IconButton
-                                  aria-label={`Add department under ${entity.name}`}
-                                  onClick={() => openCreateDepartment(entity)}
-                                  tooltip="Add department"
+                                  aria-label={`${isExpanded ? "Collapse" : "Expand"} departments for ${entity.name}`}
+                                  onClick={() => setExpandedEntityId((currentId) => (currentId === entity.id ? "" : entity.id))}
+                                  tooltip={isExpanded ? "Collapse departments" : "Show departments"}
                                 >
-                                  <Plus size={17} />
+                                  {isExpanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
                                 </IconButton>
-                              ) : null}
-                              {canManage ? (
-                                <>
-                                  <IconButton aria-label={`Edit ${entity.name}`} onClick={() => openEdit(entity)} tooltip="Edit entity">
-                                    <Pencil size={17} />
-                                  </IconButton>
-                                  <IconButton
-                                    aria-label={`Delete ${entity.name}`}
-                                    disabled={entity.tenderCount > 0}
-                                    onClick={() => setEntityToDelete(entity)}
-                                    tooltip={entity.tenderCount > 0 ? "Entity has tenders and cannot be deleted" : "Delete entity"}
-                                    variant="danger"
-                                  >
-                                    <Trash2 size={17} />
-                                  </IconButton>
-                                </>
-                              ) : (
-                                "-"
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                        {isExpanded ? (
-                          <tr className="entity-departments-row">
-                            <td colSpan={6}>
-                              <div className="entity-departments-panel">
-                                <div className="entity-departments-panel-header">
-                                  <div>
-                                    <strong>Departments for {entity.name}</strong>
-                                    <span>{entity.departmentCount} active departments</span>
-                                  </div>
-                                  {canManage ? (
-                                    <Button variant="secondary" onClick={() => openCreateDepartment(entity)} type="button">
-                                      <Plus size={16} />
-                                      New Department
-                                    </Button>
-                                  ) : null}
+                              </td>
+                              <td className="col-mono">{entity.code}</td>
+                              <td>
+                                <div className="entity-tree-title">
+                                  <strong>{entity.name}</strong>
+                                  <span>{formatDepartmentSummary(entity.departments, entity.departmentCount)}</span>
                                 </div>
-                                {expandedDepartments.isLoading ? (
-                                  <Skeleton height={16} />
-                                ) : expandedDepartments.error ? (
-                                  <p className="inline-error">{expandedDepartments.error.message}</p>
-                                ) : (expandedDepartments.data ?? []).length > 0 ? (
-                                  <table className="entity-departments-table">
-                                    <thead>
-                                      <tr>
-                                        <th scope="col">Department</th>
-                                        <th scope="col">Status</th>
-                                        <th scope="col">Tenders</th>
-                                        <th scope="col">Actions</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {(expandedDepartments.data ?? []).map((department) => (
-                                        <tr key={department.id}>
-                                          <td>
-                                            <div className="entity-tree-title">
-                                              <strong>{department.name}</strong>
-                                              <span>{entity.code}</span>
-                                            </div>
-                                          </td>
-                                          <td>
-                                            <StatusBadge tone={department.isActive ? "success" : "neutral"}>
-                                              {department.isActive ? "Active" : "Inactive"}
-                                            </StatusBadge>
-                                          </td>
-                                          <td>{department.tenderCount}</td>
-                                          <td>
-                                            {canManage ? (
-                                              <div className="row-actions">
-                                                <IconButton
-                                                  aria-label={`Edit ${department.name}`}
-                                                  onClick={() => openDepartmentEdit(department)}
-                                                  tooltip="Edit department"
-                                                >
-                                                  <Pencil size={17} />
-                                                </IconButton>
-                                                <IconButton
-                                                  aria-label={`Delete ${department.name}`}
-                                                  disabled={department.tenderCount > 0}
-                                                  onClick={() => setDepartmentToDelete(department)}
-                                                  tooltip={
-                                                    department.tenderCount > 0
-                                                      ? "Department has tenders and cannot be deleted"
-                                                      : "Delete department"
-                                                  }
-                                                  variant="danger"
-                                                >
-                                                  <Trash2 size={17} />
-                                                </IconButton>
-                                              </div>
-                                            ) : (
-                                              "-"
+                              </td>
+                              <td>
+                                <StatusBadge tone={entity.isActive ? "success" : "neutral"}>
+                                  {entity.isActive ? "Active" : "Inactive"}
+                                </StatusBadge>
+                              </td>
+                              <td>{entity.tenderCount}</td>
+                              <td>
+                                <div className="row-actions">
+                                  {canManage ? (
+                                    <IconButton
+                                      aria-label={`Add department under ${entity.name}`}
+                                      onClick={() => openCreateDepartment(entity)}
+                                      tooltip="Add department"
+                                    >
+                                      <Plus size={17} />
+                                    </IconButton>
+                                  ) : null}
+                                  {canManage ? (
+                                    <>
+                                      <IconButton aria-label={`Edit ${entity.name}`} onClick={() => openEdit(entity)} tooltip="Edit entity">
+                                        <Pencil size={17} />
+                                      </IconButton>
+                                      <IconButton
+                                        aria-label={`Delete ${entity.name}`}
+                                        disabled={entity.tenderCount > 0}
+                                        onClick={() => setEntityToDelete(entity)}
+                                        tooltip={entity.tenderCount > 0 ? "Entity has tenders and cannot be deleted" : "Delete entity"}
+                                        variant="danger"
+                                      >
+                                        <Trash2 size={17} />
+                                      </IconButton>
+                                    </>
+                                  ) : (
+                                    "-"
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                            {isExpanded ? (
+                              <tr className="entity-departments-row">
+                                <td colSpan={6}>
+                                  <div className="entity-departments-panel">
+                                    <div className="entity-departments-panel-header">
+                                      <div>
+                                        <strong>Departments for {entity.name}</strong>
+                                        <span>{entity.departmentCount} active departments</span>
+                                      </div>
+                                      {canManage ? (
+                                        <Button variant="secondary" onClick={() => openCreateDepartment(entity)} type="button">
+                                          <Plus size={16} />
+                                          New Department
+                                        </Button>
+                                      ) : null}
+                                    </div>
+                                    {expandedDepartments.isLoading ? (
+                                      <Skeleton height={16} />
+                                    ) : expandedDepartments.error ? (
+                                      <p className="inline-error">{expandedDepartments.error.message}</p>
+                                    ) : (expandedDepartments.data ?? []).length > 0 ? (
+                                      <>
+                                        <div className="table-toolbar">
+                                          <span className="table-result-summary" aria-live="polite">
+                                            {formatTableRowSummary(
+                                              filteredExpandedDepartments.length,
+                                              (expandedDepartments.data ?? []).length,
+                                              "Departments",
                                             )}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                ) : (
-                                  <p className="entity-departments-empty">No departments under this entity yet.</p>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        ) : null}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                                          </span>
+                                          <label className="table-search-control">
+                                            <Search aria-hidden="true" size={15} />
+                                            <input
+                                              aria-label={`Search departments for ${entity.name}`}
+                                              onChange={(event) => setDepartmentSearch(event.target.value)}
+                                              placeholder="Search departments"
+                                              type="search"
+                                              value={departmentSearch}
+                                            />
+                                          </label>
+                                        </div>
+                                        {filteredExpandedDepartments.length > 0 ? (
+                                          <table className="entity-departments-table">
+                                            <thead>
+                                              <tr>
+                                                <th scope="col">Department</th>
+                                                <th scope="col">Status</th>
+                                                <th scope="col">Tenders</th>
+                                                <th scope="col">Actions</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {filteredExpandedDepartments.map((department) => (
+                                                <tr key={department.id}>
+                                                  <td>
+                                                    <div className="entity-tree-title">
+                                                      <strong>{department.name}</strong>
+                                                      <span>{entity.code}</span>
+                                                    </div>
+                                                  </td>
+                                                  <td>
+                                                    <StatusBadge tone={department.isActive ? "success" : "neutral"}>
+                                                      {department.isActive ? "Active" : "Inactive"}
+                                                    </StatusBadge>
+                                                  </td>
+                                                  <td>{department.tenderCount}</td>
+                                                  <td>
+                                                    {canManage ? (
+                                                      <div className="row-actions">
+                                                        <IconButton
+                                                          aria-label={`Edit ${department.name}`}
+                                                          onClick={() => openDepartmentEdit(department)}
+                                                          tooltip="Edit department"
+                                                        >
+                                                          <Pencil size={17} />
+                                                        </IconButton>
+                                                        <IconButton
+                                                          aria-label={`Delete ${department.name}`}
+                                                          disabled={department.tenderCount > 0}
+                                                          onClick={() => setDepartmentToDelete(department)}
+                                                          tooltip={
+                                                            department.tenderCount > 0
+                                                              ? "Department has tenders and cannot be deleted"
+                                                              : "Delete department"
+                                                          }
+                                                          variant="danger"
+                                                        >
+                                                          <Trash2 size={17} />
+                                                        </IconButton>
+                                                      </div>
+                                                    ) : (
+                                                      "-"
+                                                    )}
+                                                  </td>
+                                                </tr>
+                                              ))}
+                                            </tbody>
+                                          </table>
+                                        ) : (
+                                          <p className="entity-departments-empty">No departments match the current search.</p>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <p className="entity-departments-empty">No departments under this entity yet.</p>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ) : null}
+                          </Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <EmptyState title="No entities match the current search">
+                  <Building2 size={18} />
+                </EmptyState>
+              )}
+            </>
           ) : (
             <EmptyState title="No entities yet">
               <Building2 size={18} />
@@ -724,6 +791,29 @@ function parseDepartmentLines(value: string): string[] {
 
 function addDepartmentToDraft(currentValue: string, department: string) {
   return parseDepartmentLines(`${currentValue}\n${department}`).join("\n");
+}
+
+function normalizeSearch(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function matchesEntitySearch(entity: AdminEntity, query: string): boolean {
+  return [
+    entity.code,
+    entity.name,
+    entity.isActive ? "active" : "inactive",
+    String(entity.tenderCount),
+    String(entity.departmentCount),
+    ...entity.departments,
+  ].some((value) => value.toLowerCase().includes(query));
+}
+
+function matchesDepartmentSearch(department: AdminDepartment, query: string): boolean {
+  return [
+    department.name,
+    department.isActive ? "active" : "inactive",
+    String(department.tenderCount),
+  ].some((value) => value.toLowerCase().includes(query));
 }
 
 function OrgSummaryCard({

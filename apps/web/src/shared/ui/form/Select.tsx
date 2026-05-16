@@ -1,5 +1,7 @@
 import type { SelectHTMLAttributes } from "react";
 
+import { useFormFieldContext } from "./FormField";
+
 export type SelectOption = {
   disabled?: boolean;
   label: string;
@@ -11,9 +13,16 @@ type SelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, "children"> & {
   placeholder?: string;
 };
 
-export function Select({ className = "", options, placeholder, ...props }: SelectProps) {
+export function Select({ className = "", id, "aria-describedby": ariaDescribedBy, "aria-invalid": ariaInvalid, options, placeholder, ...props }: SelectProps) {
+  const ctx = useFormFieldContext();
   return (
-    <select className={`text-input ${className}`.trim()} {...props}>
+    <select
+      aria-describedby={ariaDescribedBy ?? ctx?.describedBy}
+      aria-invalid={ariaInvalid ?? (ctx?.hasError ? "true" : undefined)}
+      className={`text-input ${className}`.trim()}
+      id={id ?? ctx?.inputId}
+      {...props}
+    >
       {placeholder ? <option value="">{placeholder}</option> : null}
       {options.map((option) => (
         <option disabled={option.disabled ?? false} key={option.value} value={option.value}>
