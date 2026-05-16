@@ -96,7 +96,17 @@ async function upsertCaseFact(tenantId: string, caseId: string, pool: Pool): Pro
           else null
         end,
         case
-          when c.pr_receipt_date is not null then current_date - c.pr_receipt_date
+          when c.status <> 'running' then null
+          when c.stage_code = 0 and c.pr_receipt_date is not null then current_date - c.pr_receipt_date
+          when c.stage_code = 1 and m.nit_initiation_date is not null then current_date - m.nit_initiation_date
+          when c.stage_code = 2 and m.nit_approval_date is not null then current_date - m.nit_approval_date
+          when c.stage_code = 3 and m.nit_publish_date is not null then current_date - m.nit_publish_date
+          when c.stage_code = 4 and m.bid_receipt_date is not null then current_date - m.bid_receipt_date
+          when c.stage_code = 5 and coalesce(greatest(m.commercial_evaluation_date, m.technical_evaluation_date), m.commercial_evaluation_date, m.technical_evaluation_date) is not null
+            then current_date - coalesce(greatest(m.commercial_evaluation_date, m.technical_evaluation_date), m.commercial_evaluation_date, m.technical_evaluation_date)
+          when c.stage_code = 6 and m.nfa_submission_date is not null then current_date - m.nfa_submission_date
+          when c.stage_code = 7 and m.nfa_approval_date is not null then current_date - m.nfa_approval_date
+          when c.stage_code = 8 and m.rc_po_award_date is not null then current_date - m.rc_po_award_date
           else null
         end,
         f.pr_value,
