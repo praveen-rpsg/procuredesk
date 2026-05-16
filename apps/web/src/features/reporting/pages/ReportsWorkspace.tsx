@@ -2747,6 +2747,7 @@ function ReportDepartmentNatureStackedBar({
                   const value = segment?.value ?? 0;
                   return value > 0 ? (
                     <button
+                      aria-label={`${row.departmentName} ${label}: ${value} case${value === 1 ? "" : "s"}`}
                       key={label}
                       onClick={(event) => {
                         event.stopPropagation();
@@ -2764,7 +2765,9 @@ function ReportDepartmentNatureStackedBar({
                           : undefined
                       }
                       type="button"
-                    />
+                    >
+                      <span>{value}</span>
+                    </button>
                   ) : null;
                 })}
               </div>

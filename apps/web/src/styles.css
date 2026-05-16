@@ -6182,11 +6182,25 @@ textarea:focus:not(:focus-visible) {
 }
 
 .report-department-nature-stack button {
+  align-items: center;
   appearance: none;
   border: 0;
+  color: #ffffff;
   cursor: pointer;
+  display: inline-flex;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  justify-content: center;
   min-width: 3px;
+  overflow: hidden;
   padding: 0;
+  text-shadow: 0 1px 1px rgba(15, 23, 42, 0.38);
+}
+
+.report-department-nature-stack button span {
+  overflow: hidden;
+  text-overflow: clip;
 }
 
 .report-department-nature-total {
