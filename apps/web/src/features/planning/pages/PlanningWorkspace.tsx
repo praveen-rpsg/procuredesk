@@ -551,7 +551,7 @@ export function PlanningWorkspace() {
             />
           </FormField>
           <div className="two-column">
-            <FormField label="Value">
+            <FormField label="Value (Rs.) [All Inclusive]">
               <TextInput
                 min="0"
                 onChange={(event) => setTenderValue(event.target.value)}
@@ -616,7 +616,7 @@ export function PlanningWorkspace() {
             />
           </FormField>
           <div className="two-column">
-            <FormField label="Value">
+            <FormField label="Value (Rs.) [All Inclusive]">
               <TextInput
                 min="0"
                 onChange={(event) => setEditTenderValue(event.target.value)}
