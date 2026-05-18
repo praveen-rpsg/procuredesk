@@ -397,7 +397,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   });
   const completionRate = percentage(metrics.completed, metrics.total);
   const runningRate = percentage(metrics.running, metrics.total);
-  const riskCount = metrics.risk;
+  const riskCount = metrics.delayed + metrics.offTrack;
   const riskRate = percentage(riskCount, metrics.running);
   const focusedCaseRows = focusedCases.data ?? [];
   const caseColumns: DataTableColumn<CaseListItem>[] = [
