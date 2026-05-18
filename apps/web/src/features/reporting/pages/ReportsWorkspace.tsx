@@ -456,7 +456,10 @@ export function ReportsWorkspace() {
   ]);
 
   const includeCompletionFilters =
-    reportCode !== "running" && reportCode !== "rc_po_expiry";
+    reportCode !== "running" &&
+    reportCode !== "rc_po_expiry" &&
+    reportCode !== "technical_evaluation_pendency" &&
+    reportCode !== "technical_evaluation_time";
   const includeTrackStatusFilter =
     reportCode !== "completed" &&
     reportCode !== "rc_po_expiry" &&
@@ -492,10 +495,16 @@ export function ReportsWorkspace() {
   const caseRowsForColumnFilters = useMemo(() => {
     if (reportCode === "running") return data.running.data ?? [];
     if (reportCode === "completed") return data.completed.data ?? [];
+    if (reportCode === "technical_evaluation_pendency")
+      return data.technicalEvaluationPendency.data ?? [];
+    if (reportCode === "technical_evaluation_time")
+      return data.technicalEvaluationTime.data ?? [];
     return data.tenderDetails.data ?? [];
   }, [
     data.completed.data,
     data.running.data,
+    data.technicalEvaluationPendency.data,
+    data.technicalEvaluationTime.data,
     data.tenderDetails.data,
     reportCode,
   ]);
@@ -528,6 +537,14 @@ export function ReportsWorkspace() {
         caseRowsForColumnFilters,
         (row) => row.ownerFullName ?? "-",
       ),
+      natureOfWork: uniqueReportFilterOptions(
+        caseRowsForColumnFilters,
+        (row) => row.natureOfWorkName ?? "-",
+      ),
+      priority: [
+        { label: "Priority", value: "Priority" },
+        { label: "Normal", value: "Normal" },
+      ],
       stage: uniqueReportFilterOptions(caseRowsForColumnFilters, (row) =>
         formatCaseStage(row.stageCode),
       ),
@@ -937,28 +954,11 @@ export function ReportsWorkspace() {
   const technicalPendencyColumns = useMemo<VirtualTableColumn<ReportCaseRow>[]>(
     () => [
       {
-        key: "tenderNo",
-        header: "Tender No.",
-        render: (row) => row.tenderNo ?? row.prId,
-      },
-      {
-        key: "tenderName",
-        header: "Tender Name",
-        render: (row) => row.tenderName ?? row.prDescription ?? "-",
-      },
-      {
         key: "entity",
         filterOptions: caseColumnFilterOptions.entity,
         filterValue: (row) => row.entityCode ?? row.entityName ?? row.entityId,
         header: "Entity",
         render: (row) => row.entityCode ?? row.entityName ?? row.entityId,
-      },
-      {
-        key: "department",
-        filterOptions: caseColumnFilterOptions.department,
-        filterValue: (row) => row.departmentName ?? "-",
-        header: "User Department",
-        render: (row) => row.departmentName ?? "-",
       },
       {
         key: "owner",
@@ -968,67 +968,98 @@ export function ReportsWorkspace() {
         render: (row) => row.ownerFullName ?? "-",
       },
       {
-        key: "stage",
-        header: "Tender Stage",
-        render: (row) => formatCaseStage(row.stageCode),
+        key: "department",
+        filterOptions: caseColumnFilterOptions.department,
+        filterValue: (row) => row.departmentName ?? "-",
+        header: "User Department",
+        render: (row) => row.departmentName ?? "-",
       },
       {
-        key: "bidReceiptDate",
-        header: "Bid Receipt Date",
-        render: (row) => formatDateCell(row.bidReceiptDate),
+        key: "prNumber",
+        header: "PR number",
+        render: (row) => row.prId,
       },
       {
-        key: "technicalEvaluationDate",
-        header: "Technical Evaluation Date",
-        render: (row) => formatDateCell(row.technicalEvaluationDate),
+        key: "tenderNumber",
+        header: "Tender number",
+        render: (row) => row.tenderNo ?? "-",
       },
       {
-        key: "currentStageAging",
-        header: "Current Stage Aging",
-        render: (row) => formatNullableDays(row.currentStageAgingDays),
+        key: "tenderDescription",
+        header: "Tender Description",
+        render: (row) => row.prDescription ?? row.tenderName ?? "-",
+      },
+      {
+        key: "tenderType",
+        filterOptions: caseColumnFilterOptions.tenderType,
+        filterValue: (row) => row.tenderTypeName ?? "-",
+        header: "Tender Type",
+        render: (row) => row.tenderTypeName ?? "-",
+      },
+      {
+        key: "natureOfWork",
+        filterOptions: caseColumnFilterOptions.natureOfWork,
+        filterValue: (row) => row.natureOfWorkName ?? "-",
+        header: "Nature of Work",
+        render: (row) => row.natureOfWorkName ?? "-",
+      },
+      {
+        key: "priority",
+        filterOptions: caseColumnFilterOptions.priority,
+        filterValue: (row) => (row.priorityCase ? "Priority" : "Normal"),
+        header: "Priority",
+        render: (row) =>
+          row.priorityCase ? (
+            <StatusBadge tone="warning">Priority</StatusBadge>
+          ) : (
+            "-"
+          ),
+      },
+      {
+        key: "prValue",
+        header: "PR Value/Approved Budget (Rs.) [All Inclusive]",
+        render: (row) => formatAmount(row.prValue, "rupees"),
+        sortValue: (row) => row.prValue ?? "",
+      },
+      {
+        key: "prReceiptDate",
+        header: "PR Receipt Date",
+        render: (row) => formatDateCell(row.prReceiptDate),
+      },
+      {
+        key: "participatedBidderCount",
+        header: "Participated Bidder Count",
+        render: (row) => row.biddersParticipated ?? "-",
+        sortValue: (row) => row.biddersParticipated ?? "",
       },
       {
         key: "runningAge",
-        header: "Running Tender Age",
+        header: "Running Tender Age (Days)",
         render: (row) => formatNullableDays(row.runningAgeDays),
+        sortValue: (row) => row.runningAgeDays ?? "",
       },
-      ...(canViewDelay
-        ? [
-            {
-              key: "delayReason",
-              header: "Reasons for Delay",
-              render: (row) => row.delayReason ?? "-",
-            } satisfies VirtualTableColumn<ReportCaseRow>,
-          ]
-        : []),
+      {
+        key: "technicalEvaluationPendency",
+        header: "Technical Evaluation Pendency (days)",
+        render: (row) => formatNullableDays(row.currentStageAgingDays),
+        sortValue: (row) => row.currentStageAgingDays ?? "",
+      },
+      {
+        key: "commercialEvaluationDate",
+        header: "Commercial Evaluation Date",
+        render: (row) => formatDateCell(row.commercialEvaluationDate),
+      },
     ],
-    [canViewDelay, caseColumnFilterOptions],
+    [caseColumnFilterOptions],
   );
   const technicalTimeColumns = useMemo<VirtualTableColumn<ReportCaseRow>[]>(
     () => [
       {
-        key: "tenderNo",
-        header: "Tender No.",
-        render: (row) => row.tenderNo ?? row.prId,
-      },
-      {
-        key: "tenderName",
-        header: "Tender Name",
-        render: (row) => row.tenderName ?? row.prDescription ?? "-",
-      },
-      {
         key: "entity",
         filterOptions: caseColumnFilterOptions.entity,
         filterValue: (row) => row.entityCode ?? row.entityName ?? row.entityId,
         header: "Entity",
         render: (row) => row.entityCode ?? row.entityName ?? row.entityId,
-      },
-      {
-        key: "department",
-        filterOptions: caseColumnFilterOptions.department,
-        filterValue: (row) => row.departmentName ?? "-",
-        header: "User Department",
-        render: (row) => row.departmentName ?? "-",
       },
       {
         key: "owner",
@@ -1038,24 +1069,92 @@ export function ReportsWorkspace() {
         render: (row) => row.ownerFullName ?? "-",
       },
       {
-        key: "bidReceiptDate",
-        header: "Bid Receipt Date",
-        render: (row) => formatDateCell(row.bidReceiptDate),
+        key: "department",
+        filterOptions: caseColumnFilterOptions.department,
+        filterValue: (row) => row.departmentName ?? "-",
+        header: "User Department",
+        render: (row) => row.departmentName ?? "-",
       },
       {
-        key: "technicalEvaluationDate",
-        header: "Technical Evaluation Date",
-        render: (row) => formatDateCell(row.technicalEvaluationDate),
+        key: "prNumber",
+        header: "PR number",
+        render: (row) => row.prId,
       },
       {
-        key: "technicalEvaluationTime",
-        header: "Technical Evaluation Time",
+        key: "tenderNumber",
+        header: "Tender number",
+        render: (row) => row.tenderNo ?? "-",
+      },
+      {
+        key: "tenderDescription",
+        header: "Tender Description",
+        render: (row) => row.prDescription ?? row.tenderName ?? "-",
+      },
+      {
+        key: "tenderType",
+        filterOptions: caseColumnFilterOptions.tenderType,
+        filterValue: (row) => row.tenderTypeName ?? "-",
+        header: "Tender Type",
+        render: (row) => row.tenderTypeName ?? "-",
+      },
+      {
+        key: "natureOfWork",
+        filterOptions: caseColumnFilterOptions.natureOfWork,
+        filterValue: (row) => row.natureOfWorkName ?? "-",
+        header: "Nature of Work",
+        render: (row) => row.natureOfWorkName ?? "-",
+      },
+      {
+        key: "priority",
+        filterOptions: caseColumnFilterOptions.priority,
+        filterValue: (row) => (row.priorityCase ? "Priority" : "Normal"),
+        header: "Priority",
+        render: (row) =>
+          row.priorityCase ? (
+            <StatusBadge tone="warning">Priority</StatusBadge>
+          ) : (
+            "-"
+          ),
+      },
+      {
+        key: "prValue",
+        header: "PR Value/Approved Budget (Rs.) [All Inclusive]",
+        render: (row) => formatAmount(row.prValue, "rupees"),
+        sortValue: (row) => row.prValue ?? "",
+      },
+      {
+        key: "prReceiptDate",
+        header: "PR Receipt Date",
+        render: (row) => formatDateCell(row.prReceiptDate),
+      },
+      {
+        key: "participatedBidderCount",
+        header: "Participated Bidder Count",
+        render: (row) => row.biddersParticipated ?? "-",
+        sortValue: (row) => row.biddersParticipated ?? "",
+      },
+      {
+        key: "qualifiedBidderCount",
+        header: "Qualified Bidder Count",
+        render: (row) => row.qualifiedBidders ?? "-",
+        sortValue: (row) => row.qualifiedBidders ?? "",
+      },
+      {
+        key: "daysTakenForTechnicalEvaluation",
+        header: "Days taken for Technical Evaluation",
         render: (row) => formatNullableDays(row.technicalEvaluationTimeDays),
+        sortValue: (row) => row.technicalEvaluationTimeDays ?? "",
       },
       {
-        key: "cycle",
-        header: "Cycle Time",
+        key: "commercialEvaluationDate",
+        header: "Commercial Evaluation Date",
+        render: (row) => formatDateCell(row.commercialEvaluationDate),
+      },
+      {
+        key: "completedTenderCycleTime",
+        header: "Completed Tender Cycle Time",
         render: (row) => formatNullableDays(row.completedCycleTimeDays),
+        sortValue: (row) => row.completedCycleTimeDays ?? "",
       },
     ],
     [caseColumnFilterOptions],
@@ -4166,11 +4265,19 @@ function ReportFilterPanel({
   tenderTypeOptions: ReportOption[];
   valueSlabOptions: ReportOption[];
 }) {
-  const showCompletionFilters = reportCode !== "running";
+  const showCompletionFilters =
+    reportCode !== "running" &&
+    reportCode !== "technical_evaluation_pendency" &&
+    reportCode !== "technical_evaluation_time";
+  const isTechnicalEvaluationPendency =
+    reportCode === "technical_evaluation_pendency";
+  const isTechnicalEvaluationTime = reportCode === "technical_evaluation_time";
   const useBusinessFilterSet =
     reportCode === "completed" || reportCode === "vendor_awards";
   const showTrackStatusFilter =
-    reportCode !== "completed" && reportCode !== "vendor_awards";
+    reportCode !== "completed" &&
+    reportCode !== "technical_evaluation_time" &&
+    reportCode !== "vendor_awards";
   if (reportCode === "rc_po_expiry") {
     return (
       <RcPoReportFilterPanel
@@ -4245,7 +4352,9 @@ function ReportFilterPanel({
             options={tenderTypeOptions}
             value={filters.selectedTenderTypeIds}
           />
-          {!useBusinessFilterSet ? (
+          {!useBusinessFilterSet &&
+          !isTechnicalEvaluationPendency &&
+          !isTechnicalEvaluationTime ? (
             <ReportMultiSelectFilter
               disabled={dataIsLoading}
               label="Tender Stage"
@@ -4268,21 +4377,23 @@ function ReportFilterPanel({
             options={prReceiptMonthOptions}
             value={filters.selectedPrReceiptMonths}
           />
-          <FormField label="LOI Awarded?">
-            <Select
-              onChange={(event) =>
-                filters.setLoiAwarded(
-                  event.target.value as "all" | "false" | "true",
-                )
-              }
-              options={[
-                { label: "Yes", value: "true" },
-                { label: "No", value: "false" },
-              ]}
-              placeholder="All"
-              value={filters.loiAwarded === "all" ? "" : filters.loiAwarded}
-            />
-          </FormField>
+          {!isTechnicalEvaluationPendency && !isTechnicalEvaluationTime ? (
+            <FormField label="LOI Awarded?">
+              <Select
+                onChange={(event) =>
+                  filters.setLoiAwarded(
+                    event.target.value as "all" | "false" | "true",
+                  )
+                }
+                options={[
+                  { label: "Yes", value: "true" },
+                  { label: "No", value: "false" },
+                ]}
+                placeholder="All"
+                value={filters.loiAwarded === "all" ? "" : filters.loiAwarded}
+              />
+            </FormField>
+          ) : null}
           <ReportMultiSelectFilter
             disabled={dataIsLoading}
             label="Nature of Work"
@@ -4359,7 +4470,11 @@ function ReportFilterPanel({
               onChange={(event) => filters.setDeletedOnly(event.target.checked)}
               type="checkbox"
             />
-            <span>Show deleted cases only</span>
+            <span>
+              {isTechnicalEvaluationPendency || isTechnicalEvaluationTime
+                ? "Show Deleted Cases"
+                : "Show deleted cases only"}
+            </span>
           </label>
           {useBusinessFilterSet ? (
             <FormField label="Currency Unit">

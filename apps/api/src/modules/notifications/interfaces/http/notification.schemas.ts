@@ -14,10 +14,17 @@ export const NotificationPreviewQuerySchema = z.object({
 export const NotificationRuleTypeSchema = z.enum([
   "delayed_case_alert",
   "entity_monthly_digest",
+  "export_ready",
+  "import_completed",
+  "import_failed",
   "manager_daily_snapshot",
   "off_track_case_alert",
+  "password_changed",
+  "password_reset",
   "rc_po_expiry",
+  "security_alert",
   "stale_tender",
+  "user_welcome",
 ]);
 export const NotificationTypeSchema = z.enum([
   "delayed_case_alert",

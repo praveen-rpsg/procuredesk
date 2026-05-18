@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 
 import { hasExpandedPermission } from "../../../common/auth/permission-utils.js";
 import { DatabaseService } from "../../../database/database.service.js";
@@ -11,6 +12,29 @@ import type { AuthenticatedUser } from "../../identity-access/domain/authenticat
 import { OutboxWriterService } from "../../outbox/application/outbox-writer.service.js";
 import { MicrosoftGraphEmailAdapter } from "../infrastructure/microsoft-graph-email.adapter.js";
 import { NotificationRepository } from "../infrastructure/notification.repository.js";
+import { buildNotificationJobEmail } from "./email-templates.js";
+
+const SYSTEM_ONLY_NOTIFICATION_TYPES = [
+  "password_changed",
+  "password_reset",
+  "user_welcome",
+] as const;
+
+const EMAIL_CAPABILITIES = [
+  { category: "Account", label: "New User Setup", notificationType: "user_welcome" },
+  { category: "Security", label: "Forgot Password", notificationType: "password_reset" },
+  { category: "Security", label: "Password Changed", notificationType: "password_changed" },
+  { category: "Operations", label: "Manager Daily Snapshot", notificationType: "manager_daily_snapshot" },
+  { category: "Operations", label: "Delayed Case Reminder", notificationType: "delayed_case_alert" },
+  { category: "Operations", label: "Off Track Case Reminder", notificationType: "off_track_case_alert" },
+  { category: "Planning", label: "RC/PO Expiry Reminder", notificationType: "rc_po_expiry" },
+  { category: "Operations", label: "Entity Monthly Digest", notificationType: "entity_monthly_digest" },
+  { category: "Operations", label: "No Recent Update Reminder", notificationType: "stale_tender" },
+  { category: "Exports", label: "Export Ready", notificationType: "export_ready" },
+  { category: "Imports", label: "Import Completed", notificationType: "import_completed" },
+  { category: "Imports", label: "Import Failed", notificationType: "import_failed" },
+  { category: "Security", label: "Security Alert", notificationType: "security_alert" },
+] as const;
 
 @Injectable()
 export class NotificationService {
@@ -20,6 +44,7 @@ export class NotificationService {
     private readonly db: DatabaseService,
     private readonly outbox: OutboxWriterService,
     private readonly graph: MicrosoftGraphEmailAdapter,
+    private readonly config: ConfigService,
   ) {}
 
   preview(
@@ -71,12 +96,31 @@ export class NotificationService {
     return this.repository.listRules(tenantId);
   }
 
-  status(actor: AuthenticatedUser) {
-    this.requireTenant(actor);
+  async status(actor: AuthenticatedUser) {
+    const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "notification.manage");
     const graphConfigured = this.graph.isConfigured();
+    const rules = await this.repository.listRules(tenantId);
+    const ruleByType = new Map(rules.map((rule) => [rule.notificationType, rule]));
     return {
       deliveryMode: graphConfigured ? "microsoft_graph" : "stub",
+      emailTypes: EMAIL_CAPABILITIES.map((capability) => {
+        const rule = ruleByType.get(capability.notificationType);
+        const enabledByRule = rule?.isEnabled !== false;
+        return {
+          blockingReason: !graphConfigured
+            ? "Microsoft Graph is not configured."
+            : !enabledByRule
+              ? "Notification rule is disabled."
+              : null,
+          canSend: graphConfigured && enabledByRule,
+          category: capability.category,
+          enabledByRule,
+          label: capability.label,
+          notificationType: capability.notificationType,
+          ruleGated: true,
+        };
+      }),
       graphConfigured,
     };
   }
@@ -87,6 +131,13 @@ export class NotificationService {
       cadence: "daily" | "manual" | "monthly" | "weekly";
       isEnabled: boolean;
       notificationType:
+        | "export_ready"
+        | "import_completed"
+        | "import_failed"
+        | "password_changed"
+        | "password_reset"
+        | "security_alert"
+        | "user_welcome"
         | "delayed_case_alert"
         | "entity_monthly_digest"
         | "manager_daily_snapshot"
@@ -136,13 +187,24 @@ export class NotificationService {
   ) {
     const tenantId = this.requireTenant(actor);
     this.requirePermission(actor, "notification.manage");
+    if (this.isSystemOnly(input.notificationType)) {
+      throw new BadRequestException("This transactional email is sent only by its system workflow.");
+    }
     this.graph.assertConfigured();
+    const enabled = await this.repository.isRuleEnabled(tenantId, input.notificationType);
+    if (!enabled) {
+      throw new BadRequestException("Notification template is disabled. Enable it before sending this email.");
+    }
     return this.db.transaction(async () => {
       const result = await this.repository.createNotificationJob({
         ...input,
-        textBody:
-          input.textBody ??
-          `${input.subject}\n\nNotification type: ${input.notificationType}`,
+        ...buildNotificationJobEmail({
+          actorEmail: actor.email,
+          appUrl: this.config.get<string>("APP_URL", "http://localhost:5175"),
+          notificationType: input.notificationType,
+          subject: input.subject,
+          textBody: input.textBody,
+        }),
         tenantId,
       });
       await this.outbox.write({
@@ -230,5 +292,11 @@ export class NotificationService {
       throw new BadRequestException("Tenant context is required.");
     }
     return actor.tenantId;
+  }
+
+  private isSystemOnly(notificationType: string): boolean {
+    return SYSTEM_ONLY_NOTIFICATION_TYPES.includes(
+      notificationType as (typeof SYSTEM_ONLY_NOTIFICATION_TYPES)[number],
+    );
   }
 }

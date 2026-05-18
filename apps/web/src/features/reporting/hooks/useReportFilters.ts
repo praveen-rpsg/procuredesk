@@ -102,6 +102,10 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
     reportCode !== "completed" &&
     reportCode !== "technical_evaluation_time" &&
     reportCode !== "vendor_awards";
+  const includePriorityFilter =
+    includeCaseWorkflowFilters &&
+    reportCode !== "completed" &&
+    reportCode !== "vendor_awards";
   const expiryHorizonDaysParam = isRcPoExpiry
     ? normalizeExpiryHorizonDays(expiryHorizonDays)
     : undefined;
@@ -131,7 +135,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
       natureOfWorkIds: selectedNatureOfWorkIds,
       ownerUserIds: selectedOwnerUserIds,
       prReceiptMonths: includeCaseWorkflowFilters ? selectedPrReceiptMonths : [],
-      priorityCase: includeWorkflowHealthFilters && priorityCase ? true : undefined,
+      priorityCase: includePriorityFilter && priorityCase ? true : undefined,
       budgetTypeIds: selectedBudgetTypeIds,
       stageCodes: includeWorkflowHealthFilters ? selectedStageCodes : [],
       status: statusFilter,
@@ -147,6 +151,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
       includeExpiredContracts,
       includeTenderFloatedOrNotRequired,
       includeCaseWorkflowFilters,
+      includePriorityFilter,
       includeWorkflowHealthFilters,
       isRcPoExpiry,
       loiAwarded,

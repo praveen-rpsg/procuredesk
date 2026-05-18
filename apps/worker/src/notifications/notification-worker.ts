@@ -23,15 +23,26 @@ export async function processNotificationJob(
       notification_type: string;
       html_body: string | null;
       recipient_email: string;
+      rule_enabled: boolean;
       text_body: string | null;
       subject: string;
     }>(
       `
-        select notification_type, recipient_email, subject, text_body, html_body
-        from ops.notification_jobs
-        where tenant_id = $1
-          and id = $2
-          and status in ('queued', 'failed')
+        select
+          j.notification_type,
+          j.recipient_email,
+          j.subject,
+          j.text_body,
+          j.html_body,
+          coalesce(r.is_enabled, true) as rule_enabled
+        from ops.notification_jobs j
+        left join ops.notification_rules r
+          on r.tenant_id = j.tenant_id
+         and r.notification_type = j.notification_type
+         and r.deleted_at is null
+        where j.tenant_id = $1
+          and j.id = $2
+          and j.status in ('queued', 'failed')
         for update
       `,
       [payload.tenantId, payload.notificationJobId],
@@ -39,6 +50,35 @@ export async function processNotificationJob(
     const job = result.rows[0];
     if (!job) {
       await client.query("rollback");
+      return;
+    }
+
+    if (!job.rule_enabled) {
+      await client.query(
+        `
+          update ops.notification_jobs
+          set status = 'cancelled',
+              error_message = 'Notification rule disabled.'
+          where tenant_id = $1
+            and id = $2
+        `,
+        [payload.tenantId, payload.notificationJobId],
+      );
+      await client.query(
+        `
+          insert into ops.audit_events (
+            tenant_id, action, target_type, target_id, summary, details
+          )
+          values ($1, 'notification_job.cancelled', 'notification_job', $2, $3, $4)
+        `,
+        [
+          payload.tenantId,
+          payload.notificationJobId,
+          "Notification email skipped because the rule is disabled",
+          JSON.stringify({ notificationType: job.notification_type }),
+        ],
+      );
+      await client.query("commit");
       return;
     }
 

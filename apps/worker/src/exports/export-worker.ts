@@ -345,6 +345,7 @@ async function queryExportRows(input: {
     "e.name",
     "dep.name",
     "tt.name",
+    "rv_nature.label",
     "owner.full_name",
       ...(input.scope.canViewDelay ? ["d.delay_reason"] : []),
   ]);
@@ -360,9 +361,11 @@ async function queryExportRows(input: {
         coalesce(e.code, e.name) as entity,
         dep.name as department,
         f.pr_value,
+        f.priority_case,
         f.estimate_benchmark,
         f.approved_amount,
         tt.name as tender_type,
+        rv_nature.label as nature_of_work,
         f.status,
         f.stage_code,
         f.desired_stage_code,
@@ -373,10 +376,28 @@ async function queryExportRows(input: {
           else round((coalesce(f.completed_age_days, f.running_age_days)::numeric / greatest((c.tentative_completion_date - f.pr_receipt_date), 1)) * 100)
         end as percent_time_elapsed,
         f.running_age_days,
-        f.current_stage_aging_days,
+        case
+          when f.status <> 'running' then null
+          when f.stage_code >= 8 and m.rc_po_award_date is not null then current_date - m.rc_po_award_date
+          when f.stage_code >= 7 and m.nfa_approval_date is not null then current_date - m.nfa_approval_date
+          when f.stage_code >= 6 and m.nfa_submission_date is not null then current_date - m.nfa_submission_date
+          when f.stage_code >= 5 and m.commercial_evaluation_date is not null and m.technical_evaluation_date is not null
+            then current_date - greatest(m.commercial_evaluation_date, m.technical_evaluation_date)
+          when f.stage_code >= 5 and m.commercial_evaluation_date is not null
+            then current_date - m.commercial_evaluation_date
+          when f.stage_code >= 5 and m.technical_evaluation_date is not null
+            then current_date - m.technical_evaluation_date
+          when f.stage_code >= 4 and m.bid_receipt_date is not null then current_date - m.bid_receipt_date
+          when f.stage_code >= 3 and m.nit_publish_date is not null then current_date - m.nit_publish_date
+          when f.stage_code >= 2 and m.nit_approval_date is not null then current_date - m.nit_approval_date
+          when f.stage_code >= 1 and m.nit_initiation_date is not null then current_date - m.nit_initiation_date
+          when f.pr_receipt_date is not null then current_date - f.pr_receipt_date
+          else null
+        end as current_stage_aging_days,
         f.pr_receipt_date,
         m.bid_receipt_date,
         m.technical_evaluation_date,
+        m.commercial_evaluation_date,
         case
           when m.technical_evaluation_date is null or m.bid_receipt_date is null then null
           else m.technical_evaluation_date - m.bid_receipt_date
@@ -401,6 +422,7 @@ async function queryExportRows(input: {
       left join org.entities e on e.id = f.entity_id and e.tenant_id = f.tenant_id
       left join org.departments dep on dep.id = f.department_id and dep.tenant_id = f.tenant_id
       left join catalog.tender_types tt on tt.id = f.tender_type_id and tt.tenant_id = f.tenant_id
+      left join catalog.reference_values rv_nature on rv_nature.id = c.nature_of_work_id and rv_nature.tenant_id = c.tenant_id
       left join iam.users owner on owner.id = f.owner_user_id and owner.tenant_id = f.tenant_id
       left join procurement.case_milestones m on m.case_id = f.case_id and m.tenant_id = f.tenant_id
       left join procurement.case_delays d on d.case_id = f.case_id and d.tenant_id = f.tenant_id
@@ -414,34 +436,41 @@ async function queryExportRows(input: {
   );
   if (input.reportCode === "technical_evaluation_pendency") {
     return result.rows.map((row) => ({
-      "Tender No.": row.tender_no ?? row.pr_id ?? null,
-      "Tender Name": row.tender_name ?? row.pr_description ?? null,
       Entity: row.entity ?? null,
-      "User Department": row.department ?? null,
       "Tender Owner": row.tender_owner ?? null,
-      "Tender Stage": formatExportStage(row.stage_code),
-      "Bid Receipt Date": formatExportDate(row.bid_receipt_date),
-      "Technical Evaluation Date": formatExportDate(row.technical_evaluation_date),
-      "Current Stage Aging": row.current_stage_aging_days ?? null,
-      "Running Tender Age": row.running_age_days ?? null,
-      ...(input.scope.canViewDelay
-        ? {
-            "Reasons for Delay": row.delay_reason ?? null,
-          }
-        : {}),
+      "User Department": row.department ?? null,
+      "PR number": row.pr_id ?? null,
+      "Tender number": row.tender_no ?? null,
+      "Tender Description": row.pr_description ?? row.tender_name ?? null,
+      "Tender Type": row.tender_type ?? null,
+      "Nature of Work": row.nature_of_work ?? null,
+      Priority: row.priority_case ? "Priority" : null,
+      "PR Value/Approved Budget (Rs.) [All Inclusive]": row.pr_value ?? null,
+      "PR Receipt Date": formatExportDate(row.pr_receipt_date),
+      "Participated Bidder Count": row.bidders_participated ?? null,
+      "Running Tender Age (Days)": row.running_age_days ?? null,
+      "Technical Evaluation Pendency (days)": row.current_stage_aging_days ?? null,
+      "Commercial Evaluation Date": formatExportDate(row.commercial_evaluation_date),
     }));
   }
   if (input.reportCode === "technical_evaluation_time") {
     return result.rows.map((row) => ({
-      "Tender No.": row.tender_no ?? row.pr_id ?? null,
-      "Tender Name": row.tender_name ?? row.pr_description ?? null,
       Entity: row.entity ?? null,
-      "User Department": row.department ?? null,
       "Tender Owner": row.tender_owner ?? null,
-      "Bid Receipt Date": formatExportDate(row.bid_receipt_date),
-      "Technical Evaluation Date": formatExportDate(row.technical_evaluation_date),
-      "Technical Evaluation Time": row.technical_evaluation_time_days ?? null,
-      "Cycle Time": row.completed_cycle_time_days ?? null,
+      "User Department": row.department ?? null,
+      "PR number": row.pr_id ?? null,
+      "Tender number": row.tender_no ?? null,
+      "Tender Description": row.pr_description ?? row.tender_name ?? null,
+      "Tender Type": row.tender_type ?? null,
+      "Nature of Work": row.nature_of_work ?? null,
+      Priority: row.priority_case ? "Priority" : null,
+      "PR Value/Approved Budget (Rs.) [All Inclusive]": row.pr_value ?? null,
+      "PR Receipt Date": formatExportDate(row.pr_receipt_date),
+      "Participated Bidder Count": row.bidders_participated ?? null,
+      "Qualified Bidder Count": row.qualified_bidders ?? null,
+      "Days taken for Technical Evaluation": row.technical_evaluation_time_days ?? null,
+      "Commercial Evaluation Date": formatExportDate(row.commercial_evaluation_date),
+      "Completed Tender Cycle Time": row.completed_cycle_time_days ?? null,
     }));
   }
   if (input.reportCode === "running") {
@@ -606,7 +635,24 @@ async function queryStageTimeExport(input: {
         owner.full_name as tender_owner,
         f.stage_code,
         f.running_age_days,
-        f.current_stage_aging_days,
+        case
+          when f.status <> 'running' then null
+          when f.stage_code >= 8 and m.rc_po_award_date is not null then current_date - m.rc_po_award_date
+          when f.stage_code >= 7 and m.nfa_approval_date is not null then current_date - m.nfa_approval_date
+          when f.stage_code >= 6 and m.nfa_submission_date is not null then current_date - m.nfa_submission_date
+          when f.stage_code >= 5 and m.commercial_evaluation_date is not null and m.technical_evaluation_date is not null
+            then current_date - greatest(m.commercial_evaluation_date, m.technical_evaluation_date)
+          when f.stage_code >= 5 and m.commercial_evaluation_date is not null
+            then current_date - m.commercial_evaluation_date
+          when f.stage_code >= 5 and m.technical_evaluation_date is not null
+            then current_date - m.technical_evaluation_date
+          when f.stage_code >= 4 and m.bid_receipt_date is not null then current_date - m.bid_receipt_date
+          when f.stage_code >= 3 and m.nit_publish_date is not null then current_date - m.nit_publish_date
+          when f.stage_code >= 2 and m.nit_approval_date is not null then current_date - m.nit_approval_date
+          when f.stage_code >= 1 and m.nit_initiation_date is not null then current_date - m.nit_initiation_date
+          when f.pr_receipt_date is not null then current_date - f.pr_receipt_date
+          else null
+        end as current_stage_aging_days,
         f.completed_age_days as cycle_time_days,
         case
           when f.pr_receipt_date is null or m.nit_initiation_date is null then null

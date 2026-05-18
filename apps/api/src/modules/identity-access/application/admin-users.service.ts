@@ -10,6 +10,7 @@ import { hasExpandedPermission } from "../../../common/auth/permission-utils.js"
 import type { EnvConfig } from "../../../config/env.schema.js";
 import { DatabaseService } from "../../../database/database.service.js";
 import { AuditWriterService } from "../../audit/application/audit-writer.service.js";
+import { buildAccountSetupEmail } from "../../notifications/application/email-templates.js";
 import { OutboxWriterService } from "../../outbox/application/outbox-writer.service.js";
 import type { AuthenticatedUser } from "../domain/authenticated-user.js";
 import { PasswordPolicyRepository } from "../infrastructure/password-policy.repository.js";
@@ -239,6 +240,9 @@ export class AdminUsersService {
     tenantId: string;
     userId: string;
   }): Promise<void> {
+    if (!(await this.isEmailTemplateEnabled(input.tenantId, "user_welcome"))) {
+      return;
+    }
     const token = randomBytes(32).toString("base64url");
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const setupUrl = new URL(
@@ -246,6 +250,11 @@ export class AdminUsersService {
       this.config.get("APP_URL", { infer: true }) ?? "http://localhost:5175",
     );
     setupUrl.searchParams.set("token", token);
+    const email = buildAccountSetupEmail({
+      expiresIn: "24 hours",
+      fullName: input.fullName,
+      setupUrl: setupUrl.toString(),
+    });
 
     await this.db.transaction(async (client) => {
       await this.users.createPasswordResetToken(
@@ -262,17 +271,10 @@ export class AdminUsersService {
         {
           notificationType: "user_welcome",
           recipientEmail: input.email,
-          subject: "Set up your ProcureDesk account",
+          subject: email.subject,
           tenantId: input.tenantId,
-          textBody: [
-            `Hello ${input.fullName},`,
-            "",
-            "An administrator created a ProcureDesk account for you.",
-            "Set your password using the secure link below:",
-            setupUrl.toString(),
-            "",
-            "This setup link expires in 24 hours. If you were not expecting this account, contact your administrator.",
-          ].join("\n"),
+          textBody: email.textBody,
+          htmlBody: email.htmlBody,
         },
       );
       await this.outbox.write({
@@ -295,14 +297,15 @@ export class AdminUsersService {
       subject: string;
       tenantId: string;
       textBody: string;
+      htmlBody?: string | null;
     },
   ): Promise<{ id: string }> {
     const row = await this.db.one<{ id: string }>(
       `
         insert into ops.notification_jobs (
-          tenant_id, notification_type, recipient_email, subject, text_body
+          tenant_id, notification_type, recipient_email, subject, text_body, html_body
         )
-        values ($1, $2, $3, $4, $5)
+        values ($1, $2, $3, $4, $5, $6)
         returning id
       `,
       [
@@ -311,6 +314,7 @@ export class AdminUsersService {
         input.recipientEmail,
         input.subject,
         input.textBody,
+        input.htmlBody ?? null,
       ],
     );
     if (!row) throw new Error("Failed to create welcome notification.");
@@ -319,6 +323,21 @@ export class AdminUsersService {
 
   private hashResetToken(token: string): string {
     return createHash("sha256").update(token).digest("hex");
+  }
+
+  private async isEmailTemplateEnabled(tenantId: string, notificationType: string): Promise<boolean> {
+    const row = await this.db.one<{ is_enabled: boolean }>(
+      `
+        select is_enabled
+        from ops.notification_rules
+        where tenant_id = $1
+          and notification_type = $2
+          and deleted_at is null
+        limit 1
+      `,
+      [tenantId, notificationType],
+    );
+    return row?.is_enabled ?? true;
   }
 
   async updateProfile(

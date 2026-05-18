@@ -62,12 +62,19 @@ export class NotificationRepository {
           threshold_days, recipient_mode, subject_template
         )
         values
+          ($1, 'user_welcome', true, 'manual', null, 'explicit', 'Set up your ProcureDesk account'),
+          ($1, 'password_reset', true, 'manual', null, 'explicit', 'Reset your ProcureDesk password'),
+          ($1, 'password_changed', true, 'manual', null, 'explicit', 'Your ProcureDesk password was changed'),
           ($1, 'delayed_case_alert', true, 'daily', null, 'owner_or_entity', 'Delayed procurement case'),
           ($1, 'off_track_case_alert', true, 'daily', null, 'owner_or_entity', 'Off-track procurement case'),
           ($1, 'stale_tender', true, 'weekly', 14, 'owner_or_entity', 'No recent update reminder'),
           ($1, 'entity_monthly_digest', true, 'monthly', null, 'entity_admin', 'Monthly procurement digest'),
           ($1, 'manager_daily_snapshot', true, 'daily', null, 'entity_admin', 'Daily procurement snapshot'),
-          ($1, 'rc_po_expiry', true, 'weekly', 90, 'entity_admin', 'RC/PO expiry alert')
+          ($1, 'rc_po_expiry', true, 'weekly', 90, 'entity_admin', 'RC/PO expiry alert'),
+          ($1, 'export_ready', true, 'manual', null, 'explicit', 'Export ready'),
+          ($1, 'import_completed', true, 'manual', null, 'explicit', 'Import completed'),
+          ($1, 'import_failed', true, 'manual', null, 'explicit', 'Import failed'),
+          ($1, 'security_alert', true, 'manual', null, 'explicit', 'Security alert')
         on conflict do nothing
       `,
       [tenantId],
@@ -116,6 +123,22 @@ export class NotificationRepository {
     );
     if (!row) throw new Error("Failed to save notification rule.");
     return this.mapRule(row);
+  }
+
+  async isRuleEnabled(tenantId: string, notificationType: string): Promise<boolean> {
+    await this.ensureDefaultRules(tenantId);
+    const row = await this.db.one<QueryResultRow & { is_enabled: boolean }>(
+      `
+        select is_enabled
+        from ops.notification_rules
+        where tenant_id = $1
+          and notification_type = $2
+          and deleted_at is null
+        limit 1
+      `,
+      [tenantId, notificationType],
+    );
+    return row?.is_enabled ?? true;
   }
 
   async staleTenderPreview(tenantId: string): Promise<NotificationPreviewRow[]> {

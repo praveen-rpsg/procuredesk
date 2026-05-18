@@ -12,6 +12,7 @@ import {
   retryNotificationJob,
   updateNotificationRule,
   type DeadLetterEvent,
+  type NotificationStatus,
   type NotificationJob,
   type NotificationRule,
   type NotificationRuleType,
@@ -88,6 +89,18 @@ const ruleColumns: DataTableColumn<NotificationRule>[] = [
   { key: "threshold", header: "Threshold", render: (row) => row.thresholdDays ?? "-" },
 ];
 
+const emailCapabilityColumns: DataTableColumn<NotificationStatus["emailTypes"][number]>[] = [
+  { key: "email", header: "Email", render: (row) => row.label },
+  { key: "category", header: "Category", render: (row) => row.category },
+  { key: "flag", header: "Flag", render: (row) => (row.ruleGated ? (row.enabledByRule ? "Enabled" : "Disabled") : "System") },
+  {
+    key: "can-send",
+    header: "Can Send",
+    render: (row) => <StatusBadge tone={row.canSend ? "success" : "warning"}>{row.canSend ? "Yes" : "No"}</StatusBadge>,
+  },
+  { key: "reason", header: "Reason", render: (row) => row.blockingReason ?? "-" },
+];
+
 const notificationJobColumns = (
   onRetry: (job: NotificationJob) => void,
   onCancel: (job: NotificationJob) => void,
@@ -132,7 +145,7 @@ const notificationJobColumns = (
 type OperationsSectionKey = "dead-letters" | "jobs" | "preview" | "rules";
 
 const operationsSections = [
-  { description: "Choose which business emails are enabled.", icon: Bell, key: "rules", label: "Email Rules" },
+  { description: "Choose which email templates are enabled.", icon: Bell, key: "rules", label: "Email Rules" },
   { description: "Check recipients before scheduled emails run.", icon: ListChecks, key: "preview", label: "Recipients Preview" },
   { description: "Review queued, sent, and failed emails.", icon: History, key: "jobs", label: "Email History" },
   { description: "Delivery failures that need admin review.", icon: TriangleAlert, key: "dead-letters", label: "Delivery Issues" },
@@ -308,7 +321,7 @@ export function OperationsWorkspace() {
           <div className="detail-header">
             <div>
               <p className="eyebrow">Rules</p>
-              <h2>Email Rules</h2>
+              <h2>Email Template Flags</h2>
             </div>
             <div className="panel-icon panel-icon-brand">
               <Bell size={16} />
@@ -321,7 +334,7 @@ export function OperationsWorkspace() {
                 onChange={(event) => setRuleType(event.target.value as NotificationRule["notificationType"])}
                 value={ruleType}
               >
-                {businessRuleOptions.map((option) => (
+                  {emailTemplateRuleOptions.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
@@ -400,6 +413,14 @@ export function OperationsWorkspace() {
               </span>
             )}
           </div>
+          {notificationStatus.data?.emailTypes?.length ? (
+            <DataTable
+              columns={emailCapabilityColumns}
+              emptyMessage="No email delivery status available."
+              getRowKey={(row) => row.notificationType}
+              rows={notificationStatus.data.emailTypes}
+            />
+          ) : null}
           <div className="operations-alert-preview-list">
             {notificationPreviewCards.map((card) => {
               const query = previewQueries[card.key];
@@ -536,22 +557,20 @@ function sectionRequiresAudit(section: OperationsSectionKey): boolean {
 const notificationTypeOptions: Array<{ label: string; value: NotificationType }> = [
   { label: "New User Setup", value: "user_welcome" },
   { label: "Forgot Password", value: "password_reset" },
+  { label: "Password Changed", value: "password_changed" },
   { label: "Manager Daily Snapshot", value: "manager_daily_snapshot" },
   { label: "Delayed Case Alert", value: "delayed_case_alert" },
   { label: "Off Track Case Alert", value: "off_track_case_alert" },
   { label: "RC/PO Expiry", value: "rc_po_expiry" },
   { label: "No Recent Update Reminder", value: "stale_tender" },
   { label: "Entity Monthly Digest", value: "entity_monthly_digest" },
+  { label: "Export Ready", value: "export_ready" },
+  { label: "Import Completed", value: "import_completed" },
+  { label: "Import Failed", value: "import_failed" },
+  { label: "Security Alert", value: "security_alert" },
 ];
 
-const businessRuleOptions: Array<{ label: string; value: NotificationRuleType }> = [
-  { label: "Manager Daily Snapshot", value: "manager_daily_snapshot" },
-  { label: "Delayed Case Reminder", value: "delayed_case_alert" },
-  { label: "Off Track Case Reminder", value: "off_track_case_alert" },
-  { label: "RC/PO Expiry Reminder", value: "rc_po_expiry" },
-  { label: "Entity Monthly Digest", value: "entity_monthly_digest" },
-  { label: "No Recent Update Reminder", value: "stale_tender" },
-];
+const emailTemplateRuleOptions: Array<{ label: string; value: NotificationRuleType }> = notificationTypeOptions;
 
 function formatNotificationType(value: string): string {
   return notificationTypeOptions.find((option) => option.value === value)?.label ?? value;

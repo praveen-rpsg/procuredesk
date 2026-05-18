@@ -18,6 +18,7 @@ export type ReportCaseRow = {
   delayReason: string | null;
   departmentName: string | null;
   desiredStageCode: number | null;
+  commercialEvaluationDate: string | null;
   caseId: string;
   entityId: string;
   entityCode: string | null;
@@ -34,6 +35,7 @@ export type ReportCaseRow = {
   prReceiptDate: string | null;
   prRemarks: string | null;
   prValue: number | null;
+  priorityCase: boolean;
   qualifiedBidders: number | null;
   rcPoAwardDate: string | null;
   runningAgeDays: number | null;
@@ -43,6 +45,7 @@ export type ReportCaseRow = {
   status: string;
   tenderName: string | null;
   tenderNo: string | null;
+  natureOfWorkName: string | null;
   tenderTypeName: string | null;
   technicalEvaluationDate: string | null;
   technicalEvaluationTimeDays: number | null;
