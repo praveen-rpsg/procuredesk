@@ -8,6 +8,10 @@ import { ConfigService } from "@nestjs/config";
 import { createHash, randomBytes } from "node:crypto";
 
 import { DatabaseService } from "../../../database/database.service.js";
+import {
+  buildPasswordChangedEmail,
+  buildPasswordResetEmail,
+} from "../../notifications/application/email-templates.js";
 import { OutboxWriterService } from "../../outbox/application/outbox-writer.service.js";
 import type { AuthenticatedUser } from "../domain/authenticated-user.js";
 import type { PasswordPolicy } from "../domain/password-policy.js";
@@ -229,15 +233,25 @@ export class AuthService {
     }
 
     const passwordHash = await this.passwords.hash(input.newPassword);
-    const updated = await this.users.setOwnPassword({
-      passwordHash,
-      tenantId: actor.tenantId,
-      updatedBy: actor.id,
-      userId: actor.id,
+    await this.db.transaction(async () => {
+      const updated = await this.users.setOwnPassword({
+        passwordHash,
+        tenantId: actor.tenantId,
+        updatedBy: actor.id,
+        userId: actor.id,
+      });
+      if (!updated) {
+        throw new NotFoundException("User profile not found.");
+      }
+      if (actor.tenantId) {
+        await this.queuePasswordChangedEmailIfEnabled({
+          email: actor.email,
+          fullName: actor.fullName,
+          tenantId: actor.tenantId,
+          userId: actor.id,
+        });
+      }
     });
-    if (!updated) {
-      throw new NotFoundException("User profile not found.");
-    }
     return { updated: true };
   }
 
@@ -250,6 +264,9 @@ export class AuthService {
     const email = input.email.trim().toLowerCase();
     const user = await this.users.findForPasswordReset(email, input.tenantCode);
     if (!user) return { ok: true };
+    if (user.tenantId && !(await this.isEmailTemplateEnabled(user.tenantId, "password_reset"))) {
+      return { ok: true };
+    }
 
     const token = randomBytes(32).toString("base64url");
     const tokenHash = this.hashResetToken(token);
@@ -268,19 +285,18 @@ export class AuthService {
       const resetUrl = new URL("/reset-password", this.config.get<string>("APP_URL", "http://localhost:5175"));
       resetUrl.searchParams.set("token", token);
       if (user.tenantCode) resetUrl.searchParams.set("tenant", user.tenantCode);
+      const email = buildPasswordResetEmail({
+        expiresIn: "1 hour",
+        fullName: user.fullName,
+        resetUrl: resetUrl.toString(),
+      });
       const notification = await this.createNotificationJob({
         notificationType: "password_reset",
         recipientEmail: user.email,
-        subject: "Reset your ProcureDesk password",
+        subject: email.subject,
         tenantId: user.tenantId,
-        textBody: [
-          `Hello ${user.fullName},`,
-          "",
-          "We received a request to reset your ProcureDesk password.",
-          `Reset link: ${resetUrl.toString()}`,
-          "",
-          "This link expires in 1 hour. If you did not request it, ignore this email.",
-        ].join("\n"),
+        textBody: email.textBody,
+        htmlBody: email.htmlBody,
       });
       await this.outbox.write({
         aggregateId: notification.id,
@@ -327,20 +343,30 @@ export class AuthService {
       throw new BadRequestException(`Password does not satisfy policy: ${errors.join(" ")}`);
     }
     const passwordHash = await this.passwords.hash(input.newPassword);
-    const updated = reset.tenantId
-      ? await this.users.setPassword({
-          passwordHash,
+    await this.db.transaction(async () => {
+      const updated = reset.tenantId
+        ? await this.users.setPassword({
+            passwordHash,
+            tenantId: reset.tenantId,
+            updatedBy: reset.userId,
+            userId: reset.userId,
+          })
+        : await this.users.setOwnPassword({
+            passwordHash,
+            tenantId: null,
+            updatedBy: reset.userId,
+            userId: reset.userId,
+          });
+      if (!updated) throw new BadRequestException("Password reset failed.");
+      if (reset.tenantId && reset.email && reset.fullName) {
+        await this.queuePasswordChangedEmailIfEnabled({
+          email: reset.email,
+          fullName: reset.fullName,
           tenantId: reset.tenantId,
-          updatedBy: reset.userId,
-          userId: reset.userId,
-        })
-      : await this.users.setOwnPassword({
-          passwordHash,
-          tenantId: null,
-          updatedBy: reset.userId,
           userId: reset.userId,
         });
-    if (!updated) throw new BadRequestException("Password reset failed.");
+      }
+    });
     return { updated: true };
   }
 
@@ -354,13 +380,14 @@ export class AuthService {
     subject: string;
     tenantId: string;
     textBody: string;
+    htmlBody?: string | null;
   }): Promise<{ id: string }> {
     const row = await this.db.one<{ id: string }>(
       `
         insert into ops.notification_jobs (
-          tenant_id, notification_type, recipient_email, subject, text_body
+          tenant_id, notification_type, recipient_email, subject, text_body, html_body
         )
-        values ($1, $2, $3, $4, $5)
+        values ($1, $2, $3, $4, $5, $6)
         returning id
       `,
       [
@@ -369,10 +396,56 @@ export class AuthService {
         input.recipientEmail,
         input.subject,
         input.textBody,
+        input.htmlBody ?? null,
       ],
     );
     if (!row) throw new Error("Failed to create password reset notification.");
     return { id: row.id };
+  }
+
+  private async queuePasswordChangedEmailIfEnabled(input: {
+    email: string;
+    fullName: string;
+    tenantId: string;
+    userId: string;
+  }): Promise<void> {
+    if (!(await this.isEmailTemplateEnabled(input.tenantId, "password_changed"))) {
+      return;
+    }
+    const email = buildPasswordChangedEmail({
+      appUrl: this.config.get<string>("APP_URL", "http://localhost:5175"),
+      fullName: input.fullName,
+    });
+    const notification = await this.createNotificationJob({
+      notificationType: "password_changed",
+      recipientEmail: input.email,
+      subject: email.subject,
+      tenantId: input.tenantId,
+      textBody: email.textBody,
+      htmlBody: email.htmlBody,
+    });
+    await this.outbox.write({
+      aggregateId: notification.id,
+      aggregateType: "notification_job",
+      eventType: "notification_job.created",
+      payload: { notificationType: "password_changed", userId: input.userId },
+      tenantId: input.tenantId,
+    });
+  }
+
+  private async isEmailTemplateEnabled(tenantId: string, notificationType: string): Promise<boolean> {
+    const row = await this.db.one<{ is_enabled: boolean }>(
+      `
+        select is_enabled
+        from ops.notification_rules
+        where tenant_id = $1
+          and notification_type = $2
+          and deleted_at is null
+        limit 1
+      `,
+      [tenantId, notificationType],
+    );
+    return row?.is_enabled ?? true;
   }
 
   private hashResetToken(token: string): string {

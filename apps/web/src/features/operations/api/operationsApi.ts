@@ -22,10 +22,17 @@ export type NotificationPreviewRow = {
 export type NotificationRuleType =
   | "delayed_case_alert"
   | "entity_monthly_digest"
+  | "export_ready"
+  | "import_completed"
+  | "import_failed"
   | "manager_daily_snapshot"
   | "off_track_case_alert"
+  | "password_changed"
+  | "password_reset"
   | "rc_po_expiry"
-  | "stale_tender";
+  | "security_alert"
+  | "stale_tender"
+  | "user_welcome";
 
 export type NotificationType =
   | "delayed_case_alert"
@@ -66,6 +73,15 @@ export type NotificationJob = {
 
 export type NotificationStatus = {
   deliveryMode: "microsoft_graph" | "stub";
+  emailTypes: Array<{
+    blockingReason: string | null;
+    canSend: boolean;
+    category: string;
+    enabledByRule: boolean;
+    label: string;
+    notificationType: NotificationType;
+    ruleGated: boolean;
+  }>;
   graphConfigured: boolean;
 };
 

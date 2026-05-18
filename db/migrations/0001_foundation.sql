@@ -802,10 +802,17 @@ create table ops.notification_rules (
     notification_type in (
       'delayed_case_alert',
       'entity_monthly_digest',
+      'export_ready',
+      'import_completed',
+      'import_failed',
       'manager_daily_snapshot',
       'off_track_case_alert',
+      'password_changed',
+      'password_reset',
       'rc_po_expiry',
-      'stale_tender'
+      'security_alert',
+      'stale_tender',
+      'user_welcome'
     )
   ),
   constraint notification_rules_cadence_check check (

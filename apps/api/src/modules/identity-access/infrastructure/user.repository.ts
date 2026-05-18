@@ -244,19 +244,35 @@ export class UserRepository {
 
   async consumePasswordResetToken(input: {
     tokenHash: string;
-  }): Promise<{ tenantId: string | null; userId: string } | null> {
-    const row = await this.db.one<QueryResultRow & { tenant_id: string | null; user_id: string }>(
+  }): Promise<{ email: string | null; fullName: string | null; tenantId: string | null; userId: string } | null> {
+    const row = await this.db.one<
+      QueryResultRow & {
+        email: string | null;
+        full_name: string | null;
+        tenant_id: string | null;
+        user_id: string;
+      }
+    >(
       `
         update iam.password_reset_tokens
         set used_at = now()
+        from iam.users u
         where token_hash = $1
           and used_at is null
           and expires_at > now()
-        returning tenant_id, user_id
+          and u.id = iam.password_reset_tokens.user_id
+        returning iam.password_reset_tokens.tenant_id, iam.password_reset_tokens.user_id, u.email, u.full_name
       `,
       [input.tokenHash],
     );
-    return row ? { tenantId: row.tenant_id, userId: row.user_id } : null;
+    return row
+      ? {
+          email: row.email,
+          fullName: row.full_name,
+          tenantId: row.tenant_id,
+          userId: row.user_id,
+        }
+      : null;
   }
 
   async listTenantUsers(tenantId: string): Promise<UserListItem[]> {

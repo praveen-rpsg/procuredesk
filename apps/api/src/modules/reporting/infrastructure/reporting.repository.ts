@@ -147,16 +147,20 @@ export class ReportingRepository {
           end,
           case
             when c.status <> 'running' then null
-            when c.stage_code = 0 and c.pr_receipt_date is not null then current_date - c.pr_receipt_date
-            when c.stage_code = 1 and m.nit_initiation_date is not null then current_date - m.nit_initiation_date
-            when c.stage_code = 2 and m.nit_approval_date is not null then current_date - m.nit_approval_date
-            when c.stage_code = 3 and m.nit_publish_date is not null then current_date - m.nit_publish_date
-            when c.stage_code = 4 and m.bid_receipt_date is not null then current_date - m.bid_receipt_date
-            when c.stage_code = 5 and coalesce(greatest(m.commercial_evaluation_date, m.technical_evaluation_date), m.commercial_evaluation_date, m.technical_evaluation_date) is not null
-              then current_date - coalesce(greatest(m.commercial_evaluation_date, m.technical_evaluation_date), m.commercial_evaluation_date, m.technical_evaluation_date)
-            when c.stage_code = 6 and m.nfa_submission_date is not null then current_date - m.nfa_submission_date
-            when c.stage_code = 7 and m.nfa_approval_date is not null then current_date - m.nfa_approval_date
-            when c.stage_code = 8 and m.rc_po_award_date is not null then current_date - m.rc_po_award_date
+            when c.stage_code >= 8 and m.rc_po_award_date is not null then current_date - m.rc_po_award_date
+            when c.stage_code >= 7 and m.nfa_approval_date is not null then current_date - m.nfa_approval_date
+            when c.stage_code >= 6 and m.nfa_submission_date is not null then current_date - m.nfa_submission_date
+            when c.stage_code >= 5 and m.commercial_evaluation_date is not null and m.technical_evaluation_date is not null
+              then current_date - greatest(m.commercial_evaluation_date, m.technical_evaluation_date)
+            when c.stage_code >= 5 and m.commercial_evaluation_date is not null
+              then current_date - m.commercial_evaluation_date
+            when c.stage_code >= 5 and m.technical_evaluation_date is not null
+              then current_date - m.technical_evaluation_date
+            when c.stage_code >= 4 and m.bid_receipt_date is not null then current_date - m.bid_receipt_date
+            when c.stage_code >= 3 and m.nit_publish_date is not null then current_date - m.nit_publish_date
+            when c.stage_code >= 2 and m.nit_approval_date is not null then current_date - m.nit_approval_date
+            when c.stage_code >= 1 and m.nit_initiation_date is not null then current_date - m.nit_initiation_date
+            when c.pr_receipt_date is not null then current_date - c.pr_receipt_date
             else null
           end,
           f.pr_value,
@@ -463,6 +467,7 @@ export class ReportingRepository {
       "e.name",
       "dep.name",
       "tt.name",
+      "rv_nature.label",
       "owner.full_name",
       "f.status",
       "f.stage_code::text",
@@ -481,6 +486,7 @@ export class ReportingRepository {
       "m.nit_publish_date::text",
       "m.bid_receipt_date::text",
       "m.technical_evaluation_date::text",
+      "m.commercial_evaluation_date::text",
       "m.bidders_participated::text",
       "m.qualified_bidders::text",
       "m.loi_issued::text",
@@ -512,7 +518,9 @@ export class ReportingRepository {
           e.name as entity_name,
           dep.name as department_name,
           tt.name as tender_type_name,
+          rv_nature.label as nature_of_work_name,
           owner.full_name as owner_full_name,
+          f.priority_case,
           f.status,
           f.stage_code,
           case
@@ -534,7 +542,24 @@ export class ReportingRepository {
           f.rc_po_award_date,
           f.completion_fy,
           f.running_age_days,
-          f.current_stage_aging_days,
+          case
+            when f.status <> 'running' then null
+            when f.stage_code >= 8 and m.rc_po_award_date is not null then current_date - m.rc_po_award_date
+            when f.stage_code >= 7 and m.nfa_approval_date is not null then current_date - m.nfa_approval_date
+            when f.stage_code >= 6 and m.nfa_submission_date is not null then current_date - m.nfa_submission_date
+            when f.stage_code >= 5 and m.commercial_evaluation_date is not null and m.technical_evaluation_date is not null
+              then current_date - greatest(m.commercial_evaluation_date, m.technical_evaluation_date)
+            when f.stage_code >= 5 and m.commercial_evaluation_date is not null
+              then current_date - m.commercial_evaluation_date
+            when f.stage_code >= 5 and m.technical_evaluation_date is not null
+              then current_date - m.technical_evaluation_date
+            when f.stage_code >= 4 and m.bid_receipt_date is not null then current_date - m.bid_receipt_date
+            when f.stage_code >= 3 and m.nit_publish_date is not null then current_date - m.nit_publish_date
+            when f.stage_code >= 2 and m.nit_approval_date is not null then current_date - m.nit_approval_date
+            when f.stage_code >= 1 and m.nit_initiation_date is not null then current_date - m.nit_initiation_date
+            when f.pr_receipt_date is not null then current_date - f.pr_receipt_date
+            else null
+          end as current_stage_aging_days,
           f.completed_age_days,
           f.pr_value,
           f.estimate_benchmark,
@@ -551,6 +576,7 @@ export class ReportingRepository {
           m.nit_publish_date,
           m.bid_receipt_date,
           m.technical_evaluation_date,
+          m.commercial_evaluation_date,
           case
             when m.technical_evaluation_date is null or m.bid_receipt_date is null then null
             else m.technical_evaluation_date - m.bid_receipt_date
@@ -568,6 +594,7 @@ export class ReportingRepository {
         left join org.entities e on e.id = f.entity_id and e.tenant_id = f.tenant_id
         left join org.departments dep on dep.id = f.department_id and dep.tenant_id = f.tenant_id
         left join catalog.tender_types tt on tt.id = f.tender_type_id and tt.tenant_id = f.tenant_id
+        left join catalog.reference_values rv_nature on rv_nature.id = c.nature_of_work_id and rv_nature.tenant_id = c.tenant_id
         left join iam.users owner on owner.id = f.owner_user_id and owner.tenant_id = f.tenant_id
         left join procurement.case_milestones m on m.case_id = f.case_id and m.tenant_id = f.tenant_id
         left join procurement.case_delays d on d.case_id = f.case_id and d.tenant_id = f.tenant_id
@@ -596,6 +623,7 @@ export class ReportingRepository {
       caseId: row.case_id,
       completedCycleTimeDays: row.completed_age_days,
       completionFy: row.completion_fy,
+      commercialEvaluationDate: this.dateOnly(row.commercial_evaluation_date),
       currentStageAgingDays: row.current_stage_aging_days,
       delayReason: row.delay_reason,
       departmentName: row.department_name,
@@ -608,6 +636,7 @@ export class ReportingRepository {
       loiAwardDate: this.dateOnly(row.loi_issued_date),
       loiAwarded: row.loi_issued,
       nitPublishDate: this.dateOnly(row.nit_publish_date),
+      natureOfWorkName: row.nature_of_work_name,
       ownerFullName: row.owner_full_name,
       percentTimeElapsed: this.numberOrNull(row.percent_time_elapsed),
       prId: row.pr_id,
@@ -615,6 +644,7 @@ export class ReportingRepository {
       prReceiptDate: this.dateOnly(row.pr_receipt_date),
       prRemarks: row.pr_remarks,
       prValue: this.numberOrNull(row.pr_value),
+      priorityCase: row.priority_case,
       qualifiedBidders: row.qualified_bidders,
       rcPoAwardDate: this.dateOnly(row.rc_po_award_date),
       runningAgeDays: row.running_age_days,
@@ -795,7 +825,24 @@ export class ReportingRepository {
           f.priority_case,
           f.stage_code,
           f.running_age_days,
-          f.current_stage_aging_days,
+          case
+            when f.status <> 'running' then null
+            when f.stage_code >= 8 and m.rc_po_award_date is not null then current_date - m.rc_po_award_date
+            when f.stage_code >= 7 and m.nfa_approval_date is not null then current_date - m.nfa_approval_date
+            when f.stage_code >= 6 and m.nfa_submission_date is not null then current_date - m.nfa_submission_date
+            when f.stage_code >= 5 and m.commercial_evaluation_date is not null and m.technical_evaluation_date is not null
+              then current_date - greatest(m.commercial_evaluation_date, m.technical_evaluation_date)
+            when f.stage_code >= 5 and m.commercial_evaluation_date is not null
+              then current_date - m.commercial_evaluation_date
+            when f.stage_code >= 5 and m.technical_evaluation_date is not null
+              then current_date - m.technical_evaluation_date
+            when f.stage_code >= 4 and m.bid_receipt_date is not null then current_date - m.bid_receipt_date
+            when f.stage_code >= 3 and m.nit_publish_date is not null then current_date - m.nit_publish_date
+            when f.stage_code >= 2 and m.nit_approval_date is not null then current_date - m.nit_approval_date
+            when f.stage_code >= 1 and m.nit_initiation_date is not null then current_date - m.nit_initiation_date
+            when f.pr_receipt_date is not null then current_date - f.pr_receipt_date
+            else null
+          end as current_stage_aging_days,
           f.completed_age_days as cycle_time_days,
           case
             when f.pr_receipt_date is null or m.nit_initiation_date is null then null
@@ -1995,6 +2042,7 @@ type CaseReportRow = {
   case_id: string;
   completed_age_days: number | null;
   completion_fy: string | null;
+  commercial_evaluation_date: Date | null;
   current_stage_aging_days: number | null;
   delay_reason: string | null;
   department_name: string | null;
@@ -2007,6 +2055,7 @@ type CaseReportRow = {
   loi_issued: boolean;
   loi_issued_date: Date | null;
   nit_publish_date: Date | null;
+  nature_of_work_name: string | null;
   owner_full_name: string | null;
   percent_time_elapsed: string | null;
   pr_description: string | null;
@@ -2014,6 +2063,7 @@ type CaseReportRow = {
   pr_remarks: string | null;
   pr_receipt_date: Date | null;
   pr_value: string | null;
+  priority_case: boolean;
   qualified_bidders: number | null;
   rc_po_award_date: Date | null;
   running_age_days: number | null;
