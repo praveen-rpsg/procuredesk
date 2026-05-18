@@ -19,6 +19,7 @@ export type ReportCaseRow = {
   departmentName: string | null;
   desiredStageCode: number | null;
   commercialEvaluationDate: string | null;
+  commercialEvaluationPendencyDays: number | null;
   caseId: string;
   entityId: string;
   entityCode: string | null;
@@ -48,6 +49,7 @@ export type ReportCaseRow = {
   natureOfWorkName: string | null;
   tenderTypeName: string | null;
   technicalEvaluationDate: string | null;
+  technicalEvaluationPendencyDays: number | null;
   technicalEvaluationTimeDays: number | null;
   tmRemarks: string | null;
   totalAwardedAmount: number | null;

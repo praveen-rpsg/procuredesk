@@ -6373,6 +6373,82 @@ textarea:focus:not(:focus-visible) {
   gap: var(--space-2-5);
 }
 
+.report-entity-department-accordion {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.report-entity-department-group {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.report-entity-department-group-open {
+  box-shadow: var(--shadow-sm);
+}
+
+.report-entity-department-trigger {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--color-ink);
+  cursor: pointer;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  width: 100%;
+}
+
+.report-entity-department-trigger:hover {
+  background: var(--color-neutral-50);
+}
+
+.report-entity-department-trigger svg {
+  color: var(--color-muted);
+  transition: transform var(--transition-fast);
+}
+
+.report-entity-department-group-open .report-entity-department-trigger svg {
+  transform: rotate(180deg);
+}
+
+.report-entity-department-trigger span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.report-entity-department-trigger strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-entity-department-trigger small,
+.report-entity-department-trigger em {
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+  font-style: normal;
+  font-weight: var(--font-weight-semibold);
+}
+
+.report-entity-department-trigger em {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+.report-entity-department-group .report-department-nature-rows {
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+
 .report-department-nature-row {
   align-items: center;
   cursor: pointer;
@@ -10416,6 +10492,15 @@ textarea:focus:not(:focus-visible) {
     grid-template-columns: minmax(150px, 0.42fr) minmax(220px, 1fr) 44px;
   }
 
+  .report-entity-department-trigger {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .report-entity-department-trigger em {
+    grid-column: 2;
+    justify-self: start;
+  }
+
   .report-tender-kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -10526,6 +10611,14 @@ textarea:focus:not(:focus-visible) {
   .report-entity-value-donut,
   .report-department-nature-row {
     grid-template-columns: 1fr;
+  }
+
+  .report-entity-department-trigger {
+    padding: var(--space-3);
+  }
+
+  .report-entity-department-group .report-department-nature-rows {
+    padding: var(--space-3);
   }
 
   .report-entity-value-donut-visual {

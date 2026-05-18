@@ -1041,13 +1041,26 @@ export function ReportsWorkspace() {
       {
         key: "technicalEvaluationPendency",
         header: "Technical Evaluation Pendency (days)",
-        render: (row) => formatNullableDays(row.currentStageAgingDays),
-        sortValue: (row) => row.currentStageAgingDays ?? "",
+        render: (row) =>
+          row.technicalEvaluationDate
+            ? "Completed"
+            : formatNullableDays(row.technicalEvaluationPendencyDays),
+        sortValue: (row) =>
+          row.technicalEvaluationDate
+            ? "Completed"
+            : row.technicalEvaluationPendencyDays ?? "",
       },
       {
-        key: "commercialEvaluationDate",
-        header: "Commercial Evaluation Date",
-        render: (row) => formatDateCell(row.commercialEvaluationDate),
+        key: "commercialEvaluationPendency",
+        header: "Commercial Evaluation Pendency (days)",
+        render: (row) =>
+          row.commercialEvaluationDate
+            ? "Completed"
+            : formatNullableDays(row.commercialEvaluationPendencyDays),
+        sortValue: (row) =>
+          row.commercialEvaluationDate
+            ? "Completed"
+            : row.commercialEvaluationPendencyDays ?? "",
       },
     ],
     [caseColumnFilterOptions],
@@ -1144,11 +1157,6 @@ export function ReportsWorkspace() {
         header: "Days taken for Technical Evaluation",
         render: (row) => formatNullableDays(row.technicalEvaluationTimeDays),
         sortValue: (row) => row.technicalEvaluationTimeDays ?? "",
-      },
-      {
-        key: "commercialEvaluationDate",
-        header: "Commercial Evaluation Date",
-        render: (row) => formatDateCell(row.commercialEvaluationDate),
       },
       {
         key: "completedTenderCycleTime",
@@ -1977,7 +1985,7 @@ export function ReportsWorkspace() {
               <ReportTable
                 columns={technicalPendencyColumns}
                 data={data.technicalEvaluationPendency.data}
-                emptyMessage="No technical evaluation pendency rows match the current filters."
+                emptyMessage="No bid evaluation pendency rows match the current filters."
                 error={data.technicalEvaluationPendency.error}
                 getRowKey={(row) => row.caseId}
                 isLoading={data.technicalEvaluationPendency.isLoading}
@@ -2574,10 +2582,10 @@ function ReportAnalyticsDashboard({
       <section className="state-panel report-analytics-card report-analytics-wide">
         <ReportChartHeader
           eyebrow="Department workload"
-          subtitle={`${departmentNatureRows.length} department(s)`}
-          title="User department case count by nature of work"
+          subtitle={`${departmentNatureRows.length} entity group(s)`}
+          title="Entity user department case count by nature of work"
         />
-        <ReportDepartmentNatureStackedBar
+        <ReportEntityDepartmentNatureAccordion
           onDepartmentClick={(departmentId) =>
             onOpenCaseDrilldown({ departmentIds: [departmentId] })
           }
@@ -2955,21 +2963,46 @@ function buildStageBreakdownRows(rows: StageTimeRow[]) {
 function buildDepartmentNatureChartRows(
   rows: ReportingAnalytics["byDepartmentNatureOfWork"],
 ) {
-  const departments = new Map<
+  const entities = new Map<
     string,
     {
-      departmentId: string | null;
-      departmentName: string;
+      departments: Map<
+        string,
+        {
+          departmentId: string | null;
+          departmentName: string;
+          total: number;
+          values: Map<string, { natureOfWorkId: string | null; value: number }>;
+        }
+      >;
+      entityCode: string | null;
+      entityId: string;
+      entityName: string | null;
       total: number;
-      values: Map<string, { natureOfWorkId: string | null; value: number }>;
     }
   >();
   const natureNames = new Set<string>();
 
   rows.forEach((row) => {
-    const departmentKey = row.departmentId ?? row.departmentName;
+    const entityKey = row.entityId;
+    const departmentKey = row.departmentId ?? `${row.entityId}:${row.departmentName}`;
     const natureName = row.natureOfWorkName || "Unspecified";
-    const department = departments.get(departmentKey) ?? {
+    const entity = entities.get(entityKey) ?? {
+      departments: new Map<
+        string,
+        {
+          departmentId: string | null;
+          departmentName: string;
+          total: number;
+          values: Map<string, { natureOfWorkId: string | null; value: number }>;
+        }
+      >(),
+      entityCode: row.entityCode,
+      entityId: row.entityId,
+      entityName: row.entityName,
+      total: 0,
+    };
+    const department = entity.departments.get(departmentKey) ?? {
       departmentId: row.departmentId,
       departmentName: row.departmentName || "Unspecified",
       total: 0,
@@ -2987,32 +3020,49 @@ function buildDepartmentNatureChartRows(
       natureOfWorkId: segment.natureOfWorkId ?? row.natureOfWorkId,
       value: segment.value + row.caseCount,
     });
-    departments.set(departmentKey, department);
+    entity.total += row.caseCount;
+    entity.departments.set(departmentKey, department);
+    entities.set(entityKey, entity);
     natureNames.add(natureName);
   });
 
   const natures = [...natureNames].sort((left, right) =>
     left.localeCompare(right),
   );
-  const departmentRows = [...departments.values()]
+  const entityRows = [...entities.values()]
     .sort(
       (left, right) =>
         right.total - left.total ||
-        left.departmentName.localeCompare(right.departmentName),
+        (left.entityCode ?? left.entityName ?? "").localeCompare(
+          right.entityCode ?? right.entityName ?? "",
+        ),
     )
     .slice(0, 10)
-    .map((department) => ({
-      departmentId: department.departmentId,
-      departmentName: department.departmentName,
-      segments: natures.map((nature) => ({
-        label: nature,
-        natureOfWorkId: department.values.get(nature)?.natureOfWorkId ?? null,
-        value: department.values.get(nature)?.value ?? 0,
-      })),
-      total: department.total,
+    .map((entity) => ({
+      departments: [...entity.departments.values()]
+        .sort(
+          (left, right) =>
+            right.total - left.total ||
+            left.departmentName.localeCompare(right.departmentName),
+        )
+        .map((department) => ({
+          departmentId: department.departmentId,
+          departmentName: department.departmentName,
+          segments: natures.map((nature) => ({
+            label: nature,
+            natureOfWorkId:
+              department.values.get(nature)?.natureOfWorkId ?? null,
+            value: department.values.get(nature)?.value ?? 0,
+          })),
+          total: department.total,
+        })),
+      entityCode: entity.entityCode,
+      entityId: entity.entityId,
+      entityName: entity.entityName,
+      total: entity.total,
     }));
 
-  return departmentRows;
+  return entityRows;
 }
 
 function formatInteger(value: number) {
@@ -3412,7 +3462,7 @@ function ReportEntityPrValueDonut({
   );
 }
 
-function ReportDepartmentNatureStackedBar({
+function ReportEntityDepartmentNatureAccordion({
   onDepartmentClick,
   onNatureClick,
   rows,
@@ -3420,30 +3470,52 @@ function ReportDepartmentNatureStackedBar({
   onDepartmentClick?: (departmentId: string) => void;
   onNatureClick?: (departmentId: string | null, natureOfWorkId: string) => void;
   rows: Array<{
-    departmentId: string | null;
-    departmentName: string;
-    segments: Array<{
-      label: string;
-      natureOfWorkId: string | null;
-      value: number;
+    departments: Array<{
+      departmentId: string | null;
+      departmentName: string;
+      segments: Array<{
+        label: string;
+        natureOfWorkId: string | null;
+        value: number;
+      }>;
+      total: number;
     }>;
+    entityCode: string | null;
+    entityId: string;
+    entityName: string | null;
     total: number;
   }>;
 }) {
+  const [expandedEntityId, setExpandedEntityId] = useState<string | null>(
+    rows[0]?.entityId ?? null,
+  );
   const legend = Array.from(
     new Set(
       rows.flatMap((row) =>
-        row.segments
-          .filter((segment) => segment.value > 0)
-          .map((segment) => segment.label),
+        row.departments.flatMap((department) =>
+          department.segments
+            .filter((segment) => segment.value > 0)
+            .map((segment) => segment.label),
+        ),
       ),
     ),
   );
-  const max = Math.max(1, ...rows.map((row) => row.total));
+
+  useEffect(() => {
+    if (rows.length === 0) {
+      setExpandedEntityId(null);
+      return;
+    }
+    if (!rows.some((row) => row.entityId === expandedEntityId)) {
+      setExpandedEntityId(rows[0]?.entityId ?? null);
+    }
+  }, [expandedEntityId, rows]);
 
   if (rows.length === 0) {
     return (
-      <p className="hero-copy">No department data for the current filters.</p>
+      <p className="hero-copy">
+        No entity department data for the current filters.
+      </p>
     );
   }
 
@@ -3457,82 +3529,136 @@ function ReportDepartmentNatureStackedBar({
           </span>
         ))}
       </div>
-      <div className="report-department-nature-rows">
+      <div className="report-entity-department-accordion">
         {rows.map((row) => {
-          const canOpenDepartment = Boolean(
-            row.departmentId && onDepartmentClick,
+          const entityLabel =
+            row.entityCode && row.entityName
+              ? `${row.entityCode} - ${row.entityName}`
+              : row.entityCode || row.entityName || "Unspecified entity";
+          const isExpanded = expandedEntityId === row.entityId;
+          const max = Math.max(
+            1,
+            ...row.departments.map((department) => department.total),
           );
           return (
             <div
-              className="report-department-nature-row"
-              key={row.departmentName}
-              onClick={() => {
-                if (row.departmentId) onDepartmentClick?.(row.departmentId);
-              }}
-              onKeyDown={(event) => {
-                if (!canOpenDepartment) return;
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  if (row.departmentId) onDepartmentClick?.(row.departmentId);
-                }
-              }}
-              role={canOpenDepartment ? "button" : undefined}
-              tabIndex={canOpenDepartment ? 0 : undefined}
-              title={
-                canOpenDepartment
-                  ? `Open ${row.departmentName} cases`
-                  : undefined
-              }
+              className={`report-entity-department-group ${
+                isExpanded ? "report-entity-department-group-open" : ""
+              }`}
+              key={row.entityId}
             >
-              <div className="report-department-nature-label">
-                <strong>{row.departmentName}</strong>
+              <button
+                aria-expanded={isExpanded}
+                className="report-entity-department-trigger"
+                onClick={() =>
+                  setExpandedEntityId(isExpanded ? null : row.entityId)
+                }
+                type="button"
+              >
+                <ChevronDown aria-hidden="true" size={18} />
                 <span>
-                  {row.total} case{row.total === 1 ? "" : "s"}
+                  <strong>{entityLabel}</strong>
+                  <small>
+                    {row.departments.length} department
+                    {row.departments.length === 1 ? "" : "s"}
+                  </small>
                 </span>
-              </div>
-              <div className="report-department-nature-track">
-                <div
-                  className="report-department-nature-stack"
-                  style={{ width: `${Math.max(8, (row.total / max) * 100)}%` }}
-                >
-                  {legend.map((label, index) => {
-                    const segment = row.segments.find(
-                      (item) => item.label === label,
+                <em>
+                  {row.total} case{row.total === 1 ? "" : "s"}
+                </em>
+              </button>
+              {isExpanded ? (
+                <div className="report-department-nature-rows">
+                  {row.departments.map((department) => {
+                    const canOpenDepartment = Boolean(
+                      department.departmentId && onDepartmentClick,
                     );
-                    const value = segment?.value ?? 0;
-                    return value > 0 ? (
-                      <button
-                        aria-label={`${row.departmentName} ${label}: ${value} case${value === 1 ? "" : "s"}`}
-                        key={label}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          if (segment?.natureOfWorkId) {
-                            onNatureClick?.(
-                              row.departmentId,
-                              segment.natureOfWorkId,
-                            );
+                    return (
+                      <div
+                        className="report-department-nature-row"
+                        key={department.departmentId ?? department.departmentName}
+                        onClick={() => {
+                          if (department.departmentId) {
+                            onDepartmentClick?.(department.departmentId);
                           }
                         }}
-                        style={{
-                          background: analyticsPaletteColor(index),
-                          flexBasis: `${(value / row.total) * 100}%`,
+                        onKeyDown={(event) => {
+                          if (!canOpenDepartment) return;
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            if (department.departmentId) {
+                              onDepartmentClick?.(department.departmentId);
+                            }
+                          }
                         }}
+                        role={canOpenDepartment ? "button" : undefined}
+                        tabIndex={canOpenDepartment ? 0 : undefined}
                         title={
-                          segment?.natureOfWorkId
-                            ? `Open ${row.departmentName} ${label} cases`
+                          canOpenDepartment
+                            ? `Open ${department.departmentName} cases`
                             : undefined
                         }
-                        type="button"
                       >
-                        <span>{value}</span>
-                      </button>
-                    ) : null;
+                        <div className="report-department-nature-label">
+                          <strong>{department.departmentName}</strong>
+                          <span>
+                            {department.total} case
+                            {department.total === 1 ? "" : "s"}
+                          </span>
+                        </div>
+                        <div className="report-department-nature-track">
+                          <div
+                            className="report-department-nature-stack"
+                            style={{
+                              width: `${Math.max(
+                                8,
+                                (department.total / max) * 100,
+                              )}%`,
+                            }}
+                          >
+                            {legend.map((label, index) => {
+                              const segment = department.segments.find(
+                                (item) => item.label === label,
+                              );
+                              const value = segment?.value ?? 0;
+                              return value > 0 ? (
+                                <button
+                                  aria-label={`${department.departmentName} ${label}: ${value} case${value === 1 ? "" : "s"}`}
+                                  key={label}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    if (segment?.natureOfWorkId) {
+                                      onNatureClick?.(
+                                        department.departmentId,
+                                        segment.natureOfWorkId,
+                                      );
+                                    }
+                                  }}
+                                  style={{
+                                    background: analyticsPaletteColor(index),
+                                    flexBasis: `${(value / department.total) * 100}%`,
+                                  }}
+                                  title={
+                                    segment?.natureOfWorkId
+                                      ? `Open ${department.departmentName} ${label} cases`
+                                      : undefined
+                                  }
+                                  type="button"
+                                >
+                                  <span>{value}</span>
+                                </button>
+                              ) : null;
+                            })}
+                          </div>
+                        </div>
+                        <strong className="report-department-nature-total">
+                          {department.total}
+                        </strong>
+                      </div>
+                    );
                   })}
                 </div>
-              </div>
-              <strong className="report-department-nature-total">
-                {row.total}
-              </strong>
+              ) : null}
             </div>
           );
         })}
@@ -4278,6 +4404,40 @@ function ReportFilterPanel({
     reportCode !== "completed" &&
     reportCode !== "technical_evaluation_time" &&
     reportCode !== "vendor_awards";
+  const selectedEntityIds = new Set(filters.selectedEntityIds);
+  const filteredDepartmentOptions = selectedEntityIds.size
+    ? departmentOptions.filter(
+        (department) =>
+          department.entityId == null ||
+          selectedEntityIds.has(department.entityId),
+      )
+    : [];
+  const isDepartmentFilterDisabled =
+    dataIsLoading || filters.selectedEntityIds.length === 0;
+
+  function setEntityIds(entityIds: string[]) {
+    filters.setSelectedEntityIds(entityIds);
+    if (!entityIds.length) {
+      filters.setSelectedDepartmentIds([]);
+      return;
+    }
+    const allowedEntityIds = new Set(entityIds);
+    const allowedDepartmentIds = new Set(
+      departmentOptions
+        .filter(
+          (department) =>
+            department.entityId == null ||
+            allowedEntityIds.has(department.entityId),
+        )
+        .map((department) => department.value),
+    );
+    filters.setSelectedDepartmentIds(
+      filters.selectedDepartmentIds.filter((id) =>
+        allowedDepartmentIds.has(id),
+      ),
+    );
+  }
+
   if (reportCode === "rc_po_expiry") {
     return (
       <RcPoReportFilterPanel
@@ -4334,15 +4494,15 @@ function ReportFilterPanel({
           <ReportMultiSelectFilter
             disabled={dataIsLoading}
             label="Entity"
-            onChange={filters.setSelectedEntityIds}
+            onChange={setEntityIds}
             options={entityOptions}
             value={filters.selectedEntityIds}
           />
           <ReportMultiSelectFilter
-            disabled={dataIsLoading}
+            disabled={isDepartmentFilterDisabled}
             label="User Department"
             onChange={filters.setSelectedDepartmentIds}
-            options={departmentOptions}
+            options={filteredDepartmentOptions}
             value={filters.selectedDepartmentIds}
           />
           <ReportMultiSelectFilter
@@ -4572,11 +4732,16 @@ function RcPoReportFilterPanel({
           department.entityId == null ||
           selectedEntityIds.has(department.entityId),
       )
-    : departmentOptions;
+    : [];
+  const isDepartmentFilterDisabled =
+    dataIsLoading || filters.selectedEntityIds.length === 0;
 
   function setEntityIds(entityIds: string[]) {
     filters.setSelectedEntityIds(entityIds);
-    if (!entityIds.length) return;
+    if (!entityIds.length) {
+      filters.setSelectedDepartmentIds([]);
+      return;
+    }
     const allowedEntityIds = new Set(entityIds);
     const allowedDepartmentIds = new Set(
       departmentOptions
@@ -4616,7 +4781,7 @@ function RcPoReportFilterPanel({
             value={filters.selectedEntityIds}
           />
           <ReportMultiSelectFilter
-            disabled={dataIsLoading}
+            disabled={isDepartmentFilterDisabled}
             label="User Department"
             onChange={filters.setSelectedDepartmentIds}
             options={filteredDepartmentOptions}

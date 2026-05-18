@@ -176,7 +176,7 @@ export const REPORT_OPTIONS: Array<{ code: ReportViewKey; description: string; i
   { code: "completed", description: "Closed cases and cycle outcomes.", icon: CheckCircle2, label: "Completed Tender", path: "/reports/completed" },
   { code: "vendor_awards", description: "Vendor award values and savings.", icon: UsersRound, label: "Vendor Awards", path: "/reports/vendor-awards" },
   { code: "stage_time", description: "Stage ageing and lapsed days.", icon: CalendarClock, label: "Stage-Time Lapsed", path: "/reports/stage-time" },
-  { code: "technical_evaluation_pendency", description: "Running tenders pending technical evaluation.", icon: CalendarClock, label: "Technical Evaluation Pendency", path: "/reports/technical-evaluation-pendency" },
+  { code: "technical_evaluation_pendency", description: "Running tenders pending bid evaluation.", icon: CalendarClock, label: "Bid Evaluation Pendency", path: "/reports/technical-evaluation-pendency" },
   { code: "technical_evaluation_time", description: "Completed tender technical evaluation duration.", icon: CheckCircle2, label: "Technical Evaluation Time", path: "/reports/technical-evaluation-time" },
   { code: "rc_po_expiry", description: "Contracts nearing validity end.", icon: CalendarClock, label: "RC/PO Expiry", path: "/reports/rc-po-expiry" },
   { code: "export_jobs", description: "Generated CSV and XLSX files.", icon: FileSpreadsheet, label: "Export Jobs", path: "/reports/export-jobs" },
