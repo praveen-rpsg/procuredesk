@@ -326,7 +326,7 @@ export class ReportingRepository {
           coalesce(sum(f.savings_wrt_pr) filter (where f.status = 'completed'), 0)::text as savings_wrt_pr,
           coalesce(sum(f.savings_wrt_estimate) filter (where f.status = 'completed'), 0)::text as savings_wrt_estimate,
           (avg(f.completed_age_days) filter (where f.status = 'completed'))::text as average_cycle_time_days,
-          (avg(f.running_age_days) filter (where f.status = 'running'))::text as average_running_cycle_time_days
+          (avg(current_date - f.pr_receipt_date) filter (where f.status = 'running' and f.pr_receipt_date is not null))::text as average_running_cycle_time_days
         from reporting.case_facts f
         join procurement.cases c on c.id = f.case_id and c.tenant_id = f.tenant_id and ${caseDeletionPredicate}
         where ${where.join(" and ")}
@@ -396,6 +396,9 @@ export class ReportingRepository {
     const departmentNatureDistribution = await this.db.query<QueryResultRow & AnalyticsDepartmentNatureRow>(
       `
         select
+          f.entity_id,
+          e.code as entity_code,
+          e.name as entity_name,
           f.department_id,
           dep.name as department_name,
           c.nature_of_work_id,
@@ -403,11 +406,12 @@ export class ReportingRepository {
           count(*)::text as case_count
         from reporting.case_facts f
         join procurement.cases c on c.id = f.case_id and c.tenant_id = f.tenant_id and ${caseDeletionPredicate}
+        left join org.entities e on e.id = f.entity_id and e.tenant_id = f.tenant_id
         left join org.departments dep on dep.id = f.department_id and dep.tenant_id = f.tenant_id
         left join catalog.reference_values rv_nature on rv_nature.id = c.nature_of_work_id and rv_nature.tenant_id = c.tenant_id
         where ${where.join(" and ")}
-        group by f.department_id, dep.name, c.nature_of_work_id, rv_nature.label
-        order by count(*) desc, dep.name asc nulls last, rv_nature.label asc nulls last
+        group by f.entity_id, e.code, e.name, f.department_id, dep.name, c.nature_of_work_id, rv_nature.label
+        order by count(*) desc, e.code asc nulls last, e.name asc nulls last, dep.name asc nulls last, rv_nature.label asc nulls last
         limit 80
       `,
       values,
@@ -471,8 +475,25 @@ export class ReportingRepository {
       "owner.full_name",
       "f.status",
       "f.stage_code::text",
-      "f.current_stage_aging_days::text",
-      "f.running_age_days::text",
+      `(
+        case
+          when f.status <> 'running' then null
+          when f.stage_code >= 8 and m.rc_po_award_date is not null then current_date - m.rc_po_award_date
+          when f.stage_code >= 7 and m.nfa_approval_date is not null then current_date - m.nfa_approval_date
+          when f.stage_code >= 6 and m.nfa_submission_date is not null then current_date - m.nfa_submission_date
+          when f.stage_code >= 5 and m.commercial_evaluation_date is not null and m.technical_evaluation_date is not null
+            then current_date - greatest(m.commercial_evaluation_date, m.technical_evaluation_date)
+          when f.stage_code >= 5 and m.commercial_evaluation_date is not null then current_date - m.commercial_evaluation_date
+          when f.stage_code >= 5 and m.technical_evaluation_date is not null then current_date - m.technical_evaluation_date
+          when f.stage_code >= 4 and m.bid_receipt_date is not null then current_date - m.bid_receipt_date
+          when f.stage_code >= 3 and m.nit_publish_date is not null then current_date - m.nit_publish_date
+          when f.stage_code >= 2 and m.nit_approval_date is not null then current_date - m.nit_approval_date
+          when f.stage_code >= 1 and m.nit_initiation_date is not null then current_date - m.nit_initiation_date
+          when f.pr_receipt_date is not null then current_date - f.pr_receipt_date
+          else null
+        end
+      )::text`,
+      "(case when f.status = 'running' and f.pr_receipt_date is not null then current_date - f.pr_receipt_date else null end)::text",
       "f.completed_age_days::text",
       "f.completion_fy",
       "f.pr_value::text",
@@ -541,7 +562,10 @@ export class ReportingRepository {
           f.pr_receipt_date,
           f.rc_po_award_date,
           f.completion_fy,
-          f.running_age_days,
+          case
+            when f.status = 'running' and f.pr_receipt_date is not null then current_date - f.pr_receipt_date
+            else null
+          end as running_age_days,
           case
             when f.status <> 'running' then null
             when f.stage_code >= 8 and m.rc_po_award_date is not null then current_date - m.rc_po_award_date
@@ -577,6 +601,16 @@ export class ReportingRepository {
           m.bid_receipt_date,
           m.technical_evaluation_date,
           m.commercial_evaluation_date,
+          case
+            when m.technical_evaluation_date is null and m.bid_receipt_date is not null
+              then current_date - m.bid_receipt_date
+            else null
+          end as technical_evaluation_pendency_days,
+          case
+            when m.commercial_evaluation_date is null and m.bid_receipt_date is not null
+              then current_date - m.bid_receipt_date
+            else null
+          end as commercial_evaluation_pendency_days,
           case
             when m.technical_evaluation_date is null or m.bid_receipt_date is null then null
             else m.technical_evaluation_date - m.bid_receipt_date
@@ -624,6 +658,7 @@ export class ReportingRepository {
       completedCycleTimeDays: row.completed_age_days,
       completionFy: row.completion_fy,
       commercialEvaluationDate: this.dateOnly(row.commercial_evaluation_date),
+      commercialEvaluationPendencyDays: row.commercial_evaluation_pendency_days,
       currentStageAgingDays: row.current_stage_aging_days,
       delayReason: row.delay_reason,
       departmentName: row.department_name,
@@ -656,6 +691,7 @@ export class ReportingRepository {
       tenderNo: row.tender_no,
       tenderTypeName: row.tender_type_name,
       technicalEvaluationDate: this.dateOnly(row.technical_evaluation_date),
+      technicalEvaluationPendencyDays: row.technical_evaluation_pendency_days,
       technicalEvaluationTimeDays: row.technical_evaluation_time_days,
       tmRemarks: row.tm_remarks,
       totalAwardedAmount: this.numberOrNull(row.total_awarded_amount),
@@ -671,7 +707,7 @@ export class ReportingRepository {
     return this.caseReport({
       extraWhere: [
         "f.stage_code = 4",
-        "m.technical_evaluation_date is null",
+        "(m.technical_evaluation_date is null or m.commercial_evaluation_date is null)",
       ],
       filters: input.filters,
       includeDelayFields: true,
@@ -792,8 +828,25 @@ export class ReportingRepository {
       "tt.name",
       "owner.full_name",
       "f.stage_code::text",
-      "f.current_stage_aging_days::text",
-      "f.running_age_days::text",
+      `(
+        case
+          when f.status <> 'running' then null
+          when f.stage_code >= 8 and m.rc_po_award_date is not null then current_date - m.rc_po_award_date
+          when f.stage_code >= 7 and m.nfa_approval_date is not null then current_date - m.nfa_approval_date
+          when f.stage_code >= 6 and m.nfa_submission_date is not null then current_date - m.nfa_submission_date
+          when f.stage_code >= 5 and m.commercial_evaluation_date is not null and m.technical_evaluation_date is not null
+            then current_date - greatest(m.commercial_evaluation_date, m.technical_evaluation_date)
+          when f.stage_code >= 5 and m.commercial_evaluation_date is not null then current_date - m.commercial_evaluation_date
+          when f.stage_code >= 5 and m.technical_evaluation_date is not null then current_date - m.technical_evaluation_date
+          when f.stage_code >= 4 and m.bid_receipt_date is not null then current_date - m.bid_receipt_date
+          when f.stage_code >= 3 and m.nit_publish_date is not null then current_date - m.nit_publish_date
+          when f.stage_code >= 2 and m.nit_approval_date is not null then current_date - m.nit_approval_date
+          when f.stage_code >= 1 and m.nit_initiation_date is not null then current_date - m.nit_initiation_date
+          when f.pr_receipt_date is not null then current_date - f.pr_receipt_date
+          else null
+        end
+      )::text`,
+      "(case when f.status = 'running' and f.pr_receipt_date is not null then current_date - f.pr_receipt_date else null end)::text",
       "f.completed_age_days::text",
       "f.priority_case::text",
       "m.nit_initiation_date::text",
@@ -824,7 +877,10 @@ export class ReportingRepository {
           owner.full_name as owner_full_name,
           f.priority_case,
           f.stage_code,
-          f.running_age_days,
+          case
+            when f.status = 'running' and f.pr_receipt_date is not null then current_date - f.pr_receipt_date
+            else null
+          end as running_age_days,
           case
             when f.status <> 'running' then null
             when f.stage_code >= 8 and m.rc_po_award_date is not null then current_date - m.rc_po_award_date
@@ -1964,6 +2020,9 @@ function mapAnalyticsDepartmentNatureRow(row: AnalyticsDepartmentNatureRow) {
     caseCount: Number(row.case_count),
     departmentId: row.department_id,
     departmentName: row.department_name ?? "Unspecified",
+    entityCode: row.entity_code,
+    entityId: row.entity_id,
+    entityName: row.entity_name,
     natureOfWorkId: row.nature_of_work_id,
     natureOfWorkName: row.nature_of_work_name ?? "Unspecified",
   };
@@ -2022,6 +2081,9 @@ type AnalyticsDepartmentNatureRow = {
   case_count: string;
   department_id: string | null;
   department_name: string | null;
+  entity_code: string | null;
+  entity_id: string;
+  entity_name: string | null;
   nature_of_work_id: string | null;
   nature_of_work_name: string | null;
 };

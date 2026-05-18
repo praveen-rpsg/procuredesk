@@ -326,7 +326,7 @@ async function queryExportRows(input: {
         : "";
   const technicalEvaluationPendencyClause =
     input.reportCode === "technical_evaluation_pendency"
-      ? "and f.stage_code = 4 and m.technical_evaluation_date is null"
+      ? "and f.stage_code = 4 and (m.technical_evaluation_date is null or m.commercial_evaluation_date is null)"
       : "";
   const values: unknown[] = [input.tenantId];
   const where = [
@@ -372,10 +372,13 @@ async function queryExportRows(input: {
         f.is_delayed,
         case
           when c.tentative_completion_date is null or f.pr_receipt_date is null then null
-          when coalesce(f.completed_age_days, f.running_age_days) is null then null
-          else round((coalesce(f.completed_age_days, f.running_age_days)::numeric / greatest((c.tentative_completion_date - f.pr_receipt_date), 1)) * 100)
+          when coalesce(f.completed_age_days, case when f.status = 'running' and f.pr_receipt_date is not null then current_date - f.pr_receipt_date else null end) is null then null
+          else round((coalesce(f.completed_age_days, case when f.status = 'running' and f.pr_receipt_date is not null then current_date - f.pr_receipt_date else null end)::numeric / greatest((c.tentative_completion_date - f.pr_receipt_date), 1)) * 100)
         end as percent_time_elapsed,
-        f.running_age_days,
+        case
+          when f.status = 'running' and f.pr_receipt_date is not null then current_date - f.pr_receipt_date
+          else null
+        end as running_age_days,
         case
           when f.status <> 'running' then null
           when f.stage_code >= 8 and m.rc_po_award_date is not null then current_date - m.rc_po_award_date
@@ -398,6 +401,16 @@ async function queryExportRows(input: {
         m.bid_receipt_date,
         m.technical_evaluation_date,
         m.commercial_evaluation_date,
+        case
+          when m.technical_evaluation_date is null and m.bid_receipt_date is not null
+            then current_date - m.bid_receipt_date
+          else null
+        end as technical_evaluation_pendency_days,
+        case
+          when m.commercial_evaluation_date is null and m.bid_receipt_date is not null
+            then current_date - m.bid_receipt_date
+          else null
+        end as commercial_evaluation_pendency_days,
         case
           when m.technical_evaluation_date is null or m.bid_receipt_date is null then null
           else m.technical_evaluation_date - m.bid_receipt_date
@@ -449,8 +462,12 @@ async function queryExportRows(input: {
       "PR Receipt Date": formatExportDate(row.pr_receipt_date),
       "Participated Bidder Count": row.bidders_participated ?? null,
       "Running Tender Age (Days)": row.running_age_days ?? null,
-      "Technical Evaluation Pendency (days)": row.current_stage_aging_days ?? null,
-      "Commercial Evaluation Date": formatExportDate(row.commercial_evaluation_date),
+      "Technical Evaluation Pendency (days)": row.technical_evaluation_date
+        ? "Completed"
+        : row.technical_evaluation_pendency_days ?? null,
+      "Commercial Evaluation Pendency (days)": row.commercial_evaluation_date
+        ? "Completed"
+        : row.commercial_evaluation_pendency_days ?? null,
     }));
   }
   if (input.reportCode === "technical_evaluation_time") {
@@ -469,7 +486,6 @@ async function queryExportRows(input: {
       "Participated Bidder Count": row.bidders_participated ?? null,
       "Qualified Bidder Count": row.qualified_bidders ?? null,
       "Days taken for Technical Evaluation": row.technical_evaluation_time_days ?? null,
-      "Commercial Evaluation Date": formatExportDate(row.commercial_evaluation_date),
       "Completed Tender Cycle Time": row.completed_cycle_time_days ?? null,
     }));
   }
@@ -634,7 +650,10 @@ async function queryStageTimeExport(input: {
         tt.name as tender_type,
         owner.full_name as tender_owner,
         f.stage_code,
-        f.running_age_days,
+        case
+          when f.status = 'running' and f.pr_receipt_date is not null then current_date - f.pr_receipt_date
+          else null
+        end as running_age_days,
         case
           when f.status <> 'running' then null
           when f.stage_code >= 8 and m.rc_po_award_date is not null then current_date - m.rc_po_award_date

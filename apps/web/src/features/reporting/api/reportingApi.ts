@@ -50,6 +50,9 @@ export type ReportingAnalytics = {
     caseCount: number;
     departmentId: string | null;
     departmentName: string;
+    entityCode: string | null;
+    entityId: string;
+    entityName: string | null;
     natureOfWorkId: string | null;
     natureOfWorkName: string;
   }>;
@@ -144,6 +147,7 @@ export type ReportCaseRow = {
   departmentName: string | null;
   desiredStageCode: number | null;
   commercialEvaluationDate: string | null;
+  commercialEvaluationPendencyDays: number | null;
   entityCode: string | null;
   entityId: string;
   entityName: string | null;
@@ -172,6 +176,7 @@ export type ReportCaseRow = {
   natureOfWorkName: string | null;
   tenderTypeName: string | null;
   technicalEvaluationDate: string | null;
+  technicalEvaluationPendencyDays: number | null;
   technicalEvaluationTimeDays: number | null;
   tmRemarks: string | null;
   totalAwardedAmount: number | null;
