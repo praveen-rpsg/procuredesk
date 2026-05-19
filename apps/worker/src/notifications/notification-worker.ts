@@ -43,7 +43,7 @@ export async function processNotificationJob(
         where j.tenant_id = $1
           and j.id = $2
           and j.status in ('queued', 'failed')
-        for update
+        for update of j
       `,
       [payload.tenantId, payload.notificationJobId],
     );
