@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { ReportCode, ReportQueryParams } from "../api/reportingApi";
 import {
@@ -89,6 +89,11 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
   const [statusFilter, setStatusFilter] = useState<ReportStatusFilter>("all");
   const [trackStatuses, setTrackStatuses] = useState<TrackStatusValue[]>([]);
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 350);
+
+  useEffect(() => {
+    if (selectedEntityIds.length || !selectedDepartmentIds.length) return;
+    setSelectedDepartmentIds([]);
+  }, [selectedDepartmentIds.length, selectedEntityIds.length]);
 
   const includeStatus = reportCode === "tender_details" || reportCode === "stage_time";
   const includeCompletionFilters =
