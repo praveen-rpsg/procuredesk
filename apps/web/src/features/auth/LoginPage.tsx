@@ -8,7 +8,7 @@ import { FormField, TextInput } from "../../shared/ui/form/FormField";
 
 export function LoginPage() {
   const { login } = useAuth();
-  const [tenantCode, setTenantCode] = useState("");
+  const [tenantCode, setTenantCode] = useState("RPSG");
   const [usernameOrEmail, setUsernameOrEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
