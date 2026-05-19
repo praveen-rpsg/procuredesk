@@ -684,7 +684,6 @@ export class ProcurementCaseRepository {
                   c.tentative_completion_date is not null
                   and c.tentative_completion_date < current_date
                 )
-                or c.priority_case
                 or (
                   (c.tentative_completion_date is null or c.tentative_completion_date >= current_date)
                   and c.desired_stage_code is not null

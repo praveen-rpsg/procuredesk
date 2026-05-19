@@ -3,6 +3,7 @@ dist/
 build/
 .turbo/
 .cache/
+.claude/
 .DS_Store
 .env
 .env.*

@@ -7,7 +7,7 @@ export type AppLocation = {
   search: string;
 };
 
-export function navigateToAppPath(path: string, options: { replace?: boolean } = {}) {
+export function navigateToAppPath(path: string, options: { preserveScroll?: boolean; replace?: boolean } = {}) {
   const nextUrl = normalizeTargetPath(path);
   const currentUrl = `${window.location.pathname}${window.location.search}`;
   if (nextUrl === currentUrl) return;
@@ -16,6 +16,9 @@ export function navigateToAppPath(path: string, options: { replace?: boolean } =
     window.history.replaceState({}, "", nextUrl);
   } else {
     window.history.pushState({}, "", nextUrl);
+  }
+  if (!options.preserveScroll) {
+    window.scrollTo({ left: 0, top: 0 });
   }
   window.dispatchEvent(new Event(appLocationChangeEvent));
 }
