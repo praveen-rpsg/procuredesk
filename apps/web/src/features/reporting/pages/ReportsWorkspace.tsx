@@ -84,6 +84,7 @@ import {
   type CaseSummary,
 } from "../../procurement-cases/api/casesApi";
 import { formatCaseStage } from "../../../shared/utils/caseStage";
+import { formatDateOnly } from "../../../shared/utils/dateOnly";
 import { Button } from "../../../shared/ui/button/Button";
 import {
   navigateToAppPath,
@@ -3127,7 +3128,7 @@ function formatNullableDays(value: number | null | undefined) {
 }
 
 function formatDateCell(value: string | null | undefined) {
-  return value ?? "-";
+  return formatDateOnly(value);
 }
 
 function toggleReportFilterValue(

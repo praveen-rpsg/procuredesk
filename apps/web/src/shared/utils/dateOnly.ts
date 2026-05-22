@@ -1,6 +1,5 @@
 const dateOnlyPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
 const dateOnlyPrefixPattern = /^(\d{4}-\d{2}-\d{2})/;
-const shortMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export type DateOnlyParts = {
   day: number;
@@ -51,7 +50,7 @@ export function formatDateOnly(value: string | null | undefined, emptyValue = "-
   if (!dateValue) return value ? String(value) : emptyValue;
   const parts = parseDateOnlyParts(dateValue);
   if (!parts) return emptyValue;
-  return `${parts.day} ${shortMonths[parts.month - 1]} ${parts.year}`;
+  return `${String(parts.day).padStart(2, "0")}/${String(parts.month).padStart(2, "0")}/${parts.year}`;
 }
 
 export function dateOnlyToLocalDate(value: string | null | undefined): Date | null {
