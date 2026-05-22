@@ -35,6 +35,7 @@ import { canCreateCase, canRestoreCase } from "../../../shared/auth/permissions"
 import { useDebouncedValue } from "../../../shared/hooks/useDebouncedValue";
 import { navigateToAppPath, useAppLocation } from "../../../shared/routing/appLocation";
 import { formatCaseStage } from "../../../shared/utils/caseStage";
+import { formatDateOnly } from "../../../shared/utils/dateOnly";
 import { Button } from "../../../shared/ui/button/Button";
 import { Drawer } from "../../../shared/ui/drawer/Drawer";
 import { ErrorState } from "../../../shared/ui/error-state/ErrorState";
@@ -535,7 +536,7 @@ function CasesWorkspaceList() {
         render: (row) => <StatusBadge tone={row.status === "completed" ? "success" : "warning"}>{row.status}</StatusBadge>,
       },
       { key: "completionFy", filterOptions: completionFyFilterOptions, filterValue: (row) => row.completionFy ?? "-", header: "Comp. FY", render: (row) => row.completionFy ?? "-" },
-      { key: "updated", header: "Updated", render: (row) => new Date(row.updatedAt).toLocaleDateString() },
+      { key: "updated", header: "Updated", render: (row) => formatDateOnly(row.updatedAt) },
       {
         key: "actions",
         header: "Actions",

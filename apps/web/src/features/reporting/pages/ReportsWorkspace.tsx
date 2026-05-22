@@ -84,6 +84,7 @@ import {
   type CaseSummary,
 } from "../../procurement-cases/api/casesApi";
 import { formatCaseStage } from "../../../shared/utils/caseStage";
+import { formatDateOnly } from "../../../shared/utils/dateOnly";
 import { Button } from "../../../shared/ui/button/Button";
 import {
   navigateToAppPath,
@@ -848,6 +849,11 @@ export function ReportsWorkspace() {
         header: "LOI Award Date",
         render: (row) => formatDateCell(row.loiAwardDate),
       },
+      {
+        key: "tmRemarks",
+        header: "Tender Owner Remarks",
+        render: (row) => row.tmRemarks ?? "-",
+      },
     ],
     [canViewDelay, caseColumnFilterOptions, filters.amountUnit],
   );
@@ -947,6 +953,11 @@ export function ReportsWorkspace() {
         key: "loiDate",
         header: "LOI Award Date",
         render: (row) => formatDateCell(row.loiAwardDate),
+      },
+      {
+        key: "tmRemarks",
+        header: "Tender Owner Remarks",
+        render: (row) => row.tmRemarks ?? "-",
       },
     ],
     [canViewDelay, caseColumnFilterOptions, filters.amountUnit],
@@ -3117,7 +3128,7 @@ function formatNullableDays(value: number | null | undefined) {
 }
 
 function formatDateCell(value: string | null | undefined) {
-  return value ?? "-";
+  return formatDateOnly(value);
 }
 
 function toggleReportFilterValue(

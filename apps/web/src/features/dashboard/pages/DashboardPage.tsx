@@ -500,6 +500,11 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         </div>
       ),
     },
+    {
+      key: "tmRemarks",
+      header: "Tender Owner Remarks",
+      render: (row) => row.tmRemarks ?? "-",
+    },
   ];
   const dashboardActions = [
     {

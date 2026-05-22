@@ -456,7 +456,7 @@ export class PlanningRepository {
             p.rc_po_amount,
             p.rc_po_award_date,
             p.rc_po_validity_date,
-            coalesce(p.tentative_tendering_date, p.rc_po_award_date + 150) as tentative_tendering_date,
+            coalesce(p.tentative_tendering_date, p.rc_po_validity_date - 150) as tentative_tendering_date,
             p.tender_floated_or_not_required
           from procurement.rc_po_plans p
           left join procurement.cases c on c.id = p.source_case_id and c.tenant_id = p.tenant_id
@@ -475,7 +475,7 @@ export class PlanningRepository {
             a.po_value as rc_po_amount,
             a.po_award_date as rc_po_award_date,
             a.po_validity_date as rc_po_validity_date,
-            coalesce(a.tentative_tendering_date, a.po_award_date + 150) as tentative_tendering_date,
+            coalesce(a.tentative_tendering_date, a.po_validity_date - 150) as tentative_tendering_date,
             a.tender_floated_or_not_required
           from procurement.case_awards a
           join procurement.cases c on c.id = a.case_id and c.tenant_id = a.tenant_id and c.deleted_at is null
@@ -557,7 +557,7 @@ export class PlanningRepository {
           p.rc_po_amount,
           p.rc_po_award_date,
           p.rc_po_validity_date,
-          coalesce(p.tentative_tendering_date, p.rc_po_award_date + 150),
+          coalesce(p.tentative_tendering_date, p.rc_po_validity_date - 150),
           p.tender_floated_or_not_required,
           coalesce(p.deleted_at, c.deleted_at),
           'manual_plan',

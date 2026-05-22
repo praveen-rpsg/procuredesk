@@ -1343,8 +1343,10 @@ function csvEscape(value: unknown): string {
 
 function formatExportDate(value: unknown): string | null {
   if (value == null) return null;
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
-  return String(value).slice(0, 10);
+  const iso = value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!match) return iso;
+  return `${match[3]}/${match[2]}/${match[1]}`;
 }
 
 function amountToLakhs(value: unknown): number | null {
