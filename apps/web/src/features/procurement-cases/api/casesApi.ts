@@ -30,6 +30,7 @@ export type CaseListItem = {
   tenderName: string | null;
   tenderTypeName: string | null;
   tentativeCompletionDate: string | null;
+  tmRemarks: string | null;
   updatedAt: string;
 };
 

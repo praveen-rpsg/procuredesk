@@ -70,6 +70,7 @@ export type CaseListItem = {
   tenderName: string | null;
   tenderTypeName: string | null;
   tentativeCompletionDate: string | null;
+  tmRemarks: string | null;
   updatedAt: string;
 };
 
@@ -540,6 +541,7 @@ export class ProcurementCaseRepository {
       tenderName: row.tender_name,
       tenderTypeName: row.tender_type_name,
       tentativeCompletionDate: this.dateOnly(row.tentative_completion_date),
+      tmRemarks: row.tm_remarks,
       updatedAt: row.updated_at.toISOString(),
     }));
   }
@@ -633,6 +635,7 @@ export class ProcurementCaseRepository {
       tenderName: row.tender_name,
       tenderTypeName: null,
       tentativeCompletionDate: this.dateOnly(row.tentative_completion_date),
+      tmRemarks: null,
       updatedAt: row.updated_at.toISOString(),
       deletedAt: row.deleted_at.toISOString(),
       deleteReason: row.delete_reason,
