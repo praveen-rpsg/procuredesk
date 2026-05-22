@@ -848,6 +848,11 @@ export function ReportsWorkspace() {
         header: "LOI Award Date",
         render: (row) => formatDateCell(row.loiAwardDate),
       },
+      {
+        key: "tmRemarks",
+        header: "Tender Owner Remarks",
+        render: (row) => row.tmRemarks ?? "-",
+      },
     ],
     [canViewDelay, caseColumnFilterOptions, filters.amountUnit],
   );
@@ -947,6 +952,11 @@ export function ReportsWorkspace() {
         key: "loiDate",
         header: "LOI Award Date",
         render: (row) => formatDateCell(row.loiAwardDate),
+      },
+      {
+        key: "tmRemarks",
+        header: "Tender Owner Remarks",
+        render: (row) => row.tmRemarks ?? "-",
       },
     ],
     [canViewDelay, caseColumnFilterOptions, filters.amountUnit],
