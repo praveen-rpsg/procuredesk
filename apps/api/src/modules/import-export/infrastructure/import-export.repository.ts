@@ -1017,6 +1017,26 @@ export class ImportExportRepository {
            and (lower(u.username) = lower(n.owner_username) or lower(u.email) = lower(n.owner_username))
            and u.deleted_at is null
         ),
+        derived as (
+          select
+            r.*,
+            case when r.rc_po_award_date is not null then 'completed' else 'running' end as case_status,
+            case
+              when r.rc_po_award_date is not null then null
+              when r.pr_receipt_date is null or r.tentative_completion_date is null then null
+              when r.tentative_completion_date <= r.pr_receipt_date then null
+              when ((current_date - r.pr_receipt_date)::numeric / nullif((r.tentative_completion_date - r.pr_receipt_date), 0)) * 100 < 8 then 0
+              when ((current_date - r.pr_receipt_date)::numeric / nullif((r.tentative_completion_date - r.pr_receipt_date), 0)) * 100 < 13 then 1
+              when ((current_date - r.pr_receipt_date)::numeric / nullif((r.tentative_completion_date - r.pr_receipt_date), 0)) * 100 < 17 then 2
+              when ((current_date - r.pr_receipt_date)::numeric / nullif((r.tentative_completion_date - r.pr_receipt_date), 0)) * 100 < 52 then 3
+              when ((current_date - r.pr_receipt_date)::numeric / nullif((r.tentative_completion_date - r.pr_receipt_date), 0)) * 100 < 68 then 4
+              when ((current_date - r.pr_receipt_date)::numeric / nullif((r.tentative_completion_date - r.pr_receipt_date), 0)) * 100 < 88 then 5
+              when ((current_date - r.pr_receipt_date)::numeric / nullif((r.tentative_completion_date - r.pr_receipt_date), 0)) * 100 < 97 then 6
+              when ((current_date - r.pr_receipt_date)::numeric / nullif((r.tentative_completion_date - r.pr_receipt_date), 0)) * 100 < 100 then 7
+              else 8
+            end as desired_stage_code
+          from resolved r
+        ),
         upserted as (
           insert into procurement.cases (
             tenant_id, pr_id, entity_id, department_id, tender_type_id,
@@ -1030,10 +1050,13 @@ export class ImportExportRepository {
             $1, r.pr_id, r.entity_id, r.department_id, r.tender_type_id,
             r.pr_receiving_medium_id, r.budget_type_id, r.nature_of_work_id, r.owner_user_id,
             $3, $3,
-            case when r.rc_po_award_date is not null then 'completed' else 'running' end,
+            r.case_status,
             r.stage_code,
-            null,
-            false,
+            r.desired_stage_code,
+            case
+              when r.desired_stage_code is not null and r.stage_code < r.desired_stage_code then true
+              else false
+            end,
             r.priority_case,
             r.cpc_involved,
             r.pr_scheme_no,
@@ -1043,7 +1066,7 @@ export class ImportExportRepository {
             r.tender_name,
             r.tender_no,
             r.tentative_completion_date
-          from resolved r
+          from derived r
           on conflict (tenant_id, pr_id) where deleted_at is null
           do update set
             entity_id = excluded.entity_id,
@@ -1090,7 +1113,7 @@ export class ImportExportRepository {
           end,
           now()
         from upserted u
-        join resolved r on r.pr_id = u.pr_id
+        join derived r on r.pr_id = u.pr_id
         on conflict (case_id) do update set
           pr_value = excluded.pr_value,
           estimate_benchmark = excluded.estimate_benchmark,
