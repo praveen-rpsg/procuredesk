@@ -193,6 +193,7 @@ export function CaseDetailPanel({
 
       <dl className="detail-grid case-preview-metrics">
         <Metric label="Case ID" value={kase.prId} />
+        <Metric label="Contract Type" value={kase.contractType ?? "-"} />
         <Metric
           label="Stage"
           value={formatCaseStageTransition(
@@ -236,6 +237,7 @@ export function CaseDetailPanel({
             />
             <CompactMetric label="Scheme" value={kase.prSchemeNo ?? "-"} />
             <CompactMetric label="Tender No" value={kase.tenderNo ?? "-"} />
+            <CompactMetric label="Contract Type" value={kase.contractType ?? "-"} />
             <CompactMetric
               label="CPC"
               value={
