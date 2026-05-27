@@ -6,7 +6,14 @@ alter table ops.notification_schedules
 
 alter table ops.notification_schedules
   add constraint notification_schedules_recipient_mode_check check (
-    recipient_mode in ('owner', 'entity_admin', 'group_viewer', 'owner_or_entity', 'explicit')
+    recipient_mode in (
+      'owner',
+      'entity_admin',
+      'entity_admin_and_group_viewer',
+      'group_viewer',
+      'owner_or_entity',
+      'explicit'
+    )
   );
 
 update ops.notification_schedules
