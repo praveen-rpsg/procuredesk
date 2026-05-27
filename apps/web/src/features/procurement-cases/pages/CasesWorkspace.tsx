@@ -27,6 +27,7 @@ import {
   listDeletedCases,
   restoreCase,
   type CaseListItem,
+  type ContractType,
   type DeletedCaseListItem,
 } from "../api/casesApi";
 import { CaseDetailPage } from "./CaseDetailPage";
@@ -56,6 +57,7 @@ type CaseColumnKey =
   | "actions"
   | "approvedAmount"
   | "completionFy"
+  | "contractType"
   | "cycleTime"
   | "department"
   | "description"
@@ -100,9 +102,15 @@ const trackStatusFilterOptions = [
   { label: "On Track", value: "on_track" },
 ] as const;
 
+const contractTypeOptions = [
+  { label: "PO", value: "PO" },
+  { label: "RC", value: "RC" },
+] satisfies Array<{ label: string; value: ContractType }>;
+
 type CaseViewState = {
   budgetTypeIds: string[];
   completionFys: string[];
+  contractTypes: ContractType[];
   cpcInvolved: BooleanFilter;
   dateFrom: string;
   dateTo: string;
@@ -146,6 +154,7 @@ const defaultVisibleColumnKeys: CaseColumnKey[] = [
   "prId",
   "description",
   "entity",
+  "contractType",
   "tenderType",
   "department",
   "owner",
@@ -190,6 +199,7 @@ function CasesWorkspaceList() {
   const activeSection = casesSectionFromPath(location.pathname) ?? "active";
   const [budgetTypeIds, setBudgetTypeIds] = useState<string[]>([]);
   const [completionFys, setCompletionFys] = useState<string[]>([]);
+  const [contractTypes, setContractTypes] = useState<ContractType[]>([]);
   const [cpcInvolved, setCpcInvolved] = useState<BooleanFilter>("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -244,6 +254,7 @@ function CasesWorkspaceList() {
     () => ({
       budgetTypeIds: budgetTypeIds.length ? budgetTypeIds : undefined,
       completionFys: completionFys.length ? completionFys : undefined,
+      contractTypes: contractTypes.length ? contractTypes : undefined,
       cpcInvolved: booleanFilter(cpcInvolved),
       cursor: currentCursor,
       dateFrom: dateFrom || undefined,
@@ -267,6 +278,7 @@ function CasesWorkspaceList() {
     [
       budgetTypeIds,
       completionFys,
+      contractTypes,
       cpcInvolved,
       currentCursor,
       dateFrom,
@@ -292,6 +304,7 @@ function CasesWorkspaceList() {
   }, [
     budgetTypeIds,
     completionFys,
+    contractTypes,
     cpcInvolved,
     dateFrom,
     dateTo,
@@ -338,6 +351,7 @@ function CasesWorkspaceList() {
     const nextPriorityCase = toBooleanFilter(params.get("priorityCase") ?? "");
     const nextBudgetTypeIds = csvParam(params.get("budgetTypeIds"));
     const nextCompletionFys = csvParam(params.get("completionFys"));
+    const nextContractTypes = csvParam(params.get("contractTypes")).filter(isContractTypeOption);
     const nextCpcInvolved = toBooleanFilter(params.get("cpcInvolved") ?? "");
     const nextDepartmentIds = csvParam(params.get("departmentIds"));
     const nextEntityIds = csvParam(params.get("entityIds"));
@@ -358,6 +372,7 @@ function CasesWorkspaceList() {
 
     setBudgetTypeIds(nextBudgetTypeIds);
     setCompletionFys(nextCompletionFys);
+    setContractTypes(nextContractTypes);
     setCpcInvolved(nextCpcInvolved);
     setDepartmentIds(nextDepartmentIds);
     setStatusValues(nextStatus ? [nextStatus as StatusFilter] : []);
@@ -427,6 +442,7 @@ function CasesWorkspaceList() {
   const activeFilterCount = countActiveFilters([
     ...budgetTypeIds,
     ...completionFys,
+    ...contractTypes,
     cpcInvolved,
     dateFrom,
     dateTo,
@@ -460,6 +476,9 @@ function CasesWorkspaceList() {
     if (tenderTypeIds.length) {
       chips.push({ key: "tenderType", label: `Type: ${labelSelected(tenderTypeIds, catalog.data?.tenderTypes.map((t) => ({ label: t.name, value: t.id })) ?? [])}`, onClear: () => setTenderTypeIds([]) });
     }
+    if (contractTypes.length) {
+      chips.push({ key: "contractType", label: `Contract: ${contractTypes.join(", ")}`, onClear: () => setContractTypes([]) });
+    }
     if (budgetTypeIds.length) {
       chips.push({ key: "budget", label: `Budget: ${labelSelected(budgetTypeIds, budgetTypes.map((b) => ({ label: b.label, value: b.id })))}`, onClear: () => setBudgetTypeIds([]) });
     }
@@ -477,7 +496,7 @@ function CasesWorkspaceList() {
     if (stageCodes.length) chips.push({ key: "stage", label: `Stage: ${stageCodes.map((stageCode) => formatCaseStage(Number(stageCode))).join(", ")}`, onClear: () => setStageCodes([]) });
     if (valueSlabs.length) chips.push({ key: "valueSlab", label: `Value: ${labelSelected(valueSlabs, valueSlabOptions.filter((o) => o.value) as Array<{ label: string; value: string }> )}`, onClear: () => setValueSlabs([]) });
     return chips;
-  }, [budgetTypeIds, budgetTypes, catalog.data, completionFys, cpcInvolved, dateFrom, dateTo, departmentIds, departments.data, entityIds, entities.data, loiAwarded, natureOfWork, natureOfWorkIds, ownerUserId, ownerOptions, prReceiptMonths, priorityCase, stageCodes, statusValues, tenderTypeIds, trackStatuses, valueSlabs]);
+  }, [budgetTypeIds, budgetTypes, catalog.data, completionFys, contractTypes, cpcInvolved, dateFrom, dateTo, departmentIds, departments.data, entityIds, entities.data, loiAwarded, natureOfWork, natureOfWorkIds, ownerUserId, ownerOptions, prReceiptMonths, priorityCase, stageCodes, statusValues, tenderTypeIds, trackStatuses, valueSlabs]);
   const caseRows = cases.data ?? [];
   const entityFilterOptions = useMemo(
     () => uniqueFilterOptions(caseRows, (row) => entityNameById.get(row.entityId) ?? row.entityId),
@@ -485,6 +504,10 @@ function CasesWorkspaceList() {
   );
   const tenderTypeFilterOptions = useMemo(
     () => uniqueFilterOptions(caseRows, (row) => row.tenderTypeName ?? "-"),
+    [caseRows],
+  );
+  const contractTypeFilterOptions = useMemo(
+    () => uniqueFilterOptions(caseRows, (row) => row.contractType ?? "-"),
     [caseRows],
   );
   const departmentFilterOptions = useMemo(
@@ -513,6 +536,7 @@ function CasesWorkspaceList() {
       { key: "prId", header: "Case ID", render: (row) => row.prId },
       { key: "description", header: "Description", render: (row) => row.prDescription ?? row.tenderName ?? "-" },
       { key: "entity", filterOptions: entityFilterOptions, filterValue: (row) => entityNameById.get(row.entityId) ?? row.entityId, header: "Entity", render: (row) => entityNameById.get(row.entityId) ?? row.entityId },
+      { key: "contractType", filterOptions: contractTypeFilterOptions, filterValue: (row) => row.contractType ?? "-", header: "Contract Type", render: (row) => row.contractType ?? "-" },
       { key: "tenderType", filterOptions: tenderTypeFilterOptions, filterValue: (row) => row.tenderTypeName ?? "-", header: "Type", render: (row) => row.tenderTypeName ?? "-" },
       { key: "department", filterOptions: departmentFilterOptions, filterValue: (row) => row.departmentName ?? "-", header: "Dept", render: (row) => row.departmentName ?? "-" },
       { key: "owner", filterOptions: ownerFilterOptions, filterValue: (row) => row.ownerFullName ?? "-", header: "Tender Owner", render: (row) => row.ownerFullName ?? "-" },
@@ -556,7 +580,7 @@ function CasesWorkspaceList() {
         ),
       },
     ],
-    [completionFyFilterOptions, departmentFilterOptions, entityFilterOptions, entityNameById, normativeStageFilterOptions, ownerFilterOptions, stageFilterOptions, tenderTypeFilterOptions],
+    [completionFyFilterOptions, contractTypeFilterOptions, departmentFilterOptions, entityFilterOptions, entityNameById, normativeStageFilterOptions, ownerFilterOptions, stageFilterOptions, tenderTypeFilterOptions],
   );
   const columns = useMemo(
     () => allColumns.filter((column) => visibleColumnKeys.includes(column.key)),
@@ -701,6 +725,12 @@ function CasesWorkspaceList() {
               onChange={setTenderTypeIds}
               options={(catalog.data?.tenderTypes ?? []).map((tenderType) => ({ label: tenderType.name, value: tenderType.id }))}
               value={tenderTypeIds}
+            />
+            <MultiSelectFilter
+              label="Contract Type"
+              onChange={(values) => setContractTypes(values.filter(isContractTypeOption))}
+              options={contractTypeOptions}
+              value={contractTypes}
             />
             <MultiSelectFilter
               disabled={catalog.isLoading}
@@ -953,6 +983,7 @@ function CasesWorkspaceList() {
   function clearFilters() {
     setBudgetTypeIds([]);
     setCompletionFys([]);
+    setContractTypes([]);
     setCpcInvolved("");
     setDateFrom("");
     setDateTo("");
@@ -976,6 +1007,7 @@ function CasesWorkspaceList() {
     return {
       budgetTypeIds,
       completionFys,
+      contractTypes,
       cpcInvolved,
       dateFrom,
       dateTo,
@@ -1010,6 +1042,7 @@ function CasesWorkspaceList() {
   function applySavedView(view: SavedCaseView) {
     setBudgetTypeIds(view.state.budgetTypeIds ?? []);
     setCompletionFys(view.state.completionFys ?? []);
+    setContractTypes(view.state.contractTypes ?? []);
     setCpcInvolved(view.state.cpcInvolved);
     setDateFrom(view.state.dateFrom);
     setDateTo(view.state.dateTo);
@@ -1184,6 +1217,7 @@ function hasCaseUrlFilters(params: URLSearchParams): boolean {
   return [
     "budgetTypeIds",
     "completionFys",
+    "contractTypes",
     "cpcInvolved",
     "departmentIds",
     "entityIds",
@@ -1206,6 +1240,10 @@ function hasCaseUrlFilters(params: URLSearchParams): boolean {
 
 function toStatusFilter(value: string | null): string {
   return value === "running" || value === "completed" ? value : "";
+}
+
+function isContractTypeOption(value: string): value is ContractType {
+  return value === "PO" || value === "RC";
 }
 
 function toTrackStatusFilter(value: string): TrackStatusFilter {

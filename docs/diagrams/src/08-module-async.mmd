@@ -1,0 +1,27 @@
+flowchart LR
+  subgraph API["NestJS API Process"]
+    IA[Identity & Access]
+    PC[Procurement Cases]
+    AW[Awards / Planning]
+    RP[Reporting]
+    IE[Import / Export]
+    NT[Notifications / Audit]
+  end
+  PC -- in-process DI --> AW
+  PC -- in-process DI --> RP
+  IA -- guards --> PC
+  PC --> OBX[(ops.outbox_events\nsame TX)]
+  IE --> OBX
+  AW --> OBX
+  OBX --> DSP[Outbox Dispatcher\npoll 10s · max 5 retries]
+  DSP --> Q1[[imports]]
+  DSP --> Q2[[exports]]
+  DSP --> Q3[[notifications]]
+  DSP --> Q4[[reporting-projections]]
+  Q1 --> WK[BullMQ Workers]
+  Q2 --> WK
+  Q3 --> WK
+  Q4 --> WK
+  WK -- permanent failure --> DLQ[(ops.dead_letter_events)]
+  WK --> GR[Microsoft Graph email]
+  WK --> RPF[(reporting.* projections)]

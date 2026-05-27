@@ -39,6 +39,7 @@ type CaseListCursor = {
 
 export type CreateCaseCommand = {
   budgetTypeId?: string | null;
+  contractType?: "PO" | "RC" | null;
   cpcInvolved?: boolean | null;
   departmentId?: string | null;
   entityId: string;
@@ -64,6 +65,7 @@ export type UpdateCaseCommand = {
   priorityCase?: boolean;
   tenderName?: string | null;
   tenderNo?: string | null;
+  tenderTypeId?: string | null;
   tentativeCompletionDate?: string | null;
   tmRemarks?: string | null;
 };
@@ -134,6 +136,7 @@ export class ProcurementCaseService {
       const result = await this.repository.createCase({
         actorUserId: actor.id,
         budgetTypeId: command.budgetTypeId ?? null,
+        contractType: command.contractType ?? null,
         cpcInvolved: command.cpcInvolved ?? null,
         departmentId: command.departmentId ?? null,
         desiredStageCode,
@@ -245,6 +248,15 @@ export class ProcurementCaseService {
           command.tentativeCompletionDate ?? null,
         )
       : {};
+    if (command.tenderTypeId !== undefined) {
+      await this.catalog.assertProcurementCaseSelections({
+        budgetTypeId: null,
+        natureOfWorkId: null,
+        prReceivingMediumId: null,
+        tenderTypeId: command.tenderTypeId,
+        tenantId,
+      });
+    }
     await this.db.transaction(async () => {
       await this.repository.updateCase({
         caseId,

@@ -1,0 +1,19 @@
+erDiagram
+  TENANTS ||--o{ USERS : has
+  TENANTS ||--o{ ENTITIES : has
+  USERS ||--o{ USER_ROLES : assigned
+  ROLES ||--o{ ROLE_PERMISSIONS : grants
+  USERS ||--o{ USER_ENTITY_SCOPES : scoped_to
+  ENTITIES ||--o{ DEPARTMENTS : contains
+  ENTITIES ||--o{ CASES : owns
+  CASES ||--|| CASE_FINANCIALS : has
+  CASES ||--o{ CASE_MILESTONES : tracks
+  CASES ||--o{ CASE_DELAYS : logs
+  CASES ||--o{ CASE_AWARDS : awarded
+  CASES ||--o{ RC_PO_PLANS : plans
+  CASES ||--o{ TENDER_PLAN_CASES : plans
+  CASES ||--o{ CASE_FACTS : projected_to
+  CASE_AWARDS ||--o{ CONTRACT_EXPIRY_FACTS : feeds
+  TENANTS ||--o{ AUDIT_EVENTS : records
+  TENANTS ||--o{ OUTBOX_EVENTS : emits
+  OUTBOX_EVENTS ||--o{ DEAD_LETTER_EVENTS : fails_to

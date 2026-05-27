@@ -11,6 +11,17 @@ type CommitTenderCaseRows = {
   ): Promise<void>;
 };
 
+type CommitRcPoRows = {
+  commitOldContractRows(
+    input: { committedBy: string; importJobId: string; tenantId: string },
+    client: PoolClient,
+  ): Promise<void>;
+  commitRcPoPlanRows(
+    input: { committedBy: string; importJobId: string; tenantId: string },
+    client: PoolClient,
+  ): Promise<void>;
+};
+
 describe("ImportExportRepository tender case commit", () => {
   it("derives normative stage before upserting bulk-imported tender cases", async () => {
     const db = {
@@ -37,6 +48,32 @@ describe("ImportExportRepository tender case commit", () => {
     expect(caseUpsertSql).toContain("r.desired_stage_code");
     expect(caseUpsertSql).toContain("r.stage_code < r.desired_stage_code");
     expect(caseUpsertSql).not.toContain("r.stage_code, null, false");
+  });
+});
+
+describe("ImportExportRepository RC/PO expiry imports", () => {
+  it("defaults tentative tendering date from validity date minus 120 days", async () => {
+    const db = {
+      query: vi.fn().mockResolvedValue({ rowCount: 0, rows: [] }),
+    };
+    const repository = new ImportExportRepository(
+      db as unknown as DatabaseService,
+    ) as unknown as CommitRcPoRows;
+    const input = {
+      committedBy: "00000000-0000-0000-0000-000000000001",
+      importJobId: "00000000-0000-0000-0000-000000000002",
+      tenantId: "00000000-0000-0000-0000-000000000003",
+    };
+
+    await repository.commitRcPoPlanRows(input, {} as PoolClient);
+    await repository.commitOldContractRows(input, {} as PoolClient);
+
+    for (const call of db.query.mock.calls) {
+      const sql = normalizeSql(String(call[0]));
+
+      expect(sql).toContain("rcPoValidityDate', '')::date - 120");
+      expect(sql).not.toContain("rcPoAwardDate', '')::date + 120");
+    }
   });
 });
 

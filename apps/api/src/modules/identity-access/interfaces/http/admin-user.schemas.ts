@@ -8,7 +8,10 @@ export const CreateUserRequestSchema = z.object({
   username: z.string().trim().min(2).max(80),
   fullName: z.string().trim().min(2).max(200),
   entityIds: z.array(z.string().uuid()).default([]),
-  password: z.string().min(1).max(1024).optional(),
+  password: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().min(1).max(1024).optional(),
+  ),
   roleIds: z.array(z.string().uuid()).default([]),
   sendSetupEmail: z.boolean().optional(),
   status: z.enum(["active", "inactive", "pending_password_setup"]).optional(),

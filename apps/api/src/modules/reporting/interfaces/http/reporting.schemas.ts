@@ -27,11 +27,17 @@ const csvTextList = z
   .transform((value) => (value ? value.split(",").map((item) => item.trim()).filter(Boolean) : undefined))
   .pipe(z.array(z.string().min(1).max(32)).optional());
 const trackStatusValues = ["delayed", "off_track", "on_track"] as const;
+const contractTypeValues = ["PO", "RC"] as const;
 const csvTrackStatusList = z
   .string()
   .optional()
   .transform((value) => (value ? value.split(",").filter(Boolean) : undefined))
   .pipe(z.array(z.enum(trackStatusValues)).optional());
+const csvContractTypeList = z
+  .string()
+  .optional()
+  .transform((value) => (value ? value.split(",").filter(Boolean) : undefined))
+  .pipe(z.array(z.enum(contractTypeValues)).optional());
 const nullableDateString = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -42,6 +48,7 @@ export const ReportQuerySchema = z.object({
   budgetTypeIds: csvUuidList,
   completionFys: csvTextList,
   completionMonths: csvTextList,
+  contractTypes: csvContractTypeList,
   cpcInvolved: z.enum(["true", "false"]).optional().transform((value) => value === undefined ? undefined : value === "true"),
   delayStatus: z.enum(["delayed", "on_time"]).optional(),
   deletedOnly: z.enum(["true", "false"]).optional().transform((value) => value === undefined ? undefined : value === "true"),

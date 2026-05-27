@@ -1,0 +1,9 @@
+flowchart LR
+  A[Case Intake\nPR ID + Value] --> B[Stage Workflow\nStages 0-8]
+  B --> C{Milestones\nNIT / Bid / LOI}
+  C --> D[Vendor Award\nPO No / Value / Validity]
+  D --> E[RC-PO &\nTender Planning]
+  E --> F[Reporting\nSavings · Aging · Risk]
+  B -.delay detected.-> G[Delay Capture\n+ Notification]
+  D -.expiry approaching.-> H[Contract Expiry\nAlert]
+  F --> I[Executive\nDashboards]

@@ -248,18 +248,20 @@ export function AdminUsersPage() {
   );
 
   const createUserMutation = useMutation({
-    mutationFn: () =>
-      createAdminUser({
+    mutationFn: () => {
+      const password = newUser.password.trim();
+      return createAdminUser({
         accessLevel: newUser.accessLevel,
         email: newUser.email,
         entityIds: newUser.accessLevel === "GROUP" ? [] : newUser.entityIds,
         fullName: newUser.fullName,
-        password: newUser.password,
+        ...(password ? { password: newUser.password } : {}),
         roleIds: buildRoleIds(roles.data ?? [], newUser),
         sendSetupEmail: newUser.sendSetupEmail,
         status: newUser.sendSetupEmail ? "pending_password_setup" : newUser.isActive ? "active" : "inactive",
         username: newUser.username,
-      }),
+      });
+    },
     onSuccess: async () => {
       setIsCreateOpen(false);
       setNewUser({ ...emptyEditUserForm, isActive: true, sendSetupEmail: true });

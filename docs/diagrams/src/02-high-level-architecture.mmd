@@ -1,0 +1,51 @@
+flowchart TB
+  subgraph Client["Client Tier"]
+    U[Procurement Users\nBuyers · Managers · Viewers]
+    SPA[Web App\nReact 19 + Vite SPA]
+  end
+
+  subgraph Edge["Edge / Gateway"]
+    NX[Nginx Reverse Proxy\nTLS termination · static serving]
+  end
+
+  subgraph App["Application Tier - Modular Monolith"]
+    API[NestJS API on Fastify\nGuards · Zod · RBAC]
+    subgraph MODS["Business Modules"]
+      M1[Identity & Access]
+      M2[Procurement Cases]
+      M3[Awards / Planning]
+      M4[Reporting]
+      M5[Import / Export]
+      M6[Notifications / Audit]
+    end
+    API --> MODS
+  end
+
+  subgraph Async["Asynchronous Tier"]
+    OB[Outbox Dispatcher]
+    W[BullMQ Workers\nimports · exports · notifications · projections]
+  end
+
+  subgraph Data["Data & State Tier"]
+    PG[(PostgreSQL 16\niam · org · catalog\nprocurement · reporting · ops)]
+    RDS[(Redis 7\ncache · queue · rate-limit)]
+    BLOB[(Azure Blob\nprivate file assets)]
+  end
+
+  subgraph Ext["External Services"]
+    GRAPH[Microsoft Graph\nEmail]
+    PROM[Prometheus\nMetrics scrape]
+  end
+
+  U --> SPA --> NX --> API
+  API --> PG
+  API --> RDS
+  API --> BLOB
+  API --> OB
+  OB --> RDS
+  RDS --> W
+  W --> PG
+  W --> BLOB
+  W --> GRAPH
+  API -. /metrics .-> PROM
+  W -. metrics .-> PROM

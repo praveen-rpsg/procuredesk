@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 export type MicrosoftGraphConfig = {
   clientId: string;
   clientSecret: string;
@@ -5,11 +7,25 @@ export type MicrosoftGraphConfig = {
   tenantId: string;
 };
 
+export type WorkerEmailAttachment = {
+  contentBase64: string;
+  contentType: string;
+  name: string;
+};
+
 export type WorkerEmailMessage = {
+  attachments?: WorkerEmailAttachment[] | undefined;
   htmlBody?: string | null;
   subject: string;
   textBody: string;
   to: string;
+};
+
+export type MicrosoftGraphSendResult = {
+  clientRequestId: string;
+  provider: "microsoft_graph";
+  requestId: string | null;
+  status: number;
 };
 
 const MAX_RETRIES = 3;
@@ -18,14 +34,16 @@ const FETCH_TIMEOUT_MS = 10_000;
 export class MicrosoftGraphClient {
   constructor(private readonly config: MicrosoftGraphConfig) {}
 
-  async send(message: WorkerEmailMessage): Promise<void> {
+  async send(message: WorkerEmailMessage): Promise<MicrosoftGraphSendResult> {
     const token = await this.getAccessToken();
-    await this.fetchWithRetry(
+    const clientRequestId = randomUUID();
+    const response = await this.fetchWithRetry(
       `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(this.config.senderMailbox)}/sendMail`,
       {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
+          "client-request-id": clientRequestId,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -36,12 +54,28 @@ export class MicrosoftGraphClient {
               content: message.htmlBody ?? message.textBody,
             },
             toRecipients: [{ emailAddress: { address: message.to } }],
+            ...(message.attachments?.length
+              ? {
+                  attachments: message.attachments.map((attachment) => ({
+                    "@odata.type": "#microsoft.graph.fileAttachment",
+                    contentBytes: attachment.contentBase64,
+                    contentType: attachment.contentType,
+                    name: attachment.name,
+                  })),
+                }
+              : {}),
           },
           saveToSentItems: false,
         }),
       },
       "sendMail",
     );
+    return {
+      clientRequestId,
+      provider: "microsoft_graph",
+      requestId: response.headers.get("request-id") ?? response.headers.get("x-ms-request-id"),
+      status: response.status,
+    };
   }
 
   private async getAccessToken(): Promise<string> {

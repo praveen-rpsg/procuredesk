@@ -9,6 +9,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 
 type ProblemDetails = {
   chronologyErrors?: string[];
+  issues?: Array<{ message: string; path: string }>;
   type: string;
   title: string;
   status: number;
@@ -56,6 +57,18 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       body.chronologyErrors = chronologyErrors.filter(
         (error): error is string => typeof error === "string",
       );
+    }
+    const issues = responseBody?.issues;
+    if (Array.isArray(issues)) {
+      body.issues = issues
+        .filter(
+          (issue): issue is { message: string; path: string } =>
+            Boolean(issue) &&
+            typeof issue === "object" &&
+            typeof (issue as Record<string, unknown>).message === "string" &&
+            typeof (issue as Record<string, unknown>).path === "string",
+        )
+        .map((issue) => ({ message: issue.message, path: issue.path }));
     }
 
     void response.status(status).send(body);

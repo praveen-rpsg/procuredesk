@@ -5,6 +5,7 @@ import {
   buildReportFilterPayload,
   buildReportParams,
   type AmountUnit,
+  type ContractType,
   type ReportStatusFilter,
   type TrackStatusValue,
 } from "../utils/reportUtils";
@@ -28,6 +29,7 @@ export type ReportFiltersState = {
   selectedBudgetTypeIds: string[];
   selectedCompletionFys: string[];
   selectedCompletionMonths: string[];
+  selectedContractTypes: ContractType[];
   selectedDepartmentIds: string[];
   selectedEntityIds: string[];
   selectedNatureOfWorkIds: string[];
@@ -51,6 +53,7 @@ export type ReportFiltersState = {
   setSelectedBudgetTypeIds: (v: string[]) => void;
   setSelectedCompletionFys: (v: string[]) => void;
   setSelectedCompletionMonths: (v: string[]) => void;
+  setSelectedContractTypes: (v: ContractType[]) => void;
   setSelectedDepartmentIds: (v: string[]) => void;
   setSelectedEntityIds: (v: string[]) => void;
   setSelectedNatureOfWorkIds: (v: string[]) => void;
@@ -78,6 +81,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
   const [selectedBudgetTypeIds, setSelectedBudgetTypeIds] = useState<string[]>([]);
   const [selectedCompletionFys, setSelectedCompletionFys] = useState<string[]>([]);
   const [selectedCompletionMonths, setSelectedCompletionMonths] = useState<string[]>([]);
+  const [selectedContractTypes, setSelectedContractTypes] = useState<ContractType[]>([]);
   const [selectedDepartmentIds, setSelectedDepartmentIds] = useState<string[]>([]);
   const [selectedEntityIds, setSelectedEntityIds] = useState<string[]>([]);
   const [selectedNatureOfWorkIds, setSelectedNatureOfWorkIds] = useState<string[]>([]);
@@ -119,6 +123,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
     () => ({
       completionFys: includeCompletionFilters ? selectedCompletionFys : [],
       completionMonths: includeCompletionFilters ? selectedCompletionMonths : [],
+      contractTypes: selectedContractTypes,
       cpcInvolved:
         includeCaseWorkflowFilters && cpcInvolved !== "any"
           ? cpcInvolved === "true"
@@ -166,6 +171,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
       selectedBudgetTypeIds,
       selectedCompletionFys,
       selectedCompletionMonths,
+      selectedContractTypes,
       selectedDepartmentIds,
       selectedEntityIds,
       selectedNatureOfWorkIds,
@@ -219,6 +225,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
     setPriorityCase(false);
     setSelectedStageCodes([]);
     setSelectedCompletionFys([]);
+    setSelectedContractTypes([]);
     setSelectedPrReceiptMonths([]);
     setSelectedCompletionMonths([]);
     setStatusFilter("all");
@@ -243,6 +250,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
     selectedBudgetTypeIds,
     selectedCompletionFys,
     selectedCompletionMonths,
+    selectedContractTypes,
     selectedDepartmentIds,
     selectedEntityIds,
     selectedNatureOfWorkIds,
@@ -266,6 +274,7 @@ export function useReportFilters(reportCode: ReportCode): ReportFiltersState {
     setSelectedBudgetTypeIds,
     setSelectedCompletionFys,
     setSelectedCompletionMonths,
+    setSelectedContractTypes,
     setSelectedDepartmentIds,
     setSelectedEntityIds,
     setSelectedNatureOfWorkIds,

@@ -32,6 +32,7 @@ const csvIntList = z
   )
   .pipe(z.array(z.number().int()).optional());
 const valueSlabValues = ["lt_2l", "2l_5l", "5l_10l", "10l_25l", "25l_50l", "50l_100l", "100l_200l", "gte_200l"] as const;
+const contractTypeValues = ["PO", "RC"] as const;
 const trackStatusValues = ["delayed", "off_track", "on_track"] as const;
 const csvTrackStatusList = z
   .string()
@@ -43,6 +44,11 @@ const csvValueSlabList = z
   .optional()
   .transform((value) => (value ? value.split(",").filter(Boolean) : undefined))
   .pipe(z.array(z.enum(valueSlabValues)).optional());
+const csvContractTypeList = z
+  .string()
+  .optional()
+  .transform((value) => (value ? value.split(",").filter(Boolean) : undefined))
+  .pipe(z.array(z.enum(contractTypeValues)).optional());
 const queryBoolean = z
   .enum(["true", "false"])
   .transform((value) => value === "true")
@@ -77,6 +83,7 @@ export const CaseMilestonesSchema = z.object({
 
 export const CreateCaseRequestSchema = z.object({
   budgetTypeId: requiredUuid,
+  contractType: z.enum(contractTypeValues),
   cpcInvolved: z.boolean(),
   departmentId: requiredUuid,
   entityId: z.string().uuid(),
@@ -102,6 +109,7 @@ export const UpdateCaseRequestSchema = z.object({
   priorityCase: z.boolean().optional(),
   tenderName: z.string().trim().max(500).nullable().optional(),
   tenderNo: z.string().trim().max(200).nullable().optional(),
+  tenderTypeId: requiredUuid.optional(),
   tentativeCompletionDate: requiredDateString.optional(),
   tmRemarks: z.string().trim().max(5000).nullable().optional(),
 });
@@ -124,6 +132,7 @@ export const DeleteCaseRequestSchema = z
 export const ListCasesQuerySchema = z.object({
   budgetTypeIds: csvUuidList,
   completionFys: csvTextList,
+  contractTypes: csvContractTypeList,
   cpcInvolved: queryBoolean,
   cursor: z.string().trim().min(1).max(200).optional(),
   dateFrom: z

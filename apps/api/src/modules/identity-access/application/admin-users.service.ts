@@ -10,7 +10,11 @@ import { hasExpandedPermission } from "../../../common/auth/permission-utils.js"
 import type { EnvConfig } from "../../../config/env.schema.js";
 import { DatabaseService } from "../../../database/database.service.js";
 import { AuditWriterService } from "../../audit/application/audit-writer.service.js";
-import { buildAccountSetupEmail } from "../../notifications/application/email-templates.js";
+import {
+  DEFAULT_EMAIL_SUPPORT,
+  buildAccountSetupEmail,
+  type EmailSupport,
+} from "../../notifications/application/email-templates.js";
 import { OutboxWriterService } from "../../outbox/application/outbox-writer.service.js";
 import type { AuthenticatedUser } from "../domain/authenticated-user.js";
 import { PasswordPolicyRepository } from "../infrastructure/password-policy.repository.js";
@@ -250,10 +254,12 @@ export class AdminUsersService {
       this.config.get("APP_URL", { infer: true }) ?? "http://localhost:5175",
     );
     setupUrl.searchParams.set("token", token);
+    const support = await this.getNotificationSupport(input.tenantId);
     const email = buildAccountSetupEmail({
       expiresIn: "24 hours",
       fullName: input.fullName,
       setupUrl: setupUrl.toString(),
+      support,
     });
 
     await this.db.transaction(async (client) => {
@@ -338,6 +344,28 @@ export class AdminUsersService {
       [tenantId, notificationType],
     );
     return row?.is_enabled ?? true;
+  }
+
+  private async getNotificationSupport(tenantId: string): Promise<EmailSupport> {
+    const row = await this.db.one<{
+      support_email: string;
+      support_name: string;
+      support_phone: string | null;
+    }>(
+      `
+        select support_name, support_email::text as support_email, support_phone
+        from ops.notification_settings
+        where tenant_id = $1
+        limit 1
+      `,
+      [tenantId],
+    );
+    if (!row) return DEFAULT_EMAIL_SUPPORT;
+    return {
+      email: row.support_email,
+      name: row.support_name,
+      phone: row.support_phone ?? undefined,
+    };
   }
 
   async updateProfile(

@@ -314,7 +314,7 @@ export class CaseAwardRepository {
       `
         insert into reporting.case_facts (
           case_id, tenant_id, entity_id, department_id, owner_user_id,
-          tender_type_id, status, stage_code, desired_stage_code, is_delayed,
+          tender_type_id, contract_type, status, stage_code, desired_stage_code, is_delayed,
           priority_case, cpc_involved, pr_receipt_date, rc_po_award_date,
           pr_value, estimate_benchmark, approved_amount, total_awarded_amount,
           savings_wrt_pr, savings_wrt_estimate, updated_at
@@ -326,6 +326,7 @@ export class CaseAwardRepository {
           c.department_id,
           c.owner_user_id,
           c.tender_type_id,
+          c.contract_type,
           c.status,
           c.stage_code,
           c.desired_stage_code,
@@ -363,6 +364,7 @@ export class CaseAwardRepository {
             department_id = excluded.department_id,
             owner_user_id = excluded.owner_user_id,
             tender_type_id = excluded.tender_type_id,
+            contract_type = excluded.contract_type,
             status = excluded.status,
             stage_code = excluded.stage_code,
             desired_stage_code = excluded.desired_stage_code,

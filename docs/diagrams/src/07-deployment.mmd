@@ -1,0 +1,40 @@
+flowchart TB
+  subgraph DEV["Developer"]
+    GIT[GitHub Repo\npraveen-rpsg/procuredesk]
+  end
+
+  subgraph CI["GitHub Actions CI/CD"]
+    SEC[Gitleaks secret scan]
+    AUD[npm audit]
+    TLT[Type-check · Lint · Vitest]
+    BLD[Build Docker images]
+    TRV[Trivy scan CRITICAL/HIGH]
+    PUSH[Push to GHCR]
+  end
+
+  subgraph ENVS["Environments"]
+    direction LR
+    D[Dev\ndocker-compose\npg + redis]
+    UAT[UAT / Staging\nmigrate to deploy]
+    PROD[Production\nNginx + API + Worker]
+  end
+
+  subgraph PRODINFRA["Production Runtime"]
+    LB[Nginx / Load Balancer\nTLS]
+    APIN[API replicas\nstateless · horizontal]
+    WRKN[Worker replicas\nper-queue concurrency]
+    PGP[(PostgreSQL 16\n+ read replica - future)]
+    RDP[(Redis 7\nAOF · noeviction)]
+    BLP[(Azure Blob)]
+  end
+
+  GIT --> SEC --> AUD --> TLT --> BLD --> TRV --> PUSH
+  PUSH --> UAT --> PROD
+  D -.local only.-> GIT
+  PROD --> LB --> APIN
+  APIN --> PGP
+  APIN --> RDP
+  RDP --> WRKN
+  WRKN --> PGP
+  APIN --> BLP
+  WRKN --> BLP

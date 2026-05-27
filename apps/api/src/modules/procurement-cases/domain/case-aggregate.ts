@@ -45,6 +45,7 @@ export type ProcurementCaseAggregate = {
   desiredStageCode: number | null;
   isDelayed: boolean;
   priorityCase: boolean;
+  contractType: "PO" | "RC" | null;
   cpcInvolved: boolean | null;
   prDescription: string | null;
   prRemarks: string | null;
@@ -52,6 +53,7 @@ export type ProcurementCaseAggregate = {
   prReceiptDate: string | null;
   tenderName: string | null;
   tenderNo: string | null;
+  tenderTypeId: string | null;
   tentativeCompletionDate: string | null;
   tmRemarks: string | null;
   budgetTypeLabel: string | null;

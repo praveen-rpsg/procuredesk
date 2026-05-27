@@ -9,6 +9,7 @@ import { processExportJob, type ExportJobPayload } from "./exports/export-worker
 import { processImportJob, type ImportJobPayload } from "./import-export/import-worker.js";
 import { dispatchPendingOutbox } from "./outbox/outbox-dispatcher.js";
 import { MicrosoftGraphClient } from "./notifications/microsoft-graph-client.js";
+import { processDueNotificationSchedules } from "./notifications/notification-scheduler.js";
 import { processNotificationJob, type NotificationJobPayload } from "./notifications/notification-worker.js";
 import { processReportingProjection, type ReportingProjectionPayload } from "./reporting/reporting-projection-worker.js";
 import { createPrivateObjectStorageFromEnv } from "./storage/private-object-storage.js";
@@ -23,6 +24,7 @@ const logger = pino({
 });
 
 const OUTBOX_POLLING_INTERVAL_MS = Number(process.env.OUTBOX_POLLING_INTERVAL_MS ?? 10_000);
+const NOTIFICATION_SCHEDULER_INTERVAL_MS = Number(process.env.NOTIFICATION_SCHEDULER_INTERVAL_MS ?? 60_000);
 
 function start(): void {
   logger.info({ event: "worker.start" }, "procuredesk-worker ready");
@@ -73,7 +75,7 @@ function start(): void {
       "notifications",
       async (job) => {
         logger.info({ event: "job.start", queue: "notifications", jobId: job.id }, "Processing notification job");
-        return processNotificationJob(job.data, { graph, pool });
+        return processNotificationJob(job.data, { graph, pool, storage });
       },
       workerOpts,
     );
@@ -108,11 +110,19 @@ function start(): void {
     }
   }, OUTBOX_POLLING_INTERVAL_MS);
 
+  windowedInterval(async () => {
+    const count = await processDueNotificationSchedules({ pool, storage, logger });
+    if (count > 0) {
+      logger.info({ event: "notification_schedules.processed", count }, `Processed ${count} notification schedule(s).`);
+    }
+  }, NOTIFICATION_SCHEDULER_INTERVAL_MS);
+
   logger.info(
     {
       event: "worker.queues_registered",
       queues: ["imports", "exports", "notifications", "reporting-projections"],
       pollingIntervalMs: OUTBOX_POLLING_INTERVAL_MS,
+      notificationSchedulerIntervalMs: NOTIFICATION_SCHEDULER_INTERVAL_MS,
     },
     "All queues registered",
   );

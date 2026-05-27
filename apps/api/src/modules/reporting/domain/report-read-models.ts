@@ -14,6 +14,7 @@ export type ReportCaseRow = {
   biddersParticipated: number | null;
   completedCycleTimeDays: number | null;
   completionFy: string | null;
+  contractType: "PO" | "RC" | null;
   currentStageAgingDays: number | null;
   delayReason: string | null;
   departmentName: string | null;
@@ -65,6 +66,7 @@ export type VendorAwardReportRow = {
   entityId: string;
   entityName: string | null;
   ownerFullName: string | null;
+  contractType: "PO" | "RC" | null;
   poAwardDate: string | null;
   poNumber: string | null;
   poValue: number | null;
@@ -80,6 +82,7 @@ export type StageTimeRow = {
   bidEvaluationTimeDays: number | null;
   bidReceiptTimeDays: number | null;
   caseId: string;
+  contractType: "PO" | "RC" | null;
   contractIssuanceTimeDays: number | null;
   currentStageAgingDays: number | null;
   cycleTimeDays: number | null;
@@ -104,6 +107,7 @@ export type StageTimeRow = {
 export type ContractExpiryReportRow = {
   awardedVendors: string | null;
   budgetTypeId: string | null;
+  contractType: "PO" | "RC" | null;
   departmentId: string | null;
   departmentName: string | null;
   daysToExpiry: number;

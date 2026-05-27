@@ -1,0 +1,21 @@
+flowchart TD
+  A[SPA Request\ncookie + X-CSRF-Token] --> B[Nginx\nTLS / proxy]
+  B --> C[Fastify: Helmet + CORS]
+  C --> D[Global Rate Limit\nRedis 120/60s per IP]
+  D --> E{State-changing?}
+  E -- yes --> F[CSRF Validation\ndouble-submit]
+  E -- no --> G[AuthGuard\nsession lookup]
+  F --> G
+  G --> H["PermissionGuard\n@RequirePermissions"]
+  H --> I[EntityScopeGuard\nentity visibility]
+  I --> J[Zod DTO Validation]
+  J --> K[Module Service\nraw SQL in transaction]
+  K --> L[(PostgreSQL commit\n+ ops.outbox_events)]
+  L --> M[Outbox Dispatcher\npolls every 10s]
+  M --> N[BullMQ Enqueue]
+  N --> O[Worker Processes Job]
+  O --> P[Email / Export / Projection]
+  K --> Q[RFC 7807 JSON Response]
+  G -. invalid .-> R[401 Unauthorized]
+  H -. denied .-> S[403 Forbidden]
+  D -. exceeded .-> T[429 Too Many Requests]
