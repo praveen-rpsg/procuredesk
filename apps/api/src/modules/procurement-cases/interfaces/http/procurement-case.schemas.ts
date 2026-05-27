@@ -102,6 +102,7 @@ export const CreateCaseRequestSchema = z.object({
 });
 
 export const UpdateCaseRequestSchema = z.object({
+  contractType: z.enum(contractTypeValues).optional(),
   financials: CaseFinancialsSchema.optional(),
   prDescription: z.string().trim().max(5000).nullable().optional(),
   prRemarks: z.string().trim().max(5000).nullable().optional(),

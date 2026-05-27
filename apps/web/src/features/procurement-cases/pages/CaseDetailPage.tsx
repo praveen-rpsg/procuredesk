@@ -387,6 +387,7 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
                   <InfoRow label="Tender Name" value={kase.tenderName ?? "—"} />
                   <InfoRow label="Tender No." value={kase.tenderNo ?? "—"} />
                   {kase.tenderTypeName && <InfoRow label="Tender Type" value={kase.tenderTypeName} />}
+                  <InfoRow label="Contract Type" value={kase.contractType ?? "—"} />
                   <InfoRow label="CPC Involved" value={kase.cpcInvolved == null ? "—" : kase.cpcInvolved ? "Yes" : "No"} />
                   <InfoRow label="Priority Case" value={kase.priorityCase ? "Yes" : "No"} />
                   {kase.prDescription && <InfoRow label="Description" value={kase.prDescription} />}

@@ -179,6 +179,7 @@ export class ProcurementCaseRepository {
       tenderName?: string | null;
       tenderNo?: string | null;
       tenderTypeId?: string | null;
+      contractType?: "PO" | "RC" | null;
       tmRemarks?: string | null;
       tentativeCompletionDate?: string | null;
       desiredStageCode?: number | null;
@@ -202,9 +203,10 @@ export class ProcurementCaseRepository {
             desired_stage_code = coalesce($11, desired_stage_code),
             is_delayed = coalesce($12, is_delayed),
             tender_type_id = coalesce($13, tender_type_id),
+            contract_type = coalesce($14, contract_type),
             version = version + 1,
             updated_at = now(),
-            updated_by = $14
+            updated_by = $15
         where id = $1
           and tenant_id = $2
           and deleted_at is null
@@ -223,6 +225,7 @@ export class ProcurementCaseRepository {
         input.desiredStageCode ?? null,
         input.isDelayed ?? null,
         input.tenderTypeId ?? null,
+        input.contractType ?? null,
         input.updatedBy,
       ],
       client,

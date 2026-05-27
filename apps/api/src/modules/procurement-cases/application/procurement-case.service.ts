@@ -58,6 +58,7 @@ export type CreateCaseCommand = {
 };
 
 export type UpdateCaseCommand = {
+  contractType?: "PO" | "RC" | null;
   financials?: CaseFinancials;
   prDescription?: string | null;
   prRemarks?: string | null;

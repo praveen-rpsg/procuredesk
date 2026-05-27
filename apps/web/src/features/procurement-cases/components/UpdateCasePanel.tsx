@@ -16,6 +16,7 @@ import {
   updateDelay,
   updateMilestones,
   type CaseDetail,
+  type ContractType,
 } from "../api/casesApi";
 import { ApiError } from "../../../shared/api/client";
 import { useAuth } from "../../../shared/auth/AuthProvider";
@@ -58,7 +59,10 @@ type DateMilestoneKey = Exclude<
 >;
 type MilestoneErrors = Partial<Record<keyof MilestoneFormState, string>>;
 type CaseFormErrors = Partial<
-  Record<"tenderName" | "tenderNo" | "tenderTypeId" | "tmRemarks", string>
+  Record<
+    "contractType" | "tenderName" | "tenderNo" | "tenderTypeId" | "tmRemarks",
+    string
+  >
 >;
 type FinancialFormErrors = Partial<
   Record<"approvedAmount" | "estimateBenchmark" | "prValue", string>
@@ -84,6 +88,11 @@ const emptyMilestones: MilestoneFormState = {
   technicalEvaluationDate: "",
 };
 
+const contractTypeOptions: Array<{ label: string; value: ContractType }> = [
+  { label: "PO", value: "PO" },
+  { label: "RC", value: "RC" },
+];
+
 export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -94,6 +103,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
   const [tenderName, setTenderName] = useState("");
   const [tenderNo, setTenderNo] = useState("");
   const [tenderTypeId, setTenderTypeId] = useState("");
+  const [contractType, setContractType] = useState<ContractType | "">("");
   const [tmRemarks, setTmRemarks] = useState("");
   const [priorityCase, setPriorityCase] = useState(false);
   const [milestones, setMilestones] =
@@ -139,6 +149,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
     setTenderName(kase.tenderName ?? "");
     setTenderNo(kase.tenderNo ?? "");
     setTenderTypeId(kase.tenderTypeId ?? "");
+    setContractType(kase.contractType ?? "");
     setTmRemarks(kase.tmRemarks ?? "");
     setPriorityCase(kase.priorityCase);
     setOwnerUserId(kase.ownerUserId ?? "");
@@ -193,13 +204,14 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
   const caseErrors = useMemo(
     () =>
       validateCaseForm({
+        contractType,
         hasExistingTenderTypeId: Boolean(detail.data?.tenderTypeId),
         tenderName,
         tenderNo,
         tenderTypeId,
         tmRemarks,
       }),
-    [detail.data?.tenderTypeId, tenderName, tenderNo, tenderTypeId, tmRemarks],
+    [contractType, detail.data?.tenderTypeId, tenderName, tenderNo, tenderTypeId, tmRemarks],
   );
   const financialErrors = useMemo(
     () =>
@@ -256,6 +268,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
   const caseChangedFields = useMemo(
     () =>
       buildCaseChangedFields(detail.data, {
+        contractType,
         priorityCase,
         tenderName,
         tenderNo,
@@ -264,6 +277,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
       }),
     [
       detail.data,
+      contractType,
       priorityCase,
       tenderName,
       tenderNo,
@@ -310,7 +324,9 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
           prValue,
         });
         const tenderTypeChanged = tenderTypeId !== (detail.data?.tenderTypeId ?? "");
+        const contractTypeChanged = contractType !== (detail.data?.contractType ?? "");
         await updateCase(targetCaseId, {
+          contractType: contractTypeChanged ? contractType : undefined,
           financials: financials ?? undefined,
           priorityCase,
           tenderName: tenderName || null,
@@ -463,6 +479,19 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
                 options={tenderTypeOptions}
                 placeholder="Select Tender Type"
                 value={tenderTypeId}
+              />
+            </FormField>
+            <FormField
+              error={visibleCaseErrors.contractType ?? ""}
+              label="Contract Type"
+            >
+              <Select
+                onChange={(event) =>
+                  setContractType(toContractTypeValue(event.target.value))
+                }
+                options={contractTypeOptions}
+                placeholder="Select Contract Type"
+                value={contractType}
               />
             </FormField>
             <FormField
@@ -824,6 +853,7 @@ function ChangedFields({ fields }: { fields: string[] }) {
 function buildCaseChangedFields(
   kase: CaseDetail | undefined,
   value: {
+    contractType: ContractType | "";
     priorityCase: boolean;
     tenderName: string;
     tenderNo: string;
@@ -837,6 +867,8 @@ function buildCaseChangedFields(
   if (value.tenderNo !== (kase.tenderNo ?? "")) fields.push("Tender No");
   if (value.tenderTypeId !== (kase.tenderTypeId ?? ""))
     fields.push("Tender Type");
+  if (value.contractType !== (kase.contractType ?? ""))
+    fields.push("Contract Type");
   if (value.tmRemarks !== (kase.tmRemarks ?? ""))
     fields.push("Tender Owner's Remarks");
   if (value.priorityCase !== kase.priorityCase) fields.push("Priority Case");
@@ -939,6 +971,7 @@ const milestoneLabels: Record<DateMilestoneKey, string> = {
 };
 
 function validateCaseForm(input: {
+  contractType: ContractType | "";
   hasExistingTenderTypeId: boolean;
   tenderName: string;
   tenderNo: string;
@@ -948,6 +981,9 @@ function validateCaseForm(input: {
   const errors: CaseFormErrors = {};
   if (input.hasExistingTenderTypeId && !input.tenderTypeId) {
     errors.tenderTypeId = "Tender Type is required.";
+  }
+  if (!input.contractType) {
+    errors.contractType = "Contract Type is required.";
   }
   if (input.tenderName.length > 500) {
     errors.tenderName = "Tender name cannot exceed 500 characters.";
@@ -959,6 +995,10 @@ function validateCaseForm(input: {
     errors.tmRemarks = "Tender Owner's Remarks cannot exceed 5000 characters.";
   }
   return errors;
+}
+
+function toContractTypeValue(value: string): ContractType | "" {
+  return value === "PO" || value === "RC" ? value : "";
 }
 
 function validateFinancialForm(input: {
