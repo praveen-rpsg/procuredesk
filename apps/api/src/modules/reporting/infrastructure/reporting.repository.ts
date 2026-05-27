@@ -24,6 +24,7 @@ export type ReportFilters = {
   budgetTypeIds?: string[];
   completionFys?: string[];
   completionMonths?: string[];
+  contractTypes?: Array<"PO" | "RC">;
   cpcInvolved?: boolean;
   delayStatus?: "delayed" | "on_time";
   deletedOnly?: boolean;
@@ -79,7 +80,7 @@ export class ReportingRepository {
       `
         insert into reporting.case_facts (
           case_id, tenant_id, entity_id, department_id, owner_user_id,
-          tender_type_id, status, stage_code, desired_stage_code, is_delayed,
+          tender_type_id, contract_type, status, stage_code, desired_stage_code, is_delayed,
           priority_case, cpc_involved, pr_receipt_date, rc_po_award_date,
           completion_fy, value_slab, rc_po_value_slab, running_age_days,
           completed_age_days, current_stage_aging_days, pr_value,
@@ -93,6 +94,7 @@ export class ReportingRepository {
           c.department_id,
           c.owner_user_id,
           c.tender_type_id,
+          c.contract_type,
           c.status,
           c.stage_code,
           c.desired_stage_code,
@@ -185,6 +187,7 @@ export class ReportingRepository {
             department_id = excluded.department_id,
             owner_user_id = excluded.owner_user_id,
             tender_type_id = excluded.tender_type_id,
+            contract_type = excluded.contract_type,
             status = excluded.status,
             stage_code = excluded.stage_code,
             desired_stage_code = excluded.desired_stage_code,
@@ -218,7 +221,7 @@ export class ReportingRepository {
         `
           insert into reporting.contract_expiry_facts (
             tenant_id, case_id, case_award_id, entity_id, department_id, owner_user_id,
-            budget_type_id, nature_of_work_id, tender_description, awarded_vendors,
+            budget_type_id, nature_of_work_id, contract_type, tender_description, awarded_vendors,
             rc_po_amount, rc_po_award_date, rc_po_validity_date,
             tentative_tendering_date, tender_floated_or_not_required,
             source_deleted_at, source_type, updated_at
@@ -232,12 +235,13 @@ export class ReportingRepository {
             c.owner_user_id,
             c.budget_type_id,
             c.nature_of_work_id,
+            c.contract_type,
             coalesce(c.tender_name, c.pr_description),
             a.vendor_name,
             a.po_value,
             a.po_award_date,
             a.po_validity_date,
-            coalesce(a.tentative_tendering_date, a.po_validity_date - 150),
+            coalesce(a.tentative_tendering_date, a.po_validity_date - 120),
             a.tender_floated_or_not_required,
             coalesce(a.deleted_at, c.deleted_at),
             'case_award',
@@ -254,7 +258,7 @@ export class ReportingRepository {
         `
           insert into reporting.contract_expiry_facts (
             tenant_id, rc_po_plan_id, case_id, entity_id, department_id,
-            owner_user_id, budget_type_id, nature_of_work_id, tender_description,
+            owner_user_id, budget_type_id, nature_of_work_id, contract_type, tender_description,
             awarded_vendors, rc_po_amount, rc_po_award_date, rc_po_validity_date,
             tentative_tendering_date, tender_floated_or_not_required,
             source_deleted_at, source_type, updated_at
@@ -268,12 +272,13 @@ export class ReportingRepository {
             coalesce(p.owner_user_id, c.owner_user_id),
             c.budget_type_id,
             coalesce(p.nature_of_work_id, c.nature_of_work_id),
+            c.contract_type,
             p.tender_description,
             p.awarded_vendors,
             p.rc_po_amount,
             p.rc_po_award_date,
             p.rc_po_validity_date,
-            coalesce(p.tentative_tendering_date, p.rc_po_validity_date - 150),
+            coalesce(p.tentative_tendering_date, p.rc_po_validity_date - 120),
             p.tender_floated_or_not_required,
             coalesce(p.deleted_at, c.deleted_at),
             'manual_plan',
@@ -534,6 +539,7 @@ export class ReportingRepository {
           c.pr_description,
           c.tender_no,
           c.tender_name,
+          f.contract_type,
           f.entity_id,
           e.code as entity_code,
           e.name as entity_name,
@@ -657,6 +663,7 @@ export class ReportingRepository {
       caseId: row.case_id,
       completedCycleTimeDays: row.completed_age_days,
       completionFy: row.completion_fy,
+      contractType: row.contract_type,
       commercialEvaluationDate: this.dateOnly(row.commercial_evaluation_date),
       commercialEvaluationPendencyDays: row.commercial_evaluation_pendency_days,
       currentStageAgingDays: row.current_stage_aging_days,
@@ -767,6 +774,7 @@ export class ReportingRepository {
           c.pr_id,
           c.tender_no,
           c.tender_name,
+          f.contract_type,
           f.entity_id,
           e.code as entity_code,
           e.name as entity_name,
@@ -796,6 +804,7 @@ export class ReportingRepository {
       approvedAmount: this.numberOrNull(row.approved_amount),
       awardId: row.award_id,
       caseId: row.case_id,
+      contractType: row.contract_type,
       departmentName: row.department_name,
       entityCode: row.entity_code,
       entityId: row.entity_id,
@@ -870,6 +879,7 @@ export class ReportingRepository {
           c.pr_id,
           c.tender_no,
           c.tender_name,
+          f.contract_type,
           f.entity_id,
           e.code as entity_code,
           e.name as entity_name,
@@ -958,6 +968,7 @@ export class ReportingRepository {
       bidEvaluationTimeDays: row.bid_evaluation_time_days,
       bidReceiptTimeDays: row.bid_receipt_time_days,
       caseId: row.case_id,
+      contractType: row.contract_type,
       contractIssuanceTimeDays: row.contract_issuance_time_days,
       currentStageAgingDays: row.current_stage_aging_days,
       cycleTimeDays: row.cycle_time_days,
@@ -1026,6 +1037,7 @@ export class ReportingRepository {
           (array_agg(filtered.owner_user_id order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as owner_user_id,
           (array_agg(filtered.owner_full_name order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as owner_full_name,
           (array_agg(filtered.budget_type_id order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as budget_type_id,
+          (array_agg(filtered.contract_type order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as contract_type,
           (array_agg(filtered.nature_of_work_id order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as nature_of_work_id,
           (array_agg(filtered.nature_of_work_name order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as nature_of_work_name,
           (array_agg(filtered.tender_description order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as tender_description,
@@ -1200,7 +1212,7 @@ export class ReportingRepository {
       `
         insert into reporting.contract_expiry_facts (
           tenant_id, case_id, case_award_id, entity_id, department_id, owner_user_id,
-          budget_type_id, nature_of_work_id, tender_description, awarded_vendors,
+          budget_type_id, nature_of_work_id, contract_type, tender_description, awarded_vendors,
           rc_po_amount, rc_po_award_date, rc_po_validity_date,
           tentative_tendering_date, tender_floated_or_not_required,
           source_deleted_at, source_type, updated_at
@@ -1214,12 +1226,13 @@ export class ReportingRepository {
           c.owner_user_id,
           c.budget_type_id,
           c.nature_of_work_id,
+          c.contract_type,
           coalesce(c.tender_name, c.pr_description),
           a.vendor_name,
           a.po_value,
           a.po_award_date,
           a.po_validity_date,
-          coalesce(a.tentative_tendering_date, a.po_validity_date - 150),
+          coalesce(a.tentative_tendering_date, a.po_validity_date - 120),
           a.tender_floated_or_not_required,
           coalesce(a.deleted_at, c.deleted_at),
           'case_award',
@@ -1249,7 +1262,7 @@ export class ReportingRepository {
       `
         insert into reporting.contract_expiry_facts (
           tenant_id, rc_po_plan_id, case_id, entity_id, department_id,
-          owner_user_id, budget_type_id, nature_of_work_id, tender_description,
+          owner_user_id, budget_type_id, nature_of_work_id, contract_type, tender_description,
           awarded_vendors, rc_po_amount, rc_po_award_date, rc_po_validity_date,
           tentative_tendering_date, tender_floated_or_not_required,
           source_deleted_at, source_type, updated_at
@@ -1263,12 +1276,13 @@ export class ReportingRepository {
           coalesce(p.owner_user_id, c.owner_user_id),
           c.budget_type_id,
           coalesce(p.nature_of_work_id, c.nature_of_work_id),
+          c.contract_type,
           p.tender_description,
           p.awarded_vendors,
           p.rc_po_amount,
           p.rc_po_award_date,
           p.rc_po_validity_date,
-          coalesce(p.tentative_tendering_date, p.rc_po_validity_date - 150),
+          coalesce(p.tentative_tendering_date, p.rc_po_validity_date - 120),
           p.tender_floated_or_not_required,
           coalesce(p.deleted_at, c.deleted_at),
           'manual_plan',
@@ -1308,6 +1322,7 @@ export class ReportingRepository {
           e.owner_user_id,
           owner.full_name as owner_full_name,
           e.budget_type_id,
+          e.contract_type,
           e.nature_of_work_id,
           rv_nature.label as nature_of_work_name,
           e.tender_description,
@@ -1354,6 +1369,7 @@ export class ReportingRepository {
           u.full_name as owner_full_name,
           f.tender_type_id,
           tt.name as tender_type_name,
+          f.contract_type,
           c.budget_type_id,
           rv_budget.label as budget_type_name,
           c.nature_of_work_id,
@@ -1431,6 +1447,7 @@ export class ReportingRepository {
           e.owner_user_id,
           u.username as owner_username,
           u.full_name as owner_full_name,
+          e.contract_type,
           e.budget_type_id,
           rv_budget.label as budget_type_name,
           e.nature_of_work_id,
@@ -1453,6 +1470,7 @@ export class ReportingRepository {
       budgetTypes: [...budgetTypes.values()].sort((left, right) => left.name.localeCompare(right.name)),
       completionFys: [...new Set(result.rows.map((row) => row.completion_fy).filter(Boolean))].sort(),
       completionMonths: [...new Set(result.rows.map((row) => row.completion_month).filter(Boolean))].sort(),
+      contractTypes: ["PO", "RC"],
       departments: [...departments.values()].sort((left, right) => left.name.localeCompare(right.name)),
       entities: [...entities.values()].sort((left, right) =>
         (left.code ?? left.name ?? left.id).localeCompare(right.code ?? right.name ?? right.id),
@@ -1648,6 +1666,7 @@ export class ReportingRepository {
     this.applyUuidArrayFilter(where, values, filters.departmentIds, "f.department_id");
     this.applyUuidArrayFilter(where, values, filters.ownerUserIds, "f.owner_user_id");
     this.applyUuidArrayFilter(where, values, filters.tenderTypeIds, "f.tender_type_id");
+    this.applyTextArrayFilter(where, values, filters.contractTypes, "f.contract_type");
     this.applyUuidArrayFilter(where, values, filters.budgetTypeIds, "c.budget_type_id");
     this.applyUuidArrayFilter(where, values, filters.natureOfWorkIds, "c.nature_of_work_id");
     if (filters.stageCodes?.length) {
@@ -1722,6 +1741,7 @@ export class ReportingRepository {
     this.applyEntityFilter(where, values, filters, "e.entity_id");
     this.applyUuidArrayFilter(where, values, filters.departmentIds, "e.department_id");
     this.applyUuidArrayFilter(where, values, filters.ownerUserIds, "e.owner_user_id");
+    this.applyTextArrayFilter(where, values, filters.contractTypes, "e.contract_type");
     this.applyUuidArrayFilter(where, values, filters.budgetTypeIds, "e.budget_type_id");
     this.applyUuidArrayFilter(where, values, filters.natureOfWorkIds, "e.nature_of_work_id");
     this.applyValueSlabFilter(where, filters.valueSlabs, "e.rc_po_amount");
@@ -1811,6 +1831,18 @@ export class ReportingRepository {
     }
   }
 
+  private applyTextArrayFilter(
+    where: string[],
+    values: unknown[],
+    valuesToMatch: string[] | undefined,
+    column: string,
+  ) {
+    if (valuesToMatch?.length) {
+      values.push(valuesToMatch);
+      where.push(`${column} = any($${values.length}::text[])`);
+    }
+  }
+
   private applyValueSlabFilter(where: string[], slabs: string[] | undefined, column: string) {
     if (!slabs?.length) return;
     const predicates: string[] = [];
@@ -1866,6 +1898,7 @@ export class ReportingRepository {
     return {
       awardedVendors: row.awarded_vendors,
       budgetTypeId: row.budget_type_id,
+      contractType: row.contract_type,
       departmentId: row.department_id,
       departmentName: row.department_name,
       daysToExpiry: row.days_to_expiry,
@@ -1931,6 +1964,7 @@ export class ReportingRepository {
 
     return {
       budgetTypes: [...budgetTypes.values()].sort((left, right) => left.name.localeCompare(right.name)),
+      contractTypes: ["PO", "RC"],
       departments: [...departments.values()].sort((left, right) => left.name.localeCompare(right.name)),
       entities: [...entities.values()].sort((left, right) =>
         (left.code ?? left.name ?? left.id).localeCompare(right.code ?? right.name ?? right.id),
@@ -2104,6 +2138,7 @@ type CaseReportRow = {
   case_id: string;
   completed_age_days: number | null;
   completion_fy: string | null;
+  contract_type: "PO" | "RC" | null;
   commercial_evaluation_date: Date | null;
   current_stage_aging_days: number | null;
   delay_reason: string | null;
@@ -2147,6 +2182,7 @@ type VendorAwardRow = {
   approved_amount: string | null;
   award_id: string;
   case_id: string;
+  contract_type: "PO" | "RC" | null;
   department_name: string | null;
   entity_code: string | null;
   entity_id: string;
@@ -2167,6 +2203,7 @@ type StageTimeSqlRow = {
   bid_evaluation_time_days: number | null;
   bid_receipt_time_days: number | null;
   case_id: string;
+  contract_type: "PO" | "RC" | null;
   contract_issuance_time_days: number | null;
   current_stage_aging_days: number | null;
   cycle_time_days: number | null;
@@ -2191,6 +2228,7 @@ type StageTimeSqlRow = {
 type ContractExpiryRow = {
   awarded_vendors: string | null;
   budget_type_id: string | null;
+  contract_type: "PO" | "RC" | null;
   department_id: string | null;
   department_name: string | null;
   days_to_expiry: number;
@@ -2226,6 +2264,7 @@ type FilterMetadataRow = {
   budget_type_name: string | null;
   completion_fy: string | null;
   completion_month: string | null;
+  contract_type: "PO" | "RC" | null;
   department_entity_id: string | null;
   department_id: string | null;
   department_name: string | null;
@@ -2248,6 +2287,7 @@ type FilterMetadataRow = {
 type RcPoFilterMetadataRow = {
   budget_type_id: string | null;
   budget_type_name: string | null;
+  contract_type: "PO" | "RC" | null;
   department_entity_id: string | null;
   department_id: string | null;
   department_name: string | null;

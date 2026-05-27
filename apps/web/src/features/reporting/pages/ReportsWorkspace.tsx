@@ -421,6 +421,21 @@ export function ReportsWorkspace() {
       })),
     [data.filterMetadata.data?.completionMonths],
   );
+  const contractTypeOptions = useMemo(
+    () =>
+      (reportCode === "rc_po_expiry"
+        ? (rcPoMetadata?.contractTypes ?? [])
+        : (data.filterMetadata.data?.contractTypes ?? [])
+      ).map((contractType) => ({
+        label: contractType,
+        value: contractType,
+      })),
+    [
+      data.filterMetadata.data?.contractTypes,
+      rcPoMetadata?.contractTypes,
+      reportCode,
+    ],
+  );
   const valueSlabOptions = useMemo(
     () =>
       (reportCode === "rc_po_expiry"
@@ -478,6 +493,7 @@ export function ReportsWorkspace() {
   const activeFilterChips = buildActiveReportFilterChips(filters, {
     completionFyOptions,
     completionMonthOptions,
+    contractTypeOptions,
     departmentOptions,
     entityOptions,
     budgetTypeOptions,
@@ -553,6 +569,10 @@ export function ReportsWorkspace() {
         { label: "Running", value: "running" },
         { label: "Completed", value: "completed" },
       ],
+      contractType: uniqueReportFilterOptions(
+        caseRowsForColumnFilters,
+        (row) => row.contractType ?? "-",
+      ),
       tenderType: uniqueReportFilterOptions(
         caseRowsForColumnFilters,
         (row) => row.tenderTypeName ?? "-",
@@ -598,6 +618,13 @@ export function ReportsWorkspace() {
         filterValue: (row) => row.tenderTypeName ?? "-",
         header: "Tender Type",
         render: (row) => row.tenderTypeName ?? "-",
+      },
+      {
+        key: "contractType",
+        filterOptions: caseColumnFilterOptions.contractType,
+        filterValue: (row) => row.contractType ?? "-",
+        header: "Contract Type",
+        render: (row) => row.contractType ?? "-",
       },
       {
         key: "stage",
@@ -755,6 +782,13 @@ export function ReportsWorkspace() {
         render: (row) => row.tenderName ?? row.prDescription ?? "-",
       },
       {
+        key: "contractType",
+        filterOptions: caseColumnFilterOptions.contractType,
+        filterValue: (row) => row.contractType ?? "-",
+        header: "Contract Type",
+        render: (row) => row.contractType ?? "-",
+      },
+      {
         key: "prReceiptDate",
         header: "PR Receipt Date",
         render: (row) => formatDateCell(row.prReceiptDate),
@@ -868,6 +902,13 @@ export function ReportsWorkspace() {
         key: "tenderName",
         header: "Tender Name",
         render: (row) => row.tenderName ?? row.prDescription ?? "-",
+      },
+      {
+        key: "contractType",
+        filterOptions: caseColumnFilterOptions.contractType,
+        filterValue: (row) => row.contractType ?? "-",
+        header: "Contract Type",
+        render: (row) => row.contractType ?? "-",
       },
       {
         key: "owner",
@@ -1008,6 +1049,13 @@ export function ReportsWorkspace() {
         render: (row) => row.tenderTypeName ?? "-",
       },
       {
+        key: "contractType",
+        filterOptions: caseColumnFilterOptions.contractType,
+        filterValue: (row) => row.contractType ?? "-",
+        header: "Contract Type",
+        render: (row) => row.contractType ?? "-",
+      },
+      {
         key: "natureOfWork",
         filterOptions: caseColumnFilterOptions.natureOfWork,
         filterValue: (row) => row.natureOfWorkName ?? "-",
@@ -1122,6 +1170,13 @@ export function ReportsWorkspace() {
         render: (row) => row.tenderTypeName ?? "-",
       },
       {
+        key: "contractType",
+        filterOptions: caseColumnFilterOptions.contractType,
+        filterValue: (row) => row.contractType ?? "-",
+        header: "Contract Type",
+        render: (row) => row.contractType ?? "-",
+      },
+      {
         key: "natureOfWork",
         filterOptions: caseColumnFilterOptions.natureOfWork,
         filterValue: (row) => row.natureOfWorkName ?? "-",
@@ -1193,6 +1248,10 @@ export function ReportsWorkspace() {
       data.vendorAwards.data ?? [],
       (row) => row.ownerFullName ?? "-",
     );
+    const contractTypeOptions = uniqueReportFilterOptions(
+      data.vendorAwards.data ?? [],
+      (row) => row.contractType ?? "-",
+    );
     const vendorOptions = uniqueReportFilterOptions(
       data.vendorAwards.data ?? [],
       (row) => row.vendorName,
@@ -1211,6 +1270,13 @@ export function ReportsWorkspace() {
         key: "tenderName",
         header: "Tender Name",
         render: (row) => row.tenderName ?? "-",
+      },
+      {
+        key: "contractType",
+        filterOptions: contractTypeOptions,
+        filterValue: (row) => row.contractType ?? "-",
+        header: "Contract Type",
+        render: (row) => row.contractType ?? "-",
       },
       {
         key: "entity",
@@ -1288,6 +1354,10 @@ export function ReportsWorkspace() {
       rows,
       (row) => row.tenderTypeName ?? "-",
     );
+    const contractTypeOptions = uniqueReportFilterOptions(
+      rows,
+      (row) => row.contractType ?? "-",
+    );
     const ownerOptions = uniqueReportFilterOptions(
       rows,
       (row) => row.ownerFullName ?? "-",
@@ -1332,6 +1402,13 @@ export function ReportsWorkspace() {
         filterValue: (row) => row.tenderTypeName ?? "-",
         header: "Tender Type",
         render: (row) => row.tenderTypeName ?? "-",
+      },
+      {
+        key: "contractType",
+        filterOptions: contractTypeOptions,
+        filterValue: (row) => row.contractType ?? "-",
+        header: "Contract Type",
+        render: (row) => row.contractType ?? "-",
       },
       {
         key: "owner",
@@ -1429,6 +1506,7 @@ export function ReportsWorkspace() {
     const prReceiptDate = row.tentativeTenderingDate ?? row.rcPoAwardDate ?? "";
     setCreatingCaseFromRcPo({
       initialValues: {
+        contractType: row.contractType ?? "",
         departmentId: row.departmentId ?? "",
         entityId: row.entityId,
         natureOfWorkId: row.natureOfWorkId ?? "",
@@ -1460,6 +1538,11 @@ export function ReportsWorkspace() {
         render: (row) => row.tenderDescription ?? "-",
       },
       {
+        key: "contractType",
+        header: "Contract Type",
+        render: (row) => row.contractType ?? "-",
+      },
+      {
         key: "entity",
         header: "Entity",
         render: (row) => row.entityCode ?? row.entityName ?? row.entityId,
@@ -1487,7 +1570,7 @@ export function ReportsWorkspace() {
       {
         key: "validity",
         header: "Validity Date",
-        render: (row) => row.rcPoValidityDate,
+        render: (row) => formatDateCell(row.rcPoValidityDate),
       },
       {
         key: "owner",
@@ -1634,6 +1717,7 @@ export function ReportsWorkspace() {
       setBudgetTypeIds: filters.setSelectedBudgetTypeIds,
       setCompletionFys: filters.setSelectedCompletionFys,
       setCompletionMonths: filters.setSelectedCompletionMonths,
+      setContractTypes: filters.setSelectedContractTypes,
       setCpcInvolved: filters.setCpcInvolved,
       setDelayStatus: filters.setDelayStatus,
       setDeletedOnly: filters.setDeletedOnly,
@@ -1870,6 +1954,7 @@ export function ReportsWorkspace() {
             budgetTypeOptions={budgetTypeOptions}
             completionFyOptions={completionFyOptions}
             completionMonthOptions={completionMonthOptions}
+            contractTypeOptions={contractTypeOptions}
             dataIsLoading={data.filterMetadata.isLoading}
             departmentOptions={departmentOptions}
             entityOptions={entityOptions}
@@ -3150,6 +3235,7 @@ function buildCaseDrilldownPath(
 
   setDrilldownCsvParam(params, "budgetTypeIds", mergedParams.budgetTypeIds);
   setDrilldownCsvParam(params, "completionFys", mergedParams.completionFys);
+  setDrilldownCsvParam(params, "contractTypes", mergedParams.contractTypes);
   setDrilldownBooleanParam(params, "cpcInvolved", mergedParams.cpcInvolved);
   setDrilldownCsvParam(params, "departmentIds", mergedParams.departmentIds);
   setDrilldownCsvParam(params, "entityIds", mergedParams.entityIds);
@@ -4368,6 +4454,7 @@ function ReportFilterPanel({
   budgetTypeOptions,
   completionFyOptions,
   completionMonthOptions,
+  contractTypeOptions,
   dataIsLoading,
   departmentOptions,
   entityOptions,
@@ -4387,6 +4474,7 @@ function ReportFilterPanel({
   budgetTypeOptions: ReportOption[];
   completionFyOptions: ReportOption[];
   completionMonthOptions: ReportOption[];
+  contractTypeOptions: ReportOption[];
   dataIsLoading: boolean;
   departmentOptions: ReportOption[];
   entityOptions: ReportOption[];
@@ -4454,6 +4542,7 @@ function ReportFilterPanel({
       <RcPoReportFilterPanel
         activeFilterCount={activeFilterCount}
         budgetTypeOptions={budgetTypeOptions}
+        contractTypeOptions={contractTypeOptions}
         dataIsLoading={dataIsLoading}
         departmentOptions={departmentOptions}
         entityOptions={entityOptions}
@@ -4522,6 +4611,13 @@ function ReportFilterPanel({
             onChange={filters.setSelectedTenderTypeIds}
             options={tenderTypeOptions}
             value={filters.selectedTenderTypeIds}
+          />
+          <ReportMultiSelectFilter
+            disabled={dataIsLoading}
+            label="Contract Type"
+            onChange={(value) => filters.setSelectedContractTypes(toContractTypes(value))}
+            options={contractTypeOptions}
+            value={filters.selectedContractTypes}
           />
           {!useBusinessFilterSet &&
           !isTechnicalEvaluationPendency &&
@@ -4712,6 +4808,7 @@ function ReportFilterPanel({
 function RcPoReportFilterPanel({
   activeFilterCount,
   budgetTypeOptions,
+  contractTypeOptions,
   dataIsLoading,
   departmentOptions,
   entityOptions,
@@ -4725,6 +4822,7 @@ function RcPoReportFilterPanel({
 }: {
   activeFilterCount: number;
   budgetTypeOptions: ReportOption[];
+  contractTypeOptions: ReportOption[];
   dataIsLoading: boolean;
   departmentOptions: ReportOption[];
   entityOptions: ReportOption[];
@@ -4818,6 +4916,13 @@ function RcPoReportFilterPanel({
             onChange={filters.setSelectedBudgetTypeIds}
             options={budgetTypeOptions}
             value={filters.selectedBudgetTypeIds}
+          />
+          <ReportMultiSelectFilter
+            disabled={dataIsLoading}
+            label="Contract Type"
+            onChange={(value) => filters.setSelectedContractTypes(toContractTypes(value))}
+            options={contractTypeOptions}
+            value={filters.selectedContractTypes}
           />
           <ReportMultiSelectFilter
             disabled={dataIsLoading}
@@ -5259,6 +5364,7 @@ function countActiveReportFilters(
       ...filters.selectedOwnerUserIds,
       ...filters.selectedNatureOfWorkIds,
       ...filters.selectedBudgetTypeIds,
+      ...filters.selectedContractTypes,
       ...filters.selectedValueSlabs,
     ].filter(Boolean).length;
   }
@@ -5276,6 +5382,7 @@ function countActiveReportFilters(
     ...filters.selectedDepartmentIds,
     ...filters.selectedOwnerUserIds,
     ...filters.selectedTenderTypeIds,
+    ...filters.selectedContractTypes,
     ...filters.selectedNatureOfWorkIds,
     ...filters.selectedBudgetTypeIds,
     ...filters.selectedValueSlabs,
@@ -5291,6 +5398,7 @@ function buildActiveReportFilterChips(
   options: {
     completionFyOptions: ReportOption[];
     completionMonthOptions: ReportOption[];
+    contractTypeOptions: ReportOption[];
     departmentOptions: ReportOption[];
     entityOptions: ReportOption[];
     budgetTypeOptions: ReportOption[];
@@ -5347,6 +5455,11 @@ function buildActiveReportFilterChips(
         options.budgetTypeOptions,
       ),
       ...labelsForSelection(
+        "Contract",
+        filters.selectedContractTypes,
+        options.contractTypeOptions,
+      ),
+      ...labelsForSelection(
         "Value",
         filters.selectedValueSlabs,
         options.valueSlabOptions,
@@ -5390,6 +5503,11 @@ function buildActiveReportFilterChips(
       "Type",
       filters.selectedTenderTypeIds,
       options.tenderTypeOptions,
+    ),
+    ...labelsForSelection(
+      "Contract",
+      filters.selectedContractTypes,
+      options.contractTypeOptions,
     ),
     ...labelsForSelection(
       "Nature",
@@ -5444,6 +5562,10 @@ function labelsForSelection(
     options.map((option) => [option.value, option.label]),
   );
   return values.map((value) => `${prefix}: ${byValue.get(value) ?? value}`);
+}
+
+function toContractTypes(values: string[]): Array<"PO" | "RC"> {
+  return values.filter((value): value is "PO" | "RC" => value === "PO" || value === "RC");
 }
 
 function toggleArrayValue<T extends string>(

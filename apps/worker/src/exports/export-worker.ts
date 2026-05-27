@@ -23,6 +23,7 @@ type ReportFilters = {
   budgetTypeIds: string[];
   completionFys: string[];
   completionMonths: string[];
+  contractTypes: Array<"PO" | "RC">;
   cpcInvolved?: boolean | undefined;
   delayStatus?: "delayed" | "on_time" | undefined;
   deletedOnly?: boolean | undefined;
@@ -275,6 +276,7 @@ async function queryExportRows(input: {
           c.pr_id,
           c.tender_no,
           c.tender_name,
+          f.contract_type,
           coalesce(e.code, e.name) as entity,
           dep.name as department,
           owner.full_name as tender_owner,
@@ -301,6 +303,7 @@ async function queryExportRows(input: {
     return result.rows.map((row) => ({
       "Tender No.": row.tender_no ?? row.pr_id ?? null,
       "Tender Name": row.tender_name ?? null,
+      "Contract Type": row.contract_type ?? null,
       Entity: row.entity ?? null,
       "User Department": row.department ?? null,
       "Tender Owner": row.tender_owner ?? null,
@@ -358,6 +361,7 @@ async function queryExportRows(input: {
         c.pr_id,
         c.pr_description,
         c.tender_name,
+        f.contract_type,
         coalesce(e.code, e.name) as entity,
         dep.name as department,
         f.pr_value,
@@ -456,6 +460,7 @@ async function queryExportRows(input: {
       "Tender number": row.tender_no ?? null,
       "Tender Description": row.pr_description ?? row.tender_name ?? null,
       "Tender Type": row.tender_type ?? null,
+      "Contract Type": row.contract_type ?? null,
       "Nature of Work": row.nature_of_work ?? null,
       Priority: row.priority_case ? "Priority" : null,
       "PR Value/Approved Budget (Rs.) [All Inclusive]": row.pr_value ?? null,
@@ -479,6 +484,7 @@ async function queryExportRows(input: {
       "Tender number": row.tender_no ?? null,
       "Tender Description": row.pr_description ?? row.tender_name ?? null,
       "Tender Type": row.tender_type ?? null,
+      "Contract Type": row.contract_type ?? null,
       "Nature of Work": row.nature_of_work ?? null,
       Priority: row.priority_case ? "Priority" : null,
       "PR Value/Approved Budget (Rs.) [All Inclusive]": row.pr_value ?? null,
@@ -493,6 +499,7 @@ async function queryExportRows(input: {
     return result.rows.map((row) => ({
       "Tender No.": row.tender_no ?? row.pr_id ?? null,
       "Tender Name": row.tender_name ?? row.pr_description ?? null,
+      "Contract Type": row.contract_type ?? null,
       "PR Receipt Date": formatExportDate(row.pr_receipt_date),
       "PR Value / Approved Budget [All Inclusive]": row.pr_value ?? null,
       "Tender Owner": row.tender_owner ?? null,
@@ -520,6 +527,7 @@ async function queryExportRows(input: {
     return result.rows.map((row) => ({
       "Tender No.": row.tender_no ?? row.pr_id ?? null,
       "Tender Name": row.tender_name ?? row.pr_description ?? null,
+      "Contract Type": row.contract_type ?? null,
       "Tender Owner": row.tender_owner ?? null,
       Entity: row.entity ?? null,
       "User Department": row.department ?? null,
@@ -569,6 +577,7 @@ async function queryExportRows(input: {
         ? amountToNumber(row.pr_value)
         : amountToLakhs(row.pr_value),
     "Tender Type": row.tender_type ?? null,
+    "Contract Type": row.contract_type ?? null,
     "Tender Stage": formatExportStage(row.stage_code),
     "Normative Tender Stage":
       row.desired_stage_code == null
@@ -648,6 +657,7 @@ async function queryStageTimeExport(input: {
         coalesce(e.code, e.name) as entity,
         f.priority_case,
         tt.name as tender_type,
+        f.contract_type,
         owner.full_name as tender_owner,
         f.stage_code,
         case
@@ -733,6 +743,7 @@ async function queryStageTimeExport(input: {
     Entity: row.entity ?? null,
     Priority: row.priority_case ? "Priority" : null,
     "Tender Type": row.tender_type ?? null,
+    "Contract Type": row.contract_type ?? null,
     "Tender Owner": row.tender_owner ?? null,
     "Tender Stage": formatExportStage(row.stage_code),
     "Running Tender Age": row.running_age_days ?? null,
@@ -781,6 +792,7 @@ async function queryRcPoExpiryExport(input: {
         (array_agg(coalesce(filtered.entity_code, filtered.entity_name) order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as entity,
         (array_agg(filtered.department_name order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as department,
         (array_agg(filtered.owner_full_name order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as tender_owner,
+        (array_agg(filtered.contract_type order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as contract_type,
         (array_agg(filtered.tender_description order by filtered.rc_po_validity_date asc, filtered.id asc))[1] as tender_description,
         string_agg(distinct nullif(filtered.awarded_vendors, ''), ', ') as awarded_vendors,
         sum(filtered.rc_po_amount) as rc_po_amount,
@@ -820,6 +832,7 @@ async function queryRcPoExpiryExport(input: {
   return result.rows.map((row) => ({
     Source: row.source_type === "manual_plan" ? "Bulk Upload" : "TenderDB",
     "Tender Description": row.tender_description ?? null,
+    "Contract Type": row.contract_type ?? null,
     Entity: row.entity ?? null,
     Department: row.department ?? null,
     [amountHeader]:
@@ -978,6 +991,7 @@ function normalizeFilters(value: unknown): ReportFilters {
     budgetTypeIds: stringArray(record.budgetTypeIds, 100),
     completionFys: stringArray(record.completionFys, 50),
     completionMonths: stringArray(record.completionMonths, 60),
+    contractTypes: contractTypeArray(record.contractTypes),
     cpcInvolved: optionalBoolean(record.cpcInvolved),
     delayStatus:
       record.delayStatus === "delayed" || record.delayStatus === "on_time"
@@ -1035,6 +1049,7 @@ function applyCaseFactFilters(
     filters.tenderTypeIds,
     "f.tender_type_id",
   );
+  applyTextArrayFilter(where, values, filters.contractTypes, "f.contract_type");
   applyUuidArrayFilter(
     where,
     values,
@@ -1160,6 +1175,7 @@ function applyRcPoExpiryFilters(
     filters.ownerUserIds,
     "e.owner_user_id",
   );
+  applyTextArrayFilter(where, values, filters.contractTypes, "e.contract_type");
   applyUuidArrayFilter(
     where,
     values,
@@ -1268,6 +1284,18 @@ function applyUuidArrayFilter(
   }
 }
 
+function applyTextArrayFilter(
+  where: string[],
+  values: unknown[],
+  items: string[],
+  column: string,
+) {
+  if (items.length) {
+    values.push(items);
+    where.push(`${column} = any($${values.length}::text[])`);
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -1278,6 +1306,10 @@ function stringArray(value: unknown, maxLength: number) {
     .map((item) => String(item).trim())
     .filter(Boolean)
     .slice(0, maxLength);
+}
+
+function contractTypeArray(value: unknown): Array<"PO" | "RC"> {
+  return stringArray(value, 2).filter((item): item is "PO" | "RC" => item === "PO" || item === "RC");
 }
 
 function intArray(value: unknown, maxLength: number) {
@@ -1343,10 +1375,17 @@ function csvEscape(value: unknown): string {
 
 function formatExportDate(value: unknown): string | null {
   if (value == null) return null;
-  const iso = value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
+  const iso = value instanceof Date ? formatDateParts(value) : String(value).slice(0, 10);
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
   if (!match) return iso;
   return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
+function formatDateParts(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function amountToLakhs(value: unknown): number | null {

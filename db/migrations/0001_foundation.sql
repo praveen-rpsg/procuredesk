@@ -309,6 +309,7 @@ create table procurement.cases (
   desired_stage_code integer,
   is_delayed boolean not null default false,
   priority_case boolean not null default false,
+  contract_type text,
   cpc_involved boolean,
   pr_scheme_no text,
   pr_receipt_date date,
@@ -326,6 +327,7 @@ create table procurement.cases (
   deleted_by uuid references iam.users(id),
   delete_reason text,
   constraint cases_status_check check (status in ('running', 'completed')),
+  constraint cases_contract_type_check check (contract_type is null or contract_type in ('PO', 'RC')),
   constraint cases_stage_code_check check (stage_code between 0 and 8),
   constraint cases_desired_stage_code_check check (
     desired_stage_code is null or desired_stage_code between 0 and 8
@@ -546,6 +548,7 @@ create table reporting.case_facts (
   department_id uuid,
   owner_user_id uuid,
   tender_type_id uuid,
+  contract_type text,
   status text not null,
   stage_code integer not null,
   desired_stage_code integer,
@@ -586,6 +589,7 @@ create table reporting.contract_expiry_facts (
   owner_user_id uuid,
   budget_type_id uuid references catalog.reference_values(id) on delete restrict,
   nature_of_work_id uuid references catalog.reference_values(id) on delete restrict,
+  contract_type text,
   tender_description text,
   awarded_vendors text,
   rc_po_amount numeric(18,2),
@@ -596,7 +600,8 @@ create table reporting.contract_expiry_facts (
   source_deleted_at timestamptz,
   source_type text not null,
   updated_at timestamptz not null default now(),
-  constraint contract_expiry_source_check check (source_type in ('case_award', 'manual_plan'))
+  constraint contract_expiry_source_check check (source_type in ('case_award', 'manual_plan')),
+  constraint contract_expiry_contract_type_check check (contract_type is null or contract_type in ('PO', 'RC'))
 );
 
 create index contract_expiry_facts_date_idx

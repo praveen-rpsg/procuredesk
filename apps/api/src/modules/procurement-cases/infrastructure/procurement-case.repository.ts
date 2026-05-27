@@ -13,6 +13,7 @@ import type {
 export type CaseListFilters = {
   budgetTypeIds?: string[];
   completionFys?: string[];
+  contractTypes?: Array<"PO" | "RC">;
   cpcInvolved?: boolean;
   dateFrom?: string;
   dateTo?: string;
@@ -46,6 +47,7 @@ export type CaseListScope = {
 export type CaseListItem = {
   approvedAmount: number | null;
   completionFy: string | null;
+  contractType: "PO" | "RC" | null;
   cycleTimeDays: number | null;
   cpcInvolved: boolean | null;
   departmentName: string | null;
@@ -91,6 +93,7 @@ export class ProcurementCaseRepository {
   async createCase(
     input: {
       actorUserId: string;
+      contractType?: "PO" | "RC" | null;
       cpcInvolved?: boolean | null;
       departmentId?: string | null;
       desiredStageCode: number | null;
@@ -121,12 +124,12 @@ export class ProcurementCaseRepository {
           tenant_id, pr_id, entity_id, department_id, tender_type_id,
           pr_receiving_medium_id, budget_type_id, nature_of_work_id,
           owner_user_id, created_by, status, stage_code, desired_stage_code,
-          is_delayed, priority_case, cpc_involved, pr_scheme_no,
+          is_delayed, priority_case, contract_type, cpc_involved, pr_scheme_no,
           pr_receipt_date, pr_description, pr_remarks, tentative_completion_date
         )
         values (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-          $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
+          $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
         )
         returning id
       `,
@@ -146,6 +149,7 @@ export class ProcurementCaseRepository {
         input.desiredStageCode,
         input.isDelayed,
         input.priorityCase,
+        nullable(input.contractType),
         nullable(input.cpcInvolved),
         nullable(input.prSchemeNo),
         nullable(input.prReceiptDate),
@@ -174,6 +178,7 @@ export class ProcurementCaseRepository {
       prSchemeNo?: string | null;
       tenderName?: string | null;
       tenderNo?: string | null;
+      tenderTypeId?: string | null;
       tmRemarks?: string | null;
       tentativeCompletionDate?: string | null;
       desiredStageCode?: number | null;
@@ -196,9 +201,10 @@ export class ProcurementCaseRepository {
             tentative_completion_date = coalesce($10, tentative_completion_date),
             desired_stage_code = coalesce($11, desired_stage_code),
             is_delayed = coalesce($12, is_delayed),
+            tender_type_id = coalesce($13, tender_type_id),
             version = version + 1,
             updated_at = now(),
-            updated_by = $13
+            updated_by = $14
         where id = $1
           and tenant_id = $2
           and deleted_at is null
@@ -216,6 +222,7 @@ export class ProcurementCaseRepository {
         input.tentativeCompletionDate ?? null,
         input.desiredStageCode ?? null,
         input.isDelayed ?? null,
+        input.tenderTypeId ?? null,
         input.updatedBy,
       ],
       client,
@@ -427,6 +434,7 @@ export class ProcurementCaseRepository {
           end as cycle_time_days,
           c.id,
           c.cpc_involved,
+          c.contract_type,
           case
             when c.status <> 'running' then null
             when c.stage_code >= 8 and m.rc_po_award_date is not null then current_date - m.rc_po_award_date
@@ -514,6 +522,7 @@ export class ProcurementCaseRepository {
     return result.rows.map((row) => ({
       approvedAmount: this.numberOrNull(row.approved_amount),
       completionFy: row.completion_fy,
+      contractType: row.contract_type,
       cycleTimeDays: this.numberOrNull(row.cycle_time_days),
       cpcInvolved: row.cpc_involved,
       currentStageAgingDays: this.numberOrNull(row.current_stage_aging_days),
@@ -587,6 +596,7 @@ export class ProcurementCaseRepository {
         select
           c.id,
           c.cpc_involved,
+          c.contract_type,
           c.entity_id,
           c.pr_id,
           c.pr_description,
@@ -613,6 +623,7 @@ export class ProcurementCaseRepository {
       completionFy: null,
       cycleTimeDays: null,
       cpcInvolved: row.cpc_involved,
+      contractType: row.contract_type,
       departmentName: null,
       desiredStageCode: null,
       entityId: row.entity_id,
@@ -983,6 +994,7 @@ export class ProcurementCaseRepository {
           else false
         end as is_delayed,
         c.priority_case,
+        c.contract_type,
         c.cpc_involved,
         c.pr_description,
         c.pr_remarks,
@@ -990,6 +1002,7 @@ export class ProcurementCaseRepository {
         c.pr_receipt_date,
         c.tender_name,
         c.tender_no,
+        c.tender_type_id,
         c.tentative_completion_date,
         c.tm_remarks,
         c.created_at,
@@ -1056,6 +1069,7 @@ export class ProcurementCaseRepository {
       desiredStageCode: row.desired_stage_code,
       isDelayed: row.is_delayed,
       priorityCase: row.priority_case,
+      contractType: row.contract_type,
       cpcInvolved: row.cpc_involved,
       prDescription: row.pr_description,
       prRemarks: row.pr_remarks,
@@ -1063,6 +1077,7 @@ export class ProcurementCaseRepository {
       prReceiptDate: this.dateOnly(row.pr_receipt_date),
       tenderName: row.tender_name,
       tenderNo: row.tender_no,
+      tenderTypeId: row.tender_type_id,
       tentativeCompletionDate: this.dateOnly(row.tentative_completion_date),
       tmRemarks: row.tm_remarks,
       budgetTypeLabel: row.budget_type_label,
@@ -1179,12 +1194,13 @@ function applyCaseListFilters(where: string[], values: unknown[], filters: CaseL
     { column: "c.cpc_involved", value: filters.cpcInvolved },
     { column: "m.loi_issued", value: filters.loiAwarded },
   ];
-  const arrayFilters: Array<{ column: string; value: string[] | undefined }> = [
-    { column: "c.entity_id", value: filters.entityIds },
-    { column: "c.department_id", value: filters.departmentIds },
-    { column: "c.tender_type_id", value: filters.tenderTypeIds },
-    { column: "c.budget_type_id", value: filters.budgetTypeIds },
-    { column: "c.nature_of_work_id", value: filters.natureOfWorkIds },
+  const arrayFilters: Array<{ cast: "text" | "uuid"; column: string; value: string[] | undefined }> = [
+    { cast: "uuid", column: "c.entity_id", value: filters.entityIds },
+    { cast: "uuid", column: "c.department_id", value: filters.departmentIds },
+    { cast: "uuid", column: "c.tender_type_id", value: filters.tenderTypeIds },
+    { cast: "text", column: "c.contract_type", value: filters.contractTypes },
+    { cast: "uuid", column: "c.budget_type_id", value: filters.budgetTypeIds },
+    { cast: "uuid", column: "c.nature_of_work_id", value: filters.natureOfWorkIds },
   ];
 
   for (const filter of scalarFilters) {
@@ -1336,10 +1352,10 @@ function appendOptionalBooleanFilter(
 function appendOptionalArrayFilter(
   where: string[],
   values: unknown[],
-  filter: { column: string; value: string[] | undefined },
+  filter: { cast: "text" | "uuid"; column: string; value: string[] | undefined },
 ): void {
   if (!filter.value?.length) return;
-  appendWhere(where, values, filter.value, (position) => `${filter.column} = any($${position}::uuid[])`);
+  appendWhere(where, values, filter.value, (position) => `${filter.column} = any($${position}::${filter.cast}[])`);
 }
 
 function appendWhere(
@@ -1355,6 +1371,7 @@ function appendWhere(
 type CaseListRow = {
   approved_amount: string | null;
   completion_fy: string | null;
+  contract_type: "PO" | "RC" | null;
   cycle_time_days: string | number | null;
   cpc_involved: boolean | null;
   current_stage_aging_days: string | number | null;
@@ -1408,6 +1425,7 @@ type CaseAggregateRow = {
   estimate_benchmark: string | null;
   id: string;
   is_delayed: boolean;
+  contract_type: "PO" | "RC" | null;
   cpc_involved: boolean | null;
   loi_issued: boolean;
   loi_issued_date: Date | null;
@@ -1438,6 +1456,7 @@ type CaseAggregateRow = {
   tenant_id: string;
   tender_name: string | null;
   tender_no: string | null;
+  tender_type_id: string | null;
   tender_type_name: string | null;
   tentative_completion_date: Date | null;
   tm_remarks: string | null;

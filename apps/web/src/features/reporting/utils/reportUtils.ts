@@ -7,11 +7,13 @@ export type AmountUnit = "lakh" | "rupees";
 export type ReportViewKey = ReportCode | "analytics" | "export_jobs" | "saved_views";
 export type ReportStatusFilter = "all" | "completed" | "running";
 export type TrackStatusValue = "delayed" | "off_track" | "on_track";
+export type ContractType = "PO" | "RC";
 
 export function buildReportParams(input: {
   budgetTypeIds: string[];
   completionFys: string[];
   completionMonths: string[];
+  contractTypes: ContractType[];
   cpcInvolved: boolean | undefined;
   delayStatus: "delayed" | "on_time" | undefined;
   deletedOnly: boolean | undefined;
@@ -56,6 +58,7 @@ export function buildReportParams(input: {
   assignStringArrayParam(params, "completionFys", input.completionFys);
   assignStringArrayParam(params, "prReceiptMonths", input.prReceiptMonths);
   assignStringArrayParam(params, "completionMonths", input.completionMonths);
+  assignStringArrayParam(params, "contractTypes", input.contractTypes);
   assignStatusParam(params, input.includeStatus, input.status);
   assignStringArrayParam(params, "trackStatuses", input.trackStatuses);
   return params;
@@ -66,6 +69,7 @@ export function buildReportFilterPayload(input: {
   budgetTypeIds: string[];
   completionFys: string[];
   completionMonths: string[];
+  contractTypes: ContractType[];
   cpcInvolved: boolean | undefined;
   delayStatus: "delayed" | "on_time" | undefined;
   deletedOnly: boolean | undefined;
@@ -108,6 +112,7 @@ export function buildReportFilterPayload(input: {
   assignStringArrayParam(payload, "completionFys", input.completionFys);
   assignStringArrayParam(payload, "prReceiptMonths", input.prReceiptMonths);
   assignStringArrayParam(payload, "completionMonths", input.completionMonths);
+  assignStringArrayParam(payload, "contractTypes", input.contractTypes);
   assignStatusParam(payload, input.includeStatus, input.status);
   assignStringArrayParam(payload, "trackStatuses", input.trackStatuses);
   assignAmountUnitParam(payload, input.amountUnit);
@@ -223,6 +228,7 @@ export function applySavedView(
     setBudgetTypeIds: (v: string[]) => void;
     setCompletionFys: (v: string[]) => void;
     setCompletionMonths: (v: string[]) => void;
+    setContractTypes: (v: ContractType[]) => void;
     setCpcInvolved: (v: "any" | "false" | "true") => void;
     setDelayStatus: (v: "all" | "delayed" | "on_time") => void;
     setDeletedOnly: (v: boolean) => void;
@@ -257,6 +263,7 @@ export function applySavedView(
   setters.setCompletionFys(stringArray(filters.completionFys));
   setters.setPrReceiptMonths(stringArray(filters.prReceiptMonths));
   setters.setCompletionMonths(stringArray(filters.completionMonths));
+  setters.setContractTypes(contractTypeArray(filters.contractTypes));
   setters.setStatusFilter(toStatusFilter(typeof filters.status === "string" ? filters.status : "all"));
   setters.setDelayStatus(filters.delayStatus === "delayed" || filters.delayStatus === "on_time" ? filters.delayStatus : "all");
   setters.setDeletedOnly(filters.deletedOnly === true);
@@ -272,6 +279,10 @@ export function applySavedView(
   if (isAmountUnit(filters.amountUnit)) {
     setters.setAmountUnit(filters.amountUnit);
   }
+}
+
+function contractTypeArray(value: unknown): ContractType[] {
+  return stringArray(value).filter((item): item is ContractType => item === "PO" || item === "RC");
 }
 
 function toTrackStatuses(

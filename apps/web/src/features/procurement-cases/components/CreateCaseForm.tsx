@@ -7,7 +7,7 @@ import {
   listAssignableOwners,
 } from "../../admin/api/adminApi";
 import { listEntities } from "../../planning/api/planningApi";
-import { createCase } from "../api/casesApi";
+import { createCase, type ContractType } from "../api/casesApi";
 import { useAuth } from "../../../shared/auth/AuthProvider";
 import { canEditEntityManagedCaseFields } from "../../../shared/auth/permissions";
 import {
@@ -24,6 +24,7 @@ import { useToast } from "../../../shared/ui/toast/ToastProvider";
 
 type CreateCaseFormValues = {
   budgetTypeId: string;
+  contractType: ContractType | "";
   cpcInvolved: boolean;
   departmentId: string;
   entityId: string;
@@ -48,6 +49,7 @@ type CreateCaseFormProps = {
 type CreateCaseFormErrors = Partial<Record<keyof CreateCaseFormValues, string>>;
 
 type ParsedCreateCaseForm = {
+  contractType: ContractType | null;
   errors: CreateCaseFormErrors;
   prValue: number | null;
 };
@@ -63,6 +65,11 @@ const createCaseFormSchema = {
   maxTextLength: 5000,
 };
 
+const contractTypeOptions: Array<{ label: string; value: ContractType }> = [
+  { label: "PO", value: "PO" },
+  { label: "RC", value: "RC" },
+];
+
 export function CreateCaseForm({
   initialValues,
   onCreated,
@@ -75,6 +82,7 @@ export function CreateCaseForm({
   const [ownerUserId, setOwnerUserId] = useState("");
   const [tenderTypeId, setTenderTypeId] = useState("");
   const [budgetTypeId, setBudgetTypeId] = useState("");
+  const [contractType, setContractType] = useState<ContractType | "">("");
   const [natureOfWorkId, setNatureOfWorkId] = useState("");
   const [cpcInvolved, setCpcInvolved] = useState(false);
   const [priorityCase, setPriorityCase] = useState(false);
@@ -93,6 +101,7 @@ export function CreateCaseForm({
     setOwnerUserId(initialValues.ownerUserId ?? "");
     setTenderTypeId(initialValues.tenderTypeId ?? "");
     setBudgetTypeId(initialValues.budgetTypeId ?? "");
+    setContractType(initialValues.contractType ?? "");
     setNatureOfWorkId(initialValues.natureOfWorkId ?? "");
     setCpcInvolved(initialValues.cpcInvolved ?? false);
     setPriorityCase(initialValues.priorityCase ?? false);
@@ -230,6 +239,7 @@ export function CreateCaseForm({
     event.preventDefault();
     const parsed = validateCreateCaseForm({
       budgetTypeId,
+      contractType,
       cpcInvolved,
       departmentId,
       entityId,
@@ -246,9 +256,11 @@ export function CreateCaseForm({
     setFormErrors(parsed.errors);
     if (Object.keys(parsed.errors).length > 0) return;
     if (parsed.prValue == null) return;
+    if (parsed.contractType == null) return;
 
     mutation.mutate({
       budgetTypeId,
+      contractType: parsed.contractType,
       cpcInvolved,
       departmentId,
       entityId,
@@ -447,6 +459,26 @@ export function CreateCaseForm({
               value={tentativeCompletionDate}
             />
           </FormField>
+          <FormField
+            error={formErrors.contractType ?? ""}
+            label="Contract Type"
+          >
+            <select
+              className="text-input"
+              onChange={(event) =>
+                setContractType(event.target.value as ContractType | "")
+              }
+              required
+              value={contractType}
+            >
+              <option value="">Select Contract Type</option>
+              {contractTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </FormField>
           <FormField error={formErrors.budgetTypeId ?? ""} label="Budget Type">
             <select
               className="text-input"
@@ -566,13 +598,20 @@ function validateCreateCaseForm(
   if (!values.tenderTypeId) {
     errors.tenderTypeId = "Tender Type is required.";
   }
+  if (!values.contractType) {
+    errors.contractType = "Contract Type is required.";
+  }
   if (!values.budgetTypeId) {
     errors.budgetTypeId = "Budget Type is required.";
   }
   if (!values.natureOfWorkId) {
     errors.natureOfWorkId = "Nature Of Work is required.";
   }
-  return { errors, prValue };
+  return {
+    contractType: values.contractType || null,
+    errors,
+    prValue,
+  };
 }
 
 function parseCurrencyAmount(value: string): number | null {

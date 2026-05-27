@@ -9,8 +9,10 @@ import { createHash, randomBytes } from "node:crypto";
 
 import { DatabaseService } from "../../../database/database.service.js";
 import {
+  DEFAULT_EMAIL_SUPPORT,
   buildPasswordChangedEmail,
   buildPasswordResetEmail,
+  type EmailSupport,
 } from "../../notifications/application/email-templates.js";
 import { OutboxWriterService } from "../../outbox/application/outbox-writer.service.js";
 import type { AuthenticatedUser } from "../domain/authenticated-user.js";
@@ -285,10 +287,15 @@ export class AuthService {
       const resetUrl = new URL("/reset-password", this.config.get<string>("APP_URL", "http://localhost:5175"));
       resetUrl.searchParams.set("token", token);
       if (user.tenantCode) resetUrl.searchParams.set("tenant", user.tenantCode);
+      const support = await this.getNotificationSupport(user.tenantId);
       const email = buildPasswordResetEmail({
+        deviceInfo: this.formatDeviceInfo(input.userAgent),
         expiresIn: "1 hour",
         fullName: user.fullName,
+        ipAddress: input.ipAddress,
+        requestedAt: new Date(),
         resetUrl: resetUrl.toString(),
+        support,
       });
       const notification = await this.createNotificationJob({
         notificationType: "password_reset",
@@ -412,9 +419,12 @@ export class AuthService {
     if (!(await this.isEmailTemplateEnabled(input.tenantId, "password_changed"))) {
       return;
     }
+    const support = await this.getNotificationSupport(input.tenantId);
     const email = buildPasswordChangedEmail({
       appUrl: this.config.get<string>("APP_URL", "http://localhost:5175"),
+      changedAt: new Date(),
       fullName: input.fullName,
+      support,
     });
     const notification = await this.createNotificationJob({
       notificationType: "password_changed",
@@ -448,8 +458,36 @@ export class AuthService {
     return row?.is_enabled ?? true;
   }
 
+  private async getNotificationSupport(tenantId: string): Promise<EmailSupport> {
+    const row = await this.db.one<{
+      support_email: string;
+      support_name: string;
+      support_phone: string | null;
+    }>(
+      `
+        select support_name, support_email::text as support_email, support_phone
+        from ops.notification_settings
+        where tenant_id = $1
+        limit 1
+      `,
+      [tenantId],
+    );
+    if (!row) return DEFAULT_EMAIL_SUPPORT;
+    return {
+      email: row.support_email,
+      name: row.support_name,
+      phone: row.support_phone ?? undefined,
+    };
+  }
+
   private hashResetToken(token: string): string {
     return createHash("sha256").update(token).digest("hex");
+  }
+
+  private formatDeviceInfo(userAgent: string | undefined): string | undefined {
+    const value = userAgent?.replace(/\s+/g, " ").trim();
+    if (!value) return undefined;
+    return value.length > 140 ? `${value.slice(0, 137)}...` : value;
   }
 
   private passwordPolicyForUser(

@@ -69,6 +69,19 @@ function readApiBaseUrl(env: unknown): string {
 
 function problemDetailMessage(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "Request failed.";
+  const issues = (payload as Record<string, unknown>).issues;
+  if (Array.isArray(issues) && issues.length > 0) {
+    const issue = issues.find(
+      (value): value is { message: string; path: string } =>
+        Boolean(value) &&
+        typeof value === "object" &&
+        typeof (value as Record<string, unknown>).message === "string" &&
+        typeof (value as Record<string, unknown>).path === "string",
+    );
+    if (issue) {
+      return issue.path ? `${issue.path}: ${issue.message}` : issue.message;
+    }
+  }
   const detail = (payload as Record<string, unknown>).detail;
   return typeof detail === "string" ? detail : "Request failed.";
 }

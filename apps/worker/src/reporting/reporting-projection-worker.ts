@@ -29,7 +29,7 @@ async function upsertCaseFact(tenantId: string, caseId: string, pool: Pool): Pro
     `
       insert into reporting.case_facts (
         case_id, tenant_id, entity_id, department_id, owner_user_id,
-        tender_type_id, status, stage_code, desired_stage_code, is_delayed,
+        tender_type_id, contract_type, status, stage_code, desired_stage_code, is_delayed,
         priority_case, cpc_involved, pr_receipt_date, rc_po_award_date,
         completion_fy, value_slab, rc_po_value_slab, running_age_days,
         completed_age_days, current_stage_aging_days, pr_value,
@@ -43,6 +43,7 @@ async function upsertCaseFact(tenantId: string, caseId: string, pool: Pool): Pro
         c.department_id,
         c.owner_user_id,
         c.tender_type_id,
+        c.contract_type,
         c.status,
         c.stage_code,
         c.desired_stage_code,
@@ -130,6 +131,7 @@ async function upsertCaseFact(tenantId: string, caseId: string, pool: Pool): Pro
           department_id = excluded.department_id,
           owner_user_id = excluded.owner_user_id,
           tender_type_id = excluded.tender_type_id,
+          contract_type = excluded.contract_type,
           status = excluded.status,
           stage_code = excluded.stage_code,
           desired_stage_code = excluded.desired_stage_code,
@@ -176,7 +178,7 @@ async function refreshContractExpiryForCase(tenantId: string, caseId: string, po
         `
         insert into reporting.contract_expiry_facts (
           tenant_id, case_id, case_award_id, entity_id, department_id, owner_user_id,
-          budget_type_id, nature_of_work_id, tender_description, awarded_vendors,
+          budget_type_id, nature_of_work_id, contract_type, tender_description, awarded_vendors,
           rc_po_amount, rc_po_award_date, rc_po_validity_date,
           tentative_tendering_date, tender_floated_or_not_required,
           source_deleted_at, source_type, updated_at
@@ -190,12 +192,13 @@ async function refreshContractExpiryForCase(tenantId: string, caseId: string, po
           c.owner_user_id,
           c.budget_type_id,
           c.nature_of_work_id,
+          c.contract_type,
           coalesce(c.tender_name, c.pr_description),
           a.vendor_name,
           a.po_value,
           a.po_award_date,
           a.po_validity_date,
-          coalesce(a.tentative_tendering_date, a.po_validity_date - 150),
+          coalesce(a.tentative_tendering_date, a.po_validity_date - 120),
           a.tender_floated_or_not_required,
           coalesce(a.deleted_at, c.deleted_at),
           'case_award',
@@ -229,7 +232,7 @@ async function refreshContractExpiryForPlan(tenantId: string, planId: string, po
       `
         insert into reporting.contract_expiry_facts (
           tenant_id, rc_po_plan_id, case_id, entity_id, department_id,
-          owner_user_id, budget_type_id, nature_of_work_id, tender_description,
+          owner_user_id, budget_type_id, nature_of_work_id, contract_type, tender_description,
           awarded_vendors, rc_po_amount, rc_po_award_date, rc_po_validity_date,
           tentative_tendering_date, tender_floated_or_not_required,
           source_deleted_at, source_type, updated_at
@@ -243,12 +246,13 @@ async function refreshContractExpiryForPlan(tenantId: string, planId: string, po
           coalesce(p.owner_user_id, c.owner_user_id),
           c.budget_type_id,
           coalesce(p.nature_of_work_id, c.nature_of_work_id),
+          c.contract_type,
           p.tender_description,
           p.awarded_vendors,
           p.rc_po_amount,
           p.rc_po_award_date,
           p.rc_po_validity_date,
-          coalesce(p.tentative_tendering_date, p.rc_po_validity_date - 150),
+          coalesce(p.tentative_tendering_date, p.rc_po_validity_date - 120),
           p.tender_floated_or_not_required,
           coalesce(p.deleted_at, c.deleted_at),
           'manual_plan',

@@ -8,7 +8,7 @@ import {
   type SetStateAction,
 } from "react";
 
-import { listAssignableOwners } from "../../admin/api/adminApi";
+import { getCatalogSnapshot, listAssignableOwners } from "../../admin/api/adminApi";
 import {
   assignCaseOwner,
   getCase,
@@ -58,10 +58,10 @@ type DateMilestoneKey = Exclude<
 >;
 type MilestoneErrors = Partial<Record<keyof MilestoneFormState, string>>;
 type CaseFormErrors = Partial<
-  Record<"tenderName" | "tenderNo" | "tmRemarks", string>
+  Record<"tenderName" | "tenderNo" | "tenderTypeId" | "tmRemarks", string>
 >;
 type FinancialFormErrors = Partial<
-  Record<"approvedAmount" | "estimateBenchmark", string>
+  Record<"approvedAmount" | "estimateBenchmark" | "prValue", string>
 >;
 type DelayFormErrors = Partial<
   Record<"delayExternalDays" | "delayReason", string>
@@ -90,8 +90,10 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
   const toast = useToast();
   const [approvedAmount, setApprovedAmount] = useState("");
   const [estimateBenchmark, setEstimateBenchmark] = useState("");
+  const [prValue, setPrValue] = useState("");
   const [tenderName, setTenderName] = useState("");
   const [tenderNo, setTenderNo] = useState("");
+  const [tenderTypeId, setTenderTypeId] = useState("");
   const [tmRemarks, setTmRemarks] = useState("");
   const [priorityCase, setPriorityCase] = useState(false);
   const [milestones, setMilestones] =
@@ -122,14 +124,21 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
     queryFn: () => listAssignableOwners(detail.data?.entityId as string),
     queryKey: ["case-update-assignable-owners", detail.data?.entityId],
   });
+  const catalog = useQuery({
+    enabled: canEditCase,
+    queryFn: getCatalogSnapshot,
+    queryKey: ["catalog"],
+  });
 
   useEffect(() => {
     if (!detail.data) return;
     const kase = detail.data;
     setApprovedAmount(moneyString(kase.financials.approvedAmount));
     setEstimateBenchmark(moneyString(kase.financials.estimateBenchmark));
+    setPrValue(moneyString(kase.financials.prValue));
     setTenderName(kase.tenderName ?? "");
     setTenderNo(kase.tenderNo ?? "");
+    setTenderTypeId(kase.tenderTypeId ?? "");
     setTmRemarks(kase.tmRemarks ?? "");
     setPriorityCase(kase.priorityCase);
     setOwnerUserId(kase.ownerUserId ?? "");
@@ -156,31 +165,41 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
     });
     setDelayExternalDays(numberString(kase.delay.delayExternalDays));
     setDelayReason(kase.delay.delayReason ?? "");
-    setEstimateBenchmark(moneyString(kase.financials.estimateBenchmark));
     setShowCaseErrors(false);
     setShowDelayErrors(false);
     setShowFinancialErrors(false);
     setShowMilestoneErrors(false);
   }, [detail.data]);
 
+  const selectedTenderTypeName = useMemo(
+    () =>
+      catalog.data?.tenderTypes.find((tenderType) => tenderType.id === tenderTypeId)
+        ?.name ??
+      detail.data?.tenderTypeName ??
+      null,
+    [catalog.data?.tenderTypes, detail.data?.tenderTypeName, tenderTypeId],
+  );
+  const showBidTimelineFields = requiresBidTimelineFields(selectedTenderTypeName);
   const milestoneErrors = useMemo(
     () =>
       validateMilestones({
         estimateBenchmark,
         milestones,
         prReceiptDate: detail.data?.prReceiptDate ?? null,
-        showBidTimelineFields: requiresBidTimelineFields(detail.data?.tenderTypeName),
+        showBidTimelineFields,
       }),
-    [detail.data?.prReceiptDate, detail.data?.tenderTypeName, estimateBenchmark, milestones],
+    [detail.data?.prReceiptDate, estimateBenchmark, milestones, showBidTimelineFields],
   );
   const caseErrors = useMemo(
     () =>
       validateCaseForm({
+        hasExistingTenderTypeId: Boolean(detail.data?.tenderTypeId),
         tenderName,
         tenderNo,
+        tenderTypeId,
         tmRemarks,
       }),
-    [tenderName, tenderNo, tmRemarks],
+    [detail.data?.tenderTypeId, tenderName, tenderNo, tenderTypeId, tmRemarks],
   );
   const financialErrors = useMemo(
     () =>
@@ -188,8 +207,9 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
         approvedAmount,
         estimateBenchmark,
         milestones,
+        prValue,
       }),
-    [approvedAmount, estimateBenchmark, milestones],
+    [approvedAmount, estimateBenchmark, milestones, prValue],
   );
   const delayErrors = useMemo(
     () => validateDelayForm({ delayExternalDays, delayReason }),
@@ -215,12 +235,31 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
     }
     return options;
   }, [assignableOwners.data, ownerUserId]);
+  const tenderTypeOptions = useMemo(() => {
+    const options = (catalog.data?.tenderTypes ?? [])
+      .filter((tenderType) => tenderType.isActive || tenderType.id === tenderTypeId)
+      .map((tenderType) => ({
+        label: tenderType.name,
+        value: tenderType.id,
+      }));
+    if (
+      tenderTypeId &&
+      !options.some((option) => option.value === tenderTypeId)
+    ) {
+      options.unshift({
+        label: detail.data?.tenderTypeName ?? "Current Tender Type",
+        value: tenderTypeId,
+      });
+    }
+    return options;
+  }, [catalog.data?.tenderTypes, detail.data?.tenderTypeName, tenderTypeId]);
   const caseChangedFields = useMemo(
     () =>
       buildCaseChangedFields(detail.data, {
         priorityCase,
         tenderName,
         tenderNo,
+        tenderTypeId,
         tmRemarks,
       }),
     [
@@ -228,6 +267,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
       priorityCase,
       tenderName,
       tenderNo,
+      tenderTypeId,
       tmRemarks,
     ],
   );
@@ -236,8 +276,9 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
       buildFinancialChangedFields(detail.data, {
         approvedAmount,
         estimateBenchmark,
+        prValue,
       }),
-    [approvedAmount, estimateBenchmark, detail.data],
+    [approvedAmount, estimateBenchmark, prValue, detail.data],
   );
   const delayChangedFields = useMemo(
     () =>
@@ -253,7 +294,6 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
       tentativeCompletionDate &&
       tentativeCompletionDate !== milestoneString(detail.data.tentativeCompletionDate),
   );
-  const showBidTimelineFields = requiresBidTimelineFields(detail.data?.tenderTypeName);
   const milestoneChangedFields = useMemo(
     () => buildMilestoneChangedFields(detail.data, milestones, showBidTimelineFields),
     [detail.data, milestones, showBidTimelineFields],
@@ -267,12 +307,15 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
         const financials = financialPayload({
           approvedAmount,
           estimateBenchmark,
+          prValue,
         });
+        const tenderTypeChanged = tenderTypeId !== (detail.data?.tenderTypeId ?? "");
         await updateCase(targetCaseId, {
           financials: financials ?? undefined,
           priorityCase,
           tenderName: tenderName || null,
           tenderNo: tenderNo || null,
+          tenderTypeId: tenderTypeChanged ? tenderTypeId : undefined,
           tentativeCompletionDate: tentativeCompletionChanged
             ? tentativeCompletionDate
             : undefined,
@@ -408,6 +451,18 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
                 maxLength={200}
                 onChange={(event) => setTenderNo(event.target.value)}
                 value={tenderNo}
+              />
+            </FormField>
+            <FormField
+              error={visibleCaseErrors.tenderTypeId ?? ""}
+              label="Tender Type"
+            >
+              <Select
+                disabled={catalog.isLoading}
+                onChange={(event) => setTenderTypeId(event.target.value)}
+                options={tenderTypeOptions}
+                placeholder="Select Tender Type"
+                value={tenderTypeId}
               />
             </FormField>
             <FormField
@@ -602,6 +657,17 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
               </>
             ) : null}
             <FormField
+              error={visibleFinancialErrors.prValue ?? ""}
+              label="PR Value / Approved Budget (Rs.) [All Inclusive]"
+            >
+              <TextInput
+                inputMode="decimal"
+                onChange={(event) => setPrValue(event.target.value)}
+                placeholder="0"
+                value={prValue}
+              />
+            </FormField>
+            <FormField
               error={visibleFinancialErrors.estimateBenchmark ?? ""}
               label="Estimate / Benchmark (Rs.) [All Inclusive]"
             >
@@ -761,6 +827,7 @@ function buildCaseChangedFields(
     priorityCase: boolean;
     tenderName: string;
     tenderNo: string;
+    tenderTypeId: string;
     tmRemarks: string;
   },
 ) {
@@ -768,6 +835,8 @@ function buildCaseChangedFields(
   const fields: string[] = [];
   if (value.tenderName !== (kase.tenderName ?? "")) fields.push("Tender Name");
   if (value.tenderNo !== (kase.tenderNo ?? "")) fields.push("Tender No");
+  if (value.tenderTypeId !== (kase.tenderTypeId ?? ""))
+    fields.push("Tender Type");
   if (value.tmRemarks !== (kase.tmRemarks ?? ""))
     fields.push("Tender Owner's Remarks");
   if (value.priorityCase !== kase.priorityCase) fields.push("Priority Case");
@@ -779,10 +848,18 @@ function buildFinancialChangedFields(
   value: {
     approvedAmount: string;
     estimateBenchmark: string;
+    prValue: string;
   },
 ) {
   if (!kase) return [];
   const fields: string[] = [];
+  if (
+    value.prValue.trim() &&
+    isMoneyInput(value.prValue) &&
+    parseMoneyInput(value.prValue) !== (kase.financials.prValue ?? null)
+  ) {
+    fields.push("PR Value / Approved Budget (Rs.) [All Inclusive]");
+  }
   if (
     value.approvedAmount.trim() &&
     isMoneyInput(value.approvedAmount) &&
@@ -862,11 +939,16 @@ const milestoneLabels: Record<DateMilestoneKey, string> = {
 };
 
 function validateCaseForm(input: {
+  hasExistingTenderTypeId: boolean;
   tenderName: string;
   tenderNo: string;
+  tenderTypeId: string;
   tmRemarks: string;
 }): CaseFormErrors {
   const errors: CaseFormErrors = {};
+  if (input.hasExistingTenderTypeId && !input.tenderTypeId) {
+    errors.tenderTypeId = "Tender Type is required.";
+  }
   if (input.tenderName.length > 500) {
     errors.tenderName = "Tender name cannot exceed 500 characters.";
   }
@@ -883,8 +965,13 @@ function validateFinancialForm(input: {
   approvedAmount: string;
   estimateBenchmark: string;
   milestones: MilestoneFormState;
+  prValue: string;
 }): FinancialFormErrors {
   const errors: FinancialFormErrors = {};
+  if (input.prValue.trim() && !isMoneyInput(input.prValue)) {
+    errors.prValue =
+      "PR value must be a valid amount greater than or equal to 0.";
+  }
   if (
     input.estimateBenchmark.trim() &&
     !isMoneyInput(input.estimateBenchmark)
@@ -909,8 +996,13 @@ function validateFinancialForm(input: {
 function financialPayload(input: {
   approvedAmount: string;
   estimateBenchmark: string;
+  prValue: string;
 }) {
-  if (!input.approvedAmount.trim() && !input.estimateBenchmark.trim()) {
+  if (
+    !input.approvedAmount.trim() &&
+    !input.estimateBenchmark.trim() &&
+    !input.prValue.trim()
+  ) {
     return null;
   }
   return {
@@ -920,6 +1012,7 @@ function financialPayload(input: {
     estimateBenchmark: input.estimateBenchmark.trim()
       ? parseMoneyInput(input.estimateBenchmark)
       : undefined,
+    prValue: input.prValue.trim() ? parseMoneyInput(input.prValue) : undefined,
   };
 }
 

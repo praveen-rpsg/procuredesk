@@ -3,6 +3,7 @@ import { apiRequest } from "../../../shared/api/client";
 export type CaseListItem = {
   approvedAmount: number | null;
   completionFy: string | null;
+  contractType: ContractType | null;
   currentStageAgingDays: number | null;
   cycleTimeDays: number | null;
   cpcInvolved: boolean | null;
@@ -82,6 +83,7 @@ export type CaseMilestones = {
 
 export type CaseDetail = {
   budgetTypeLabel?: string | null;
+  contractType?: ContractType | null;
   createdAt: string;
   delay: {
     delayExternalDays?: number | null;
@@ -119,6 +121,7 @@ export type CaseDetail = {
   status: string;
   tenderName?: string | null;
   tenderNo?: string | null;
+  tenderTypeId?: string | null;
   tenderTypeName?: string | null;
   tentativeCompletionDate?: string | null;
   tmRemarks?: string | null;
@@ -132,6 +135,7 @@ export function getCaseSummary() {
 export function listCases(params: {
   budgetTypeIds?: string[] | undefined;
   completionFys?: string[] | undefined;
+  contractTypes?: ContractType[] | undefined;
   cpcInvolved?: boolean | undefined;
   cursor?: string | undefined;
   dateFrom?: string | undefined;
@@ -165,6 +169,7 @@ function setCaseListSearchParams(
 ): void {
   setArrayParam(search, "budgetTypeIds", params.budgetTypeIds);
   setArrayParam(search, "completionFys", params.completionFys);
+  setArrayParam(search, "contractTypes", params.contractTypes);
   setBooleanParam(search, "cpcInvolved", params.cpcInvolved);
   setStringParam(search, "cursor", params.cursor);
   setStringParam(search, "dateFrom", params.dateFrom);
@@ -230,6 +235,7 @@ function setStringParam(
 
 export function createCase(payload: {
   budgetTypeId: string;
+  contractType: ContractType;
   cpcInvolved: boolean;
   departmentId: string;
   entityId: string;
@@ -248,6 +254,8 @@ export function createCase(payload: {
     method: "POST",
   });
 }
+
+export type ContractType = "PO" | "RC";
 
 export function getCase(caseId: string) {
   return apiRequest<CaseDetail>(`/cases/${caseId}`);

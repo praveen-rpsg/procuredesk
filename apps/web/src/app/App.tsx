@@ -5,6 +5,7 @@ import { AppErrorBoundary } from "../shared/ui/error-boundary/AppErrorBoundary";
 
 export function App() {
   const { isLoading, user } = useAuth();
+  const isResetPasswordRoute = window.location.pathname === "/reset-password";
 
   if (isLoading) {
     return <main className="loading-screen">Loading ProcureDesk...</main>;
@@ -12,7 +13,7 @@ export function App() {
 
   return (
     <AppErrorBoundary>
-      {user ? <AuthenticatedShell /> : window.location.pathname === "/reset-password" ? <ResetPasswordPage /> : <LoginPage />}
+      {isResetPasswordRoute ? <ResetPasswordPage /> : user ? <AuthenticatedShell /> : <LoginPage />}
     </AppErrorBoundary>
   );
 }

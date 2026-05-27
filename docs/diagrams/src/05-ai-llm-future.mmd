@@ -1,0 +1,10 @@
+flowchart LR
+  U[User\nAsk: summarize case / risk] --> API[NestJS API\nAI Insights Module - future]
+  API --> AG[AuthGuard + PermissionGuard\nai.insight.read]
+  AG --> CTX[Context Builder\ncase facts from PostgreSQL]
+  CTX --> VDB[(Vector DB - future\npgvector / managed)]
+  CTX --> LLM[LLM Provider\nAzure OpenAI / Claude]
+  LLM --> RESP[Structured Insight\nsummary · risk · savings]
+  RESP --> AUD[(ops.audit_events\nprompt + output logged)]
+  RESP --> U
+  AUD -.outbox.-> OB[Outbox to Worker\nasync indexing]

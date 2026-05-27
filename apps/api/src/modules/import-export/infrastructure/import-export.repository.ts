@@ -422,7 +422,7 @@ export class ImportExportRepository {
             nullif(r.normalized_payload->>'rcPoValidityDate', '')::date,
             coalesce(
               nullif(r.normalized_payload->>'tentativeTenderingDate', '')::date,
-              nullif(r.normalized_payload->>'rcPoAwardDate', '')::date + 150
+              nullif(r.normalized_payload->>'rcPoValidityDate', '')::date - 120
             ),
             $3,
             now(),
@@ -503,7 +503,7 @@ export class ImportExportRepository {
             nullif(r.normalized_payload->>'rcPoAmount', '')::numeric,
             nullif(r.normalized_payload->>'rcPoAwardDate', '')::date,
             nullif(r.normalized_payload->>'rcPoValidityDate', '')::date,
-            nullif(r.normalized_payload->>'rcPoAwardDate', '')::date + 150,
+            nullif(r.normalized_payload->>'rcPoValidityDate', '')::date - 120,
             $3,
             now(),
             $3,
@@ -908,6 +908,11 @@ export class ImportExportRepository {
             r.normalized_payload->>'entityCode' as entity_code,
             r.normalized_payload->>'departmentName' as department_name,
             r.normalized_payload->>'tenderType' as tender_type,
+            case upper(nullif(r.normalized_payload->>'contractType', ''))
+              when 'PO' then 'PO'
+              when 'RC' then 'RC'
+              else null
+            end as contract_type,
             r.normalized_payload->>'prReceivingMedium' as pr_receiving_medium,
             r.normalized_payload->>'budgetType' as budget_type,
             r.normalized_payload->>'natureOfWork' as nature_of_work,
@@ -1040,7 +1045,7 @@ export class ImportExportRepository {
         upserted as (
           insert into procurement.cases (
             tenant_id, pr_id, entity_id, department_id, tender_type_id,
-            pr_receiving_medium_id, budget_type_id, nature_of_work_id, owner_user_id,
+            contract_type, pr_receiving_medium_id, budget_type_id, nature_of_work_id, owner_user_id,
             created_by, updated_by, status, stage_code, desired_stage_code,
             is_delayed, priority_case, cpc_involved, pr_scheme_no,
             pr_receipt_date, pr_description, pr_remarks, tender_name, tender_no,
@@ -1048,7 +1053,7 @@ export class ImportExportRepository {
           )
           select
             $1, r.pr_id, r.entity_id, r.department_id, r.tender_type_id,
-            r.pr_receiving_medium_id, r.budget_type_id, r.nature_of_work_id, r.owner_user_id,
+            r.contract_type, r.pr_receiving_medium_id, r.budget_type_id, r.nature_of_work_id, r.owner_user_id,
             $3, $3,
             r.case_status,
             r.stage_code,
@@ -1072,6 +1077,7 @@ export class ImportExportRepository {
             entity_id = excluded.entity_id,
             department_id = excluded.department_id,
             tender_type_id = excluded.tender_type_id,
+            contract_type = excluded.contract_type,
             pr_receiving_medium_id = excluded.pr_receiving_medium_id,
             budget_type_id = excluded.budget_type_id,
             nature_of_work_id = excluded.nature_of_work_id,
@@ -1196,7 +1202,7 @@ export class ImportExportRepository {
       `
         insert into reporting.case_facts (
           case_id, tenant_id, entity_id, department_id, owner_user_id,
-          tender_type_id, status, stage_code, desired_stage_code, is_delayed,
+          tender_type_id, contract_type, status, stage_code, desired_stage_code, is_delayed,
           priority_case, cpc_involved, pr_receipt_date, rc_po_award_date,
           completion_fy, value_slab, rc_po_value_slab, running_age_days,
           completed_age_days, current_stage_aging_days, pr_value,
@@ -1210,6 +1216,7 @@ export class ImportExportRepository {
           c.department_id,
           c.owner_user_id,
           c.tender_type_id,
+          c.contract_type,
           c.status,
           c.stage_code,
           c.desired_stage_code,
@@ -1307,6 +1314,7 @@ export class ImportExportRepository {
             department_id = excluded.department_id,
             owner_user_id = excluded.owner_user_id,
             tender_type_id = excluded.tender_type_id,
+            contract_type = excluded.contract_type,
             status = excluded.status,
             stage_code = excluded.stage_code,
             desired_stage_code = excluded.desired_stage_code,

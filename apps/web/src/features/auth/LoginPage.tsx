@@ -203,7 +203,7 @@ export function ResetPasswordPage() {
           <Button disabled={isSubmitting || !token} type="submit">
             {isSubmitting ? "Updating..." : "Update password"}
           </Button>
-          <Button onClick={() => window.history.replaceState(null, "", "/")} type="button" variant="secondary">
+          <Button onClick={() => window.location.replace("/")} type="button" variant="secondary">
             Back to sign in
           </Button>
         </form>

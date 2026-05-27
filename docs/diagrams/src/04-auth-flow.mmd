@@ -1,0 +1,26 @@
+sequenceDiagram
+  participant U as User (SPA)
+  participant API as NestJS API
+  participant RL as login_rate_limits (DB)
+  participant DB as PostgreSQL (iam)
+  participant C as Signed Cookie
+
+  U->>API: POST /api/v1/auth/login (tenant, email, password)
+  API->>RL: Check attempts (10 / 15 min window)
+  alt Locked out
+    RL-->>API: Exceeded
+    API-->>U: 429 Too Many Requests
+  else Allowed
+    API->>DB: Fetch user + tenant + password policy
+    API->>API: Argon2id verify
+    alt Invalid
+      API->>RL: Increment failure
+      API-->>U: 401 Unauthorized
+    else Valid
+      API->>DB: Create iam.sessions (hash, tenant_id, TTL 2h)
+      API->>C: Set httpOnly+secure+sameSite cookie (signed)
+      API->>DB: Insert ops.audit_events (LOGIN)
+      API-->>U: 200 + profile + permissions
+    end
+  end
+  Note over U,API: Subsequent requests: cookie + X-CSRF-Token<br/>Idle timeout 30 min · Absolute TTL 2 h · Server-side revocation

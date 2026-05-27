@@ -11,11 +11,13 @@ export type ReportCode =
   | "vendor_awards";
 
 export type ExportFormat = "csv" | "xlsx";
+export type ContractType = "PO" | "RC";
 
 export type ReportQueryParams = {
   budgetTypeIds?: string[];
   completionFys?: string[];
   completionMonths?: string[];
+  contractTypes?: ContractType[];
   cpcInvolved?: boolean;
   delayStatus?: "delayed" | "on_time";
   deletedOnly?: boolean;
@@ -96,6 +98,7 @@ export type ReportFilterMetadata = {
   budgetTypes: Array<{ id: string; name: string }>;
   completionFys: string[];
   completionMonths: string[];
+  contractTypes: ContractType[];
   departments: Array<{ entityId?: string | null; id: string; name: string }>;
   entities: Array<{
     code: string | null;
@@ -119,6 +122,7 @@ export type ReportFilterMetadata = {
   valueSlabs: string[];
   rcPoExpiry?: {
     budgetTypes: Array<{ id: string; name: string }>;
+    contractTypes: ContractType[];
     departments: Array<{ entityId?: string | null; id: string; name: string }>;
     entities: Array<{
       code: string | null;
@@ -142,6 +146,7 @@ export type ReportCaseRow = {
   caseId: string;
   completedCycleTimeDays: number | null;
   completionFy: string | null;
+  contractType: ContractType | null;
   currentStageAgingDays: number | null;
   delayReason: string | null;
   departmentName: string | null;
@@ -187,6 +192,7 @@ export type VendorAwardReportRow = {
   approvedAmount: number | null;
   awardId: string;
   caseId: string;
+  contractType: ContractType | null;
   departmentName: string | null;
   entityCode: string | null;
   entityId: string;
@@ -207,6 +213,7 @@ export type StageTimeRow = {
   bidEvaluationTimeDays: number | null;
   bidReceiptTimeDays: number | null;
   caseId: string;
+  contractType: ContractType | null;
   contractIssuanceTimeDays: number | null;
   currentStageAgingDays: number | null;
   cycleTimeDays: number | null;
@@ -231,6 +238,7 @@ export type StageTimeRow = {
 export type ContractExpiryReportRow = {
   awardedVendors: string | null;
   budgetTypeId: string | null;
+  contractType: ContractType | null;
   departmentId: string | null;
   departmentName: string | null;
   daysToExpiry: number;
@@ -391,6 +399,7 @@ function buildReportQuery(params: ReportQueryParams) {
   setCsvParam(search, "budgetTypeIds", params.budgetTypeIds);
   setCsvParam(search, "completionFys", params.completionFys);
   setCsvParam(search, "completionMonths", params.completionMonths);
+  setCsvParam(search, "contractTypes", params.contractTypes);
   setBooleanParam(search, "cpcInvolved", params.cpcInvolved);
   if (params.delayStatus) search.set("delayStatus", params.delayStatus);
   setBooleanParam(search, "deletedOnly", params.deletedOnly);
