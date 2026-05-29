@@ -48,6 +48,36 @@ describe("calculateNextNotificationScheduleRun", () => {
     expect(nextRun.toISOString()).toBe("2026-05-28T05:30:00.000Z");
   });
 
+  it("initializes a weekly IST schedule to the next week when today's run time has passed", () => {
+    const nextRun = calculateNextNotificationScheduleRun(
+      {
+        cadence: "weekly",
+        day_of_month: null,
+        interval_days: null,
+        next_run_at: null,
+        run_time: "10:00:00",
+      },
+      new Date("2026-05-25T06:00:00.000Z"),
+    );
+
+    expect(nextRun.toISOString()).toBe("2026-06-01T04:30:00.000Z");
+  });
+
+  it("advances weekly schedules from the previous scheduled run", () => {
+    const nextRun = calculateNextNotificationScheduleRun(
+      {
+        cadence: "weekly",
+        day_of_month: null,
+        interval_days: null,
+        next_run_at: new Date("2026-05-25T04:30:00.000Z"),
+        run_time: "10:00:00",
+      },
+      new Date("2026-05-25T04:30:01.000Z"),
+    );
+
+    expect(nextRun.toISOString()).toBe("2026-06-01T04:30:00.000Z");
+  });
+
   it("schedules monthly runs on day one at the configured IST time", () => {
     const nextRun = calculateNextNotificationScheduleRun(
       {
