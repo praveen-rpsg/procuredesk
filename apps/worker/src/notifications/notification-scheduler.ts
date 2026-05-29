@@ -324,14 +324,15 @@ async function createSnapshotJobs(
           u.full_name,
           'all mapped RPSG entities' as scope_label,
           null::text[] as entity_ids,
-          count(distinct f.case_id) filter (where f.status = 'running')::int as running_tenders,
-          count(distinct f.case_id) filter (where f.status = 'completed')::int as completed_tenders,
-          count(distinct f.case_id) filter (where f.status = 'running' and coalesce(f.current_stage_aging_days, 0) >= 10)::int as stage_ageing_alerts,
-          count(distinct f.case_id) filter (where f.status = 'running' and f.stage_code in (4, 5))::int as evaluation_pendency
+          count(distinct c.id) filter (where f.status = 'running')::int as running_tenders,
+          count(distinct c.id) filter (where f.status = 'completed')::int as completed_tenders,
+          count(distinct c.id) filter (where f.status = 'running' and coalesce(f.current_stage_aging_days, 0) >= 10)::int as stage_ageing_alerts,
+          count(distinct c.id) filter (where f.status = 'running' and f.stage_code in (4, 5))::int as evaluation_pendency
         from iam.users u
         join iam.user_roles ur on ur.user_id = u.id
         join iam.roles r on r.id = ur.role_id and r.code = 'group_viewer'
         left join reporting.case_facts f on f.tenant_id = u.tenant_id
+        left join procurement.cases c on c.id = f.case_id and c.tenant_id = f.tenant_id and c.deleted_at is null
         where u.tenant_id = $1
           and u.deleted_at is null
           and u.status = 'active'
@@ -346,16 +347,17 @@ async function createSnapshotJobs(
           u.full_name,
           string_agg(distinct e.name, ', ' order by e.name) as scope_label,
           array_agg(distinct e.id::text order by e.id::text) as entity_ids,
-          count(distinct f.case_id) filter (where f.status = 'running')::int as running_tenders,
-          count(distinct f.case_id) filter (where f.status = 'completed')::int as completed_tenders,
-          count(distinct f.case_id) filter (where f.status = 'running' and coalesce(f.current_stage_aging_days, 0) >= 10)::int as stage_ageing_alerts,
-          count(distinct f.case_id) filter (where f.status = 'running' and f.stage_code in (4, 5))::int as evaluation_pendency
+          count(distinct c.id) filter (where f.status = 'running')::int as running_tenders,
+          count(distinct c.id) filter (where f.status = 'completed')::int as completed_tenders,
+          count(distinct c.id) filter (where f.status = 'running' and coalesce(f.current_stage_aging_days, 0) >= 10)::int as stage_ageing_alerts,
+          count(distinct c.id) filter (where f.status = 'running' and f.stage_code in (4, 5))::int as evaluation_pendency
         from iam.users u
         join iam.user_entity_scopes scope on scope.user_id = u.id
         join org.entities e on e.id = scope.entity_id and e.tenant_id = u.tenant_id and e.deleted_at is null
         join iam.user_roles ur on ur.user_id = u.id
         join iam.roles r on r.id = ur.role_id and r.code in ('entity_manager', 'entity_viewer')
         left join reporting.case_facts f on f.tenant_id = u.tenant_id and f.entity_id = scope.entity_id
+        left join procurement.cases c on c.id = f.case_id and c.tenant_id = f.tenant_id and c.deleted_at is null
         where u.tenant_id = $1
           and u.deleted_at is null
           and u.status = 'active'
@@ -1051,6 +1053,13 @@ export function calculateNextNotificationScheduleRun(
     }
     const today = fromIstParts(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), runTime.hour, runTime.minute);
     return today > from ? today : addDays(today, 1);
+  }
+  if (schedule.cadence === "weekly") {
+    if (schedule.next_run_at) {
+      return addDays(schedule.next_run_at, 7);
+    }
+    const today = fromIstParts(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), runTime.hour, runTime.minute);
+    return today > from ? today : addDays(today, 7);
   }
   const today = fromIstParts(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), runTime.hour, runTime.minute);
   return today > from ? today : addDays(today, 1);
