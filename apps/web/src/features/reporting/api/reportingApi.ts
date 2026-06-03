@@ -81,6 +81,7 @@ export type ReportingAnalytics = {
   completedCases: number;
   completedEstimateBenchmark: number;
   completedPrValue: number;
+  commandSummary: ReportCommandSummary;
   delayedCases: number;
   offTrackCases: number;
   onTrackCases: number;
@@ -92,6 +93,29 @@ export type ReportingAnalytics = {
   totalCases: number;
   totalEstimateBenchmark: number;
   totalPrValue: number;
+};
+
+export type ReportCommandSummary = {
+  byEntity: Array<{
+    completed: number;
+    delayed: number;
+    entityCode: string | null;
+    entityId: string;
+    entityName: string | null;
+    offTrack: number;
+    onTrack: number;
+    priority: number;
+    running: number;
+    total: number;
+  }>;
+  completed: number;
+  delayed: number;
+  offTrack: number;
+  onTrack: number;
+  priority: number;
+  risk: number;
+  running: number;
+  total: number;
 };
 
 export type ReportFilterMetadata = {

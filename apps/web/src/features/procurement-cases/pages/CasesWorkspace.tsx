@@ -62,6 +62,7 @@ type CaseColumnKey =
   | "department"
   | "description"
   | "entity"
+  | "estimateBenchmark"
   | "normativeStage"
   | "owner"
   | "percentTimeElapsed"
@@ -159,6 +160,7 @@ const defaultVisibleColumnKeys: CaseColumnKey[] = [
   "department",
   "owner",
   "prValue",
+  "estimateBenchmark",
   "approvedAmount",
   "savingsWrtPr",
   "savingsWrtEstimate",
@@ -534,13 +536,22 @@ function CasesWorkspaceList() {
   const allColumns = useMemo<Array<VirtualTableColumn<CaseListItem> & { key: CaseColumnKey }>>(
     () => [
       { key: "prId", header: "Case ID", render: (row) => row.prId },
-      { key: "description", header: "Description", render: (row) => row.prDescription ?? row.tenderName ?? "-" },
+      {
+        key: "description",
+        header: "Description",
+        render: (row) => (
+          <span className="case-description-cell">
+            {row.prDescription ?? row.tenderName ?? "-"}
+          </span>
+        ),
+      },
       { key: "entity", filterOptions: entityFilterOptions, filterValue: (row) => entityNameById.get(row.entityId) ?? row.entityId, header: "Entity", render: (row) => entityNameById.get(row.entityId) ?? row.entityId },
       { key: "contractType", filterOptions: contractTypeFilterOptions, filterValue: (row) => row.contractType ?? "-", header: "Contract Type", render: (row) => row.contractType ?? "-" },
       { key: "tenderType", filterOptions: tenderTypeFilterOptions, filterValue: (row) => row.tenderTypeName ?? "-", header: "Type", render: (row) => row.tenderTypeName ?? "-" },
       { key: "department", filterOptions: departmentFilterOptions, filterValue: (row) => row.departmentName ?? "-", header: "Dept", render: (row) => row.departmentName ?? "-" },
       { key: "owner", filterOptions: ownerFilterOptions, filterValue: (row) => row.ownerFullName ?? "-", header: "Tender Owner", render: (row) => row.ownerFullName ?? "-" },
       { key: "prValue", header: "PR Value / Approved Budget (Rs.) [All Inclusive]", render: (row) => formatMoney(row.prValue) },
+      { key: "estimateBenchmark", header: "Estimate / Benchmark Amount (Rs.) [All Inclusive]", render: (row) => formatMoney(row.estimateBenchmark) },
       { key: "approvedAmount", header: "NFA Approved Amount (Rs.) [All Inclusive]", render: (row) => formatMoney(row.approvedAmount) },
       { key: "savingsWrtPr", header: "Savings vs PR / Approved Budget (Rs.) [All Inclusive]", render: (row) => formatMoney(row.savingsWrtPr) },
       { key: "savingsWrtEstimate", header: "Savings vs Estimate / Benchmark (Rs.) [All Inclusive]", render: (row) => formatMoney(row.savingsWrtEstimate) },
@@ -719,6 +730,21 @@ function CasesWorkspaceList() {
               options={(departments.data ?? []).map((department) => ({ label: department.name, value: department.id }))}
               value={departmentIds}
             />
+            <FormField label="Tender Owner">
+              <Select
+                disabled={entityIds.length !== 1 || assignableOwners.isLoading}
+                onChange={(event) => setOwnerUserId(event.target.value)}
+                options={ownerOptions}
+                placeholder={
+                  entityIds.length === 1
+                    ? assignableOwners.isLoading
+                      ? "Loading owners"
+                      : "All owners"
+                    : "Select one entity first"
+                }
+                value={ownerUserId}
+              />
+            </FormField>
             <MultiSelectFilter
               disabled={catalog.isLoading}
               label="Tender Type"
@@ -891,6 +917,7 @@ function CasesWorkspaceList() {
             onRowClick={(row) => navigateToAppPath(`/cases/${row.id}`)}
             pagination={false}
             resultLabel="Cases"
+            rowHeight={76}
             rows={cases.data ?? []}
             showSearch={false}
           />
