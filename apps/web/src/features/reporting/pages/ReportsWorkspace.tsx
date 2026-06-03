@@ -43,6 +43,7 @@ import {
   type ExportJobStatus,
   type ReportCode,
   type ReportCaseRow,
+  type ReportCommandSummary,
   type ReportQueryParams,
   type ReportingAnalytics,
   type SavedReportView,
@@ -80,8 +81,6 @@ import {
 import { StageAgingModalContent } from "../../procurement-cases/components/StageAgingModalContent";
 import {
   getCase,
-  getCaseSummary,
-  type CaseSummary,
 } from "../../procurement-cases/api/casesApi";
 import { formatCaseStage } from "../../../shared/utils/caseStage";
 import { formatDateOnly } from "../../../shared/utils/dateOnly";
@@ -134,7 +133,7 @@ export function ReportsWorkspace() {
   const canExport = canExportReports(user);
   const canCreate = canCreateCase(user);
   const canEditRcPoExpiry = canManagePlanning(user);
-  const canViewCaseSummary = canReadCases(user);
+  const canOpenCases = canReadCases(user);
   const canViewDelay = canViewDelayFields(user);
   const reportNavigationOptions = useMemo(
     () =>
@@ -184,11 +183,6 @@ export function ReportsWorkspace() {
     rcPoExpiryParams,
     filters.analyticsParams,
   );
-  const commandCenterSummary = useQuery({
-    enabled: isAnalyticsView && canViewCaseSummary,
-    queryFn: getCaseSummary,
-    queryKey: ["case-summary"],
-  });
   const stageAgingCase = useQuery({
     enabled: Boolean(stageAgingCaseId),
     queryFn: () => getCase(stageAgingCaseId as string),
@@ -2021,9 +2015,7 @@ export function ReportsWorkspace() {
             <ReportAnalyticsDashboard
               activeFilterCount={activeFilterCount}
               amountUnit={filters.amountUnit}
-              canOpenCases={canViewCaseSummary}
-              commandCenterSummary={commandCenterSummary.data}
-              commandCenterSummaryIsLoading={commandCenterSummary.isLoading}
+              canOpenCases={canOpenCases}
               metrics={metrics}
               onOpenCaseDrilldown={openAnalyticsDrilldown}
               stageError={data.stageTime.error}
@@ -2408,8 +2400,6 @@ function ReportAnalyticsDashboard({
   activeFilterCount,
   amountUnit,
   canOpenCases,
-  commandCenterSummary,
-  commandCenterSummaryIsLoading,
   metrics,
   onOpenCaseDrilldown,
   stageError,
@@ -2419,8 +2409,6 @@ function ReportAnalyticsDashboard({
   activeFilterCount: number;
   amountUnit: AmountUnit;
   canOpenCases: boolean;
-  commandCenterSummary: CaseSummary | undefined;
-  commandCenterSummaryIsLoading: boolean;
   metrics: ReportingAnalytics | undefined;
   onOpenCaseDrilldown: (overrides?: ReportQueryParams) => void;
   stageError: Error | null;
@@ -2578,10 +2566,9 @@ function ReportAnalyticsDashboard({
   return (
     <section className="report-analytics-dashboard">
       <ReportAnalyticsCommandCenterTiles
-        analyticsMetrics={metrics}
         canOpenCases={canOpenCases}
-        isLoading={commandCenterSummaryIsLoading}
-        summary={commandCenterSummary}
+        onOpenCaseDrilldown={onOpenCaseDrilldown}
+        summary={metrics?.commandSummary}
       />
 
       <section className="state-panel report-analytics-overview">
@@ -2751,25 +2738,23 @@ type ReportCommandMetricTarget =
   | "on-track-cases"
   | "priority-cases"
   | "running-cases";
-type ReportCommandSummaryEntity = CaseSummary["byEntity"][number];
+type ReportCommandSummaryEntity = ReportCommandSummary["byEntity"][number];
 
 function ReportAnalyticsCommandCenterTiles({
-  analyticsMetrics,
   canOpenCases,
-  isLoading,
+  onOpenCaseDrilldown,
   summary,
 }: {
-  analyticsMetrics: ReportingAnalytics | undefined;
   canOpenCases: boolean;
-  isLoading: boolean;
-  summary: CaseSummary | undefined;
+  onOpenCaseDrilldown: (overrides?: ReportQueryParams) => void;
+  summary: ReportCommandSummary | undefined;
 }) {
-  const total = summary?.total ?? analyticsMetrics?.totalCases ?? 0;
-  const running = summary?.running ?? analyticsMetrics?.runningCases ?? 0;
-  const completed = summary?.completed ?? analyticsMetrics?.completedCases ?? 0;
-  const delayed = summary?.delayed ?? analyticsMetrics?.delayedCases ?? 0;
-  const offTrack = summary?.offTrack ?? analyticsMetrics?.offTrackCases ?? 0;
-  const onTrack = summary?.onTrack ?? analyticsMetrics?.onTrackCases ?? 0;
+  const total = summary?.total ?? 0;
+  const running = summary?.running ?? 0;
+  const completed = summary?.completed ?? 0;
+  const delayed = summary?.delayed ?? 0;
+  const offTrack = summary?.offTrack ?? 0;
+  const onTrack = summary?.onTrack ?? 0;
   const priority = summary?.priority ?? null;
   const commandMetrics = [
     {
@@ -2908,8 +2893,8 @@ function ReportAnalyticsCommandCenterTiles({
                       className="dashboard-metric-main-button dashboard-metric-card-clickable"
                       disabled={!canOpenCases}
                       onClick={() =>
-                        navigateToAppPath(
-                          reportCommandCasePathForTarget(metric.target),
+                        onOpenCaseDrilldown(
+                          reportCommandDrilldownOverrides(metric.target),
                         )
                       }
                       type="button"
@@ -2926,9 +2911,7 @@ function ReportAnalyticsCommandCenterTiles({
                       </div>
                       <span>{metric.label}</span>
                       <strong>
-                        {isLoading && !summary ? (
-                          <Skeleton height={22} width="60%" />
-                        ) : metric.value == null ? (
+                        {metric.value == null ? (
                           "-"
                         ) : (
                           formatInteger(metric.value)
@@ -2944,7 +2927,7 @@ function ReportAnalyticsCommandCenterTiles({
                         </span>
                       ) : null}
                     </button>
-                    {!isLoading && entityBreakdown.length ? (
+                    {entityBreakdown.length ? (
                       <div
                         aria-label={`${metric.label} by entity`}
                         className="dashboard-metric-entity-breakdown"
@@ -2956,8 +2939,8 @@ function ReportAnalyticsCommandCenterTiles({
                             disabled={!canOpenCases}
                             key={entity.entityId}
                             onClick={() =>
-                              navigateToAppPath(
-                                reportCommandCasePathForTarget(
+                              onOpenCaseDrilldown(
+                                reportCommandDrilldownOverrides(
                                   metric.target,
                                   entity.entityId,
                                 ),
@@ -2987,23 +2970,37 @@ function reportPercentage(value: number, total: number): number {
   return Math.round((value / total) * 100);
 }
 
-function reportCommandCasePathForTarget(
+function reportCommandDrilldownOverrides(
   target: ReportCommandMetricTarget,
   entityId?: string,
-): string {
-  const params = new URLSearchParams();
-  if (entityId) params.set("entityIds", entityId);
-  if (target === "running-cases") params.set("status", "running");
-  if (target === "completed-cases") params.set("status", "completed");
-  if (target === "delayed-cases") params.set("trackStatus", "delayed");
-  if (target === "off-track-cases") params.set("trackStatus", "off_track");
-  if (target === "on-track-cases") params.set("trackStatus", "on_track");
-  if (target === "priority-cases") {
-    params.set("status", "running");
-    params.set("priorityCase", "true");
+): ReportQueryParams {
+  const overrides: ReportQueryParams = entityId ? { entityIds: [entityId] } : {};
+  if (target === "running-cases") {
+    overrides.status = "running";
+    overrides.trackStatuses = [];
   }
-  const query = params.toString();
-  return `/cases${query ? `?${query}` : ""}`;
+  if (target === "completed-cases") {
+    overrides.status = "completed";
+    overrides.trackStatuses = [];
+  }
+  if (target === "delayed-cases") {
+    overrides.status = "running";
+    overrides.trackStatuses = ["delayed"];
+  }
+  if (target === "off-track-cases") {
+    overrides.status = "running";
+    overrides.trackStatuses = ["off_track"];
+  }
+  if (target === "on-track-cases") {
+    overrides.status = "running";
+    overrides.trackStatuses = ["on_track"];
+  }
+  if (target === "priority-cases") {
+    overrides.status = "running";
+    overrides.priorityCase = true;
+    overrides.trackStatuses = [];
+  }
+  return overrides;
 }
 
 function reportCommandMetricEntityCount(

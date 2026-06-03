@@ -421,6 +421,41 @@ export class ReportingRepository {
       `,
       values,
     );
+    const commandEntityDistribution = await this.db.query<QueryResultRow & AnalyticsCommandEntityRow>(
+      `
+        select
+          f.entity_id,
+          e.code as entity_code,
+          e.name as entity_name,
+          count(*)::text as total_count,
+          count(*) filter (where f.status = 'running')::text as running_count,
+          count(*) filter (where f.status = 'completed')::text as completed_count,
+          count(*) filter (
+            where f.status = 'running'
+              and c.tentative_completion_date is not null
+              and c.tentative_completion_date < current_date
+          )::text as delayed_count,
+          count(*) filter (
+            where f.status = 'running'
+              and (c.tentative_completion_date is null or c.tentative_completion_date >= current_date)
+              and f.desired_stage_code is not null
+              and f.stage_code < f.desired_stage_code
+          )::text as off_track_count,
+          count(*) filter (
+            where f.status = 'running'
+              and (c.tentative_completion_date is null or c.tentative_completion_date >= current_date)
+              and (f.desired_stage_code is null or f.stage_code >= f.desired_stage_code)
+          )::text as on_track_count,
+          count(*) filter (where f.status = 'running' and f.priority_case)::text as priority_count
+        from reporting.case_facts f
+        join procurement.cases c on c.id = f.case_id and c.tenant_id = f.tenant_id and ${caseDeletionPredicate}
+        left join org.entities e on e.id = f.entity_id and e.tenant_id = f.tenant_id
+        where ${where.join(" and ")}
+        group by f.entity_id, e.code, e.name
+        order by count(*) desc, e.code asc nulls last, e.name asc nulls last
+      `,
+      values,
+    );
     const bidderRow = await this.db.one<QueryResultRow & AnalyticsBidderRow>(
       `
         select
@@ -452,6 +487,7 @@ export class ReportingRepository {
       entityDistribution.rows,
       tenderTypeDistribution.rows,
       departmentNatureDistribution.rows,
+      commandEntityDistribution.rows,
     );
   }
 
@@ -1983,6 +2019,7 @@ export class ReportingRepository {
     entityRows: AnalyticsEntityRow[],
     tenderTypeRows: AnalyticsTenderTypeRow[],
     departmentNatureRows: AnalyticsDepartmentNatureRow[],
+    commandEntityRows: AnalyticsCommandEntityRow[],
   ) {
     return {
       averageBiddersParticipated: this.numberOrNull(nullable(rowValue(bidderRow, "average_bidders_participated"))),
@@ -1994,6 +2031,7 @@ export class ReportingRepository {
       byEntity: entityRows.map(mapAnalyticsEntityRow),
       byTenderType: tenderTypeRows.map(mapAnalyticsTenderTypeRow),
       completedCases: Number(rowValue(row, "completed_cases", "0")),
+      commandSummary: mapAnalyticsCommandSummary(row, commandEntityRows),
       delayedCases: Number(rowValue(row, "delayed_cases", "0")),
       offTrackCases: Number(rowValue(row, "off_track_cases", "0")),
       onTrackCases: Number(rowValue(row, "on_track_cases", "0")),
@@ -2073,6 +2111,40 @@ function mapAnalyticsTenderTypeRow(row: AnalyticsTenderTypeRow) {
   };
 }
 
+function mapAnalyticsCommandSummary(
+  row: AnalyticsRow | null,
+  entityRows: AnalyticsCommandEntityRow[],
+) {
+  const delayed = Number(rowValue(row, "delayed_cases", "0"));
+  const offTrack = Number(rowValue(row, "off_track_cases", "0"));
+
+  return {
+    byEntity: entityRows.map((entityRow) => ({
+      completed: Number(entityRow.completed_count),
+      delayed: Number(entityRow.delayed_count),
+      entityCode: entityRow.entity_code,
+      entityId: entityRow.entity_id,
+      entityName: entityRow.entity_name,
+      offTrack: Number(entityRow.off_track_count),
+      onTrack: Number(entityRow.on_track_count),
+      priority: Number(entityRow.priority_count),
+      running: Number(entityRow.running_count),
+      total: Number(entityRow.total_count),
+    })),
+    completed: Number(rowValue(row, "completed_cases", "0")),
+    delayed,
+    offTrack,
+    onTrack: Number(rowValue(row, "on_track_cases", "0")),
+    priority: entityRows.reduce(
+      (total, entityRow) => total + Number(entityRow.priority_count),
+      0,
+    ),
+    risk: delayed + offTrack,
+    running: Number(rowValue(row, "running_cases", "0")),
+    total: Number(rowValue(row, "total_cases", "0")),
+  };
+}
+
 type AnalyticsRow = {
   average_cycle_time_days: string | null;
   average_running_cycle_time_days: string | null;
@@ -2109,6 +2181,19 @@ type AnalyticsEntityRow = {
   running_count: string;
   total_awarded_amount: string;
   total_pr_value: string;
+};
+
+type AnalyticsCommandEntityRow = {
+  completed_count: string;
+  delayed_count: string;
+  entity_code: string | null;
+  entity_id: string;
+  entity_name: string | null;
+  off_track_count: string;
+  on_track_count: string;
+  priority_count: string;
+  running_count: string;
+  total_count: string;
 };
 
 type AnalyticsDepartmentNatureRow = {
