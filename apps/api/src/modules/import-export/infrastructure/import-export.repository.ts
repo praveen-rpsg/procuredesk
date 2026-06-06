@@ -40,6 +40,12 @@ export type PortalUserCredentialExportRow = {
   username: string;
 };
 
+export type ImportCommitResult = {
+  credentialRows: PortalUserCredentialExportRow[];
+  committed: boolean;
+  validationErrors: string[];
+};
+
 @Injectable()
 export class ImportExportRepository {
   constructor(private readonly db: DatabaseService) {}
@@ -348,7 +354,7 @@ export class ImportExportRepository {
     importJobId: string;
     portalUserCredentials?: PortalUserCredentialInput[];
     tenantId: string;
-  }): Promise<{ credentialRows: PortalUserCredentialExportRow[]; committed: boolean }> {
+  }): Promise<ImportCommitResult> {
     return this.db.transaction(async (client) => {
       const job = await this.db.one<QueryResultRow & { import_type: string }>(
         `
@@ -365,7 +371,7 @@ export class ImportExportRepository {
         [input.tenantId, input.importJobId],
         client,
       );
-      if (!job) return { committed: false, credentialRows: [] };
+      if (!job) return { committed: false, credentialRows: [], validationErrors: [] };
 
       let credentialRows: PortalUserCredentialExportRow[] = [];
       if (job.import_type === "old_contracts") {
@@ -375,6 +381,10 @@ export class ImportExportRepository {
       } else if (job.import_type === "rc_po_plan") {
         await this.commitRcPoPlanRows(input, client);
       } else if (job.import_type === "tender_cases") {
+        const validationErrors = await this.validateTenderCaseAcceptedRowsForCommit(input, client);
+        if (validationErrors.length) {
+          return { committed: false, credentialRows: [], validationErrors };
+        }
         await this.commitTenderCaseRows(input, client);
       } else if (job.import_type === "user_department_mapping") {
         await this.commitUserDepartmentRows(input, client);
@@ -394,8 +404,105 @@ export class ImportExportRepository {
         [input.tenantId, input.importJobId, input.committedBy],
         client,
       );
-      return { committed: (result.rowCount ?? 0) > 0, credentialRows };
+      return { committed: (result.rowCount ?? 0) > 0, credentialRows, validationErrors: [] };
     });
+  }
+
+  private async validateTenderCaseAcceptedRowsForCommit(
+    input: { importJobId: string; tenantId: string },
+    client: PoolClient,
+  ): Promise<string[]> {
+    const result = await this.db.query<QueryResultRow & { message: string }>(
+      `
+        with accepted as (
+          select r.row_number, r.normalized_payload as payload
+          from ops.import_job_rows r
+          join ops.import_jobs j on j.id = r.import_job_id
+          where j.tenant_id = $1
+            and j.id = $2
+            and j.import_type = 'tender_cases'
+            and r.status = 'accepted'
+        ),
+        typed_errors as (
+          select row_number, format('Row %s: %s must be a valid date.', row_number, label) as message
+          from accepted
+          cross join lateral (
+            values
+              ('PR/Scheme Receipt Date', 'prReceiptDate'),
+              ('Tentative Completion Date', 'tentativeCompletionDate'),
+              ('NIT Initiation', 'nitInitiationDate'),
+              ('NIT Approval', 'nitApprovalDate'),
+              ('NIT Publish', 'nitPublishDate'),
+              ('Bid Receipt', 'bidReceiptDate'),
+              ('Commercial Evaluation', 'commercialEvaluationDate'),
+              ('Technical Evaluation', 'technicalEvaluationDate'),
+              ('NFA Submission', 'nfaSubmissionDate'),
+              ('NFA Approval', 'nfaApprovalDate'),
+              ('LOI Award Date', 'loiIssuedDate'),
+              ('RC/PO Award Date', 'rcPoAwardDate'),
+              ('RC/PO Validity', 'rcPoValidityDate')
+          ) as fields(label, key)
+          where payload ? key
+            and nullif(payload->>key, '') is not null
+            and (
+              jsonb_typeof(payload->key) <> 'string'
+              or not (payload->>key ~ '^\\d{4}-\\d{2}-\\d{2}$')
+            )
+
+          union all
+
+          select row_number, format('Row %s: %s must be a number.', row_number, label) as message
+          from accepted
+          cross join lateral (
+            values
+              ('PR Value / Approved Budget', 'prValue'),
+              ('Estimate / Benchmark', 'estimateBenchmark'),
+              ('NFA Approved Amount', 'approvedAmount')
+          ) as fields(label, key)
+          where payload ? key
+            and nullif(payload->>key, '') is not null
+            and jsonb_typeof(payload->key) <> 'number'
+
+          union all
+
+          select row_number, format('Row %s: %s must be a non-negative integer.', row_number, label) as message
+          from accepted
+          cross join lateral (
+            values
+              ('Bidder Participated Count', 'biddersParticipated'),
+              ('Qualified Bidders Count', 'qualifiedBidders')
+          ) as fields(label, key)
+          where payload ? key
+            and nullif(payload->>key, '') is not null
+            and case
+              when jsonb_typeof(payload->key) <> 'number' then true
+              else (payload->>key)::numeric < 0
+                or (payload->>key)::numeric <> trunc((payload->>key)::numeric)
+            end
+
+          union all
+
+          select row_number, format('Row %s: %s must be Yes or No.', row_number, label) as message
+          from accepted
+          cross join lateral (
+            values
+              ('CPC Involved?', 'cpcInvolved'),
+              ('LOI Awarded?', 'loiIssued'),
+              ('Priority?', 'priorityCase')
+          ) as fields(label, key)
+          where payload ? key
+            and nullif(payload->>key, '') is not null
+            and jsonb_typeof(payload->key) <> 'boolean'
+        )
+        select message
+        from typed_errors
+        order by row_number, message
+        limit 25
+      `,
+      [input.tenantId, input.importJobId],
+      client,
+    );
+    return result.rows.map((row) => row.message);
   }
 
   private async commitRcPoPlanRows(

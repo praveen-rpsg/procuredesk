@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   HttpException,
   Injectable,
+  Logger,
   StreamableFile,
 } from "@nestjs/common";
 import ExcelJS from "exceljs";
@@ -25,6 +26,8 @@ import type { ImportType } from "../interfaces/http/import-export.schemas.js";
 
 @Injectable()
 export class ImportExportService {
+  private readonly logger = new Logger(ImportExportService.name);
+
   constructor(
     private readonly repository: ImportExportRepository,
     private readonly audit: AuditWriterService,
@@ -308,6 +311,14 @@ export class ImportExportService {
           tenantId,
         });
         credentialRows = commitResult.credentialRows;
+        if (commitResult.validationErrors.length) {
+          throw new BadRequestException(
+            [
+              "Import commit blocked because accepted rows contain invalid typed values.",
+              ...commitResult.validationErrors,
+            ].join(" "),
+          );
+        }
         if (!commitResult.committed) {
           throw new BadRequestException(
             "Import job must be parsed with zero rejected or staged unknown rows before commit.",
@@ -326,6 +337,10 @@ export class ImportExportService {
       if (error instanceof HttpException) {
         throw error;
       }
+      this.logger.error(
+        `Import commit failed for job ${importJobId} in tenant ${tenantId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
       throw new BadRequestException(
         "Import commit failed. Review the accepted rows and master data, then try again. If the file was parsed before a recent fix, upload it again and commit the new job.",
       );

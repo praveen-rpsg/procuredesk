@@ -399,7 +399,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const runningRate = percentage(metrics.running, metrics.total);
   const riskCount = metrics.delayed + metrics.offTrack;
   const riskRate = percentage(riskCount, metrics.running);
-  const focusedCaseRows = focusedCases.data ?? [];
+  const focusedCaseRows = focusedCases.data?.items ?? [];
   const caseColumns: DataTableColumn<CaseListItem>[] = [
     {
       key: "entity",
@@ -849,7 +849,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                 pageSize: DASHBOARD_TABLE_PAGE_SIZE,
                 pageSizeOptions: [10, 25, 50],
               }}
-              rows={focusedCases.data ?? []}
+              rows={focusedCaseRows}
             />
           )}
         </section>

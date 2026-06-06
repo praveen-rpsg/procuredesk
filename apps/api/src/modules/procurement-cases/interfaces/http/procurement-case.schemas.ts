@@ -102,9 +102,15 @@ export const CreateCaseRequestSchema = z.object({
 });
 
 export const UpdateCaseRequestSchema = z.object({
+  budgetTypeId: nullableUuid,
   contractType: z.enum(contractTypeValues).optional(),
+  cpcInvolved: z.boolean().nullable().optional(),
+  departmentId: nullableUuid,
+  entityId: requiredUuid.optional(),
   financials: CaseFinancialsSchema.optional(),
+  natureOfWorkId: nullableUuid,
   prDescription: z.string().trim().max(5000).nullable().optional(),
+  prReceiptDate: dateString,
   prRemarks: z.string().trim().max(5000).nullable().optional(),
   prSchemeNo: z.string().trim().max(100).nullable().optional(),
   priorityCase: z.boolean().optional(),

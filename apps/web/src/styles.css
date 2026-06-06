@@ -3642,22 +3642,33 @@ textarea:focus:not(:focus-visible) {
 }
 
 .case-edit-panel .update-workspace-grid {
+  align-items: start;
   gap: var(--space-4);
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-top: 0;
 }
 
+.case-edit-side-stack {
+  align-content: start;
+  align-items: start;
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
 .case-edit-card {
+  align-content: start;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-xs);
   min-width: 0;
   padding: var(--space-4);
+  width: 100%;
 }
 
 .case-edit-card-primary {
-  grid-row: span 2;
+  grid-row: auto;
 }
 
 .case-edit-card .button {
@@ -3668,6 +3679,7 @@ textarea:focus:not(:focus-visible) {
 
 .case-edit-panel .form-field,
 .case-edit-panel .stack-form {
+  align-content: start;
   min-width: 0;
 }
 

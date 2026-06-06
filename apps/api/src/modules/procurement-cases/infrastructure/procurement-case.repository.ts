@@ -57,6 +57,7 @@ export type CaseListItem = {
   prDescription: string | null;
   prId: string;
   prReceiptDate: string | null;
+  prSchemeNo: string | null;
   prValue: number | null;
   priorityCase: boolean;
   estimateBenchmark: number | null;
@@ -173,7 +174,13 @@ export class ProcurementCaseRepository {
       caseId: string;
       tenantId: string;
       updatedBy: string;
+      budgetTypeId?: string | null;
+      cpcInvolved?: boolean | null;
+      departmentId?: string | null;
+      entityId?: string;
+      natureOfWorkId?: string | null;
       prDescription?: string | null;
+      prReceiptDate?: string | null;
       prRemarks?: string | null;
       prSchemeNo?: string | null;
       tenderName?: string | null;
@@ -192,21 +199,27 @@ export class ProcurementCaseRepository {
     await this.db.query(
       `
         update procurement.cases
-        set pr_description = coalesce($3, pr_description),
-            pr_remarks = coalesce($4, pr_remarks),
-            pr_scheme_no = coalesce($5, pr_scheme_no),
-            tender_name = coalesce($6, tender_name),
-            tender_no = coalesce($7, tender_no),
-            tm_remarks = coalesce($8, tm_remarks),
-            priority_case = coalesce($9, priority_case),
-            tentative_completion_date = coalesce($10, tentative_completion_date),
-            desired_stage_code = coalesce($11, desired_stage_code),
-            is_delayed = coalesce($12, is_delayed),
-            tender_type_id = coalesce($13, tender_type_id),
-            contract_type = coalesce($14, contract_type),
+        set pr_description = case when $3 then $4 else pr_description end,
+            pr_remarks = case when $5 then $6 else pr_remarks end,
+            pr_scheme_no = case when $7 then $8 else pr_scheme_no end,
+            tender_name = case when $9 then $10 else tender_name end,
+            tender_no = case when $11 then $12 else tender_no end,
+            tm_remarks = case when $13 then $14 else tm_remarks end,
+            priority_case = case when $15 then $16 else priority_case end,
+            tentative_completion_date = case when $17 then $18 else tentative_completion_date end,
+            desired_stage_code = case when $19 then $20 else desired_stage_code end,
+            is_delayed = case when $21 then $22 else is_delayed end,
+            tender_type_id = case when $23 then $24 else tender_type_id end,
+            contract_type = case when $25 then $26 else contract_type end,
+            budget_type_id = case when $27 then $28 else budget_type_id end,
+            cpc_involved = case when $29 then $30 else cpc_involved end,
+            department_id = case when $31 then $32 else department_id end,
+            entity_id = case when $33 then $34 else entity_id end,
+            nature_of_work_id = case when $35 then $36 else nature_of_work_id end,
+            pr_receipt_date = case when $37 then $38 else pr_receipt_date end,
             version = version + 1,
             updated_at = now(),
-            updated_by = $15
+            updated_by = $39
         where id = $1
           and tenant_id = $2
           and deleted_at is null
@@ -214,18 +227,42 @@ export class ProcurementCaseRepository {
       [
         input.caseId,
         input.tenantId,
+        "prDescription" in input,
         input.prDescription ?? null,
+        "prRemarks" in input,
         input.prRemarks ?? null,
+        "prSchemeNo" in input,
         input.prSchemeNo ?? null,
+        "tenderName" in input,
         input.tenderName ?? null,
+        "tenderNo" in input,
         input.tenderNo ?? null,
+        "tmRemarks" in input,
         input.tmRemarks ?? null,
+        "priorityCase" in input,
         input.priorityCase ?? null,
+        "tentativeCompletionDate" in input,
         input.tentativeCompletionDate ?? null,
+        "desiredStageCode" in input,
         input.desiredStageCode ?? null,
+        "isDelayed" in input,
         input.isDelayed ?? null,
+        "tenderTypeId" in input,
         input.tenderTypeId ?? null,
+        "contractType" in input,
         input.contractType ?? null,
+        "budgetTypeId" in input,
+        input.budgetTypeId ?? null,
+        "cpcInvolved" in input,
+        input.cpcInvolved ?? null,
+        "departmentId" in input,
+        input.departmentId ?? null,
+        "entityId" in input,
+        input.entityId ?? null,
+        "natureOfWorkId" in input,
+        input.natureOfWorkId ?? null,
+        "prReceiptDate" in input,
+        input.prReceiptDate ?? null,
         input.updatedBy,
       ],
       client,
@@ -399,7 +436,7 @@ export class ProcurementCaseRepository {
     limit: number;
     scope: CaseListScope;
     tenantId: string;
-  }): Promise<CaseListItem[]> {
+  }): Promise<{ items: CaseListItem[]; total: number }> {
     const values: unknown[] = [input.tenantId];
     const where = ["c.tenant_id = $1", "c.deleted_at is null"];
 
@@ -407,6 +444,23 @@ export class ProcurementCaseRepository {
     applyCaseListFilters(where, values, input.filters);
     this.applyValueSlabFilter(where, values, input.filters.valueSlab, input.filters.valueSlabs);
     applyCaseSearchFilter(where, values, input.filters.q);
+
+    const countResult = await this.db.one<QueryResultRow & { total_count: string }>(
+      `
+        select count(*)::text as total_count
+        from procurement.cases c
+        left join procurement.case_financials f on f.case_id = c.id and f.tenant_id = c.tenant_id
+        left join procurement.case_milestones m on m.case_id = c.id and m.tenant_id = c.tenant_id
+        left join org.entities ent on ent.id = c.entity_id and ent.tenant_id = c.tenant_id
+        left join org.departments dep on dep.id = c.department_id and dep.tenant_id = c.tenant_id
+        left join iam.users owner on owner.id = c.owner_user_id and owner.tenant_id = c.tenant_id
+        left join catalog.tender_types tt on tt.id = c.tender_type_id and tt.tenant_id = c.tenant_id
+        where ${where.join(" and ")}
+      `,
+      values,
+    );
+    const total = Number(countResult?.total_count ?? 0);
+
     if (input.cursor) {
       values.push(input.cursor.timestamp);
       const timestampPosition = values.length;
@@ -477,6 +531,7 @@ export class ProcurementCaseRepository {
           c.pr_id,
           c.pr_description,
           c.pr_receipt_date,
+          c.pr_scheme_no,
           f.pr_value,
           f.estimate_benchmark,
           case
@@ -522,7 +577,8 @@ export class ProcurementCaseRepository {
       values,
     );
 
-    return result.rows.map((row) => ({
+    return {
+      items: result.rows.map((row) => ({
       approvedAmount: this.numberOrNull(row.approved_amount),
       completionFy: row.completion_fy,
       contractType: row.contract_type,
@@ -538,6 +594,7 @@ export class ProcurementCaseRepository {
       prId: row.pr_id,
       prDescription: row.pr_description,
       prReceiptDate: this.dateOnly(row.pr_receipt_date),
+      prSchemeNo: row.pr_scheme_no,
       prValue: this.numberOrNull(row.pr_value),
       estimateBenchmark: this.numberOrNull(row.estimate_benchmark),
       isDelayed: row.is_delayed,
@@ -555,7 +612,9 @@ export class ProcurementCaseRepository {
       tentativeCompletionDate: this.dateOnly(row.tentative_completion_date),
       tmRemarks: row.tm_remarks,
       updatedAt: row.updated_at.toISOString(),
-    }));
+      })),
+      total,
+    };
   }
 
   async listDeletedCases(input: {
@@ -635,6 +694,7 @@ export class ProcurementCaseRepository {
       prId: row.pr_id,
       prDescription: row.pr_description,
       prReceiptDate: this.dateOnly(row.pr_receipt_date),
+      prSchemeNo: null,
       isDelayed: row.is_delayed,
       loiAwarded: null,
       ownerFullName: null,
@@ -997,9 +1057,12 @@ export class ProcurementCaseRepository {
           else false
         end as is_delayed,
         c.priority_case,
+        c.budget_type_id,
         c.contract_type,
         c.cpc_involved,
+        c.nature_of_work_id,
         c.pr_description,
+        c.pr_receiving_medium_id,
         c.pr_remarks,
         c.pr_scheme_no,
         c.pr_receipt_date,
@@ -1072,9 +1135,12 @@ export class ProcurementCaseRepository {
       desiredStageCode: row.desired_stage_code,
       isDelayed: row.is_delayed,
       priorityCase: row.priority_case,
+      budgetTypeId: row.budget_type_id,
       contractType: row.contract_type,
       cpcInvolved: row.cpc_involved,
+      natureOfWorkId: row.nature_of_work_id,
       prDescription: row.pr_description,
+      prReceivingMediumId: row.pr_receiving_medium_id,
       prRemarks: row.pr_remarks,
       prSchemeNo: row.pr_scheme_no,
       prReceiptDate: this.dateOnly(row.pr_receipt_date),
@@ -1388,6 +1454,7 @@ type CaseListRow = {
   pr_description: string | null;
   pr_id: string;
   pr_receipt_date: Date | null;
+  pr_scheme_no: string | null;
   pr_value: string | null;
   is_delayed: boolean;
   loi_issued: boolean | null;
@@ -1414,6 +1481,7 @@ type CaseAggregateRow = {
   approved_amount: string | null;
   bid_receipt_date: Date | null;
   bidders_participated: number | null;
+  budget_type_id: string | null;
   budget_type_label: string | null;
   commercial_evaluation_date: Date | null;
   created_at: Date;
@@ -1432,6 +1500,7 @@ type CaseAggregateRow = {
   cpc_involved: boolean | null;
   loi_issued: boolean;
   loi_issued_date: Date | null;
+  nature_of_work_id: string | null;
   nature_of_work_label: string | null;
   nfa_approval_date: Date | null;
   nfa_submission_date: Date | null;
@@ -1442,6 +1511,7 @@ type CaseAggregateRow = {
   owner_user_id: string | null;
   pr_description: string | null;
   pr_id: string;
+  pr_receiving_medium_id: string | null;
   pr_receiving_medium_label: string | null;
   pr_remarks: string | null;
   pr_receipt_date: Date | null;

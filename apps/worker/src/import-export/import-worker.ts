@@ -347,8 +347,14 @@ function validateImportRow(input: ValidateImportRowInput): ParsedImportRow {
     normalizedPayload.cpcInvolved,
     "CPC Involved? must be Yes or No.",
   );
+  validateControlledBoolean(
+    errors,
+    normalizedPayload.loiIssued,
+    "LOI Awarded? must be Yes or No.",
+  );
   validatePriority(errors, normalizedPayload.priority);
   validateLoiAndRcPo(errors, normalizedPayload);
+  validateTenderCaseDbSafePayload(errors, normalizedPayload);
 
   return buildValidatedRow(
     row,
@@ -358,6 +364,66 @@ function validateImportRow(input: ValidateImportRowInput): ParsedImportRow {
       ? "update"
       : "create",
   );
+}
+
+export function validateTenderCaseDbSafePayload(
+  errors: string[],
+  payload: Record<string, unknown>,
+): void {
+  for (const [label, key] of [
+    ["PR/Scheme Receipt Date", "prReceiptDate"],
+    ["Tentative Completion Date", "tentativeCompletionDate"],
+    ["NIT Initiation", "nitInitiationDate"],
+    ["NIT Approval", "nitApprovalDate"],
+    ["NIT Publish", "nitPublishDate"],
+    ["Bid Receipt", "bidReceiptDate"],
+    ["Commercial Evaluation", "commercialEvaluationDate"],
+    ["Technical Evaluation", "technicalEvaluationDate"],
+    ["NFA Submission", "nfaSubmissionDate"],
+    ["NFA Approval", "nfaApprovalDate"],
+    ["LOI Award Date", "loiIssuedDate"],
+    ["RC/PO Award Date", "rcPoAwardDate"],
+    ["RC/PO Validity", "rcPoValidityDate"],
+  ] as const) {
+    if (hasValue(payload[key]) && !parseImportDate(payload[key])) {
+      addValidationError(errors, `${label} must be a valid date.`);
+    }
+  }
+
+  for (const [label, key] of [
+    ["PR Value / Approved Budget", "prValue"],
+    ["Estimate / Benchmark", "estimateBenchmark"],
+    ["NFA Approved Amount", "approvedAmount"],
+  ] as const) {
+    if (hasValue(payload[key]) && numberValue(payload[key]) == null) {
+      addValidationError(errors, `${label} must be a number.`);
+    }
+  }
+
+  for (const [label, key] of [
+    ["Bidder Participated Count", "biddersParticipated"],
+    ["Qualified Bidders Count", "qualifiedBidders"],
+  ] as const) {
+    if (!hasValue(payload[key])) continue;
+    const numeric = numberValue(payload[key]);
+    if (numeric == null || numeric < 0 || !Number.isInteger(numeric)) {
+      addValidationError(errors, `${label} must be a non-negative integer.`);
+    }
+  }
+
+  for (const [label, key] of [
+    ["CPC Involved?", "cpcInvolved"],
+    ["LOI Awarded?", "loiIssued"],
+    ["Priority?", "priorityCase"],
+  ] as const) {
+    if (hasValue(payload[key]) && booleanValue(payload[key]) == null) {
+      addValidationError(errors, `${label} must be Yes or No.`);
+    }
+  }
+}
+
+function addValidationError(errors: string[], message: string): void {
+  if (!errors.includes(message)) errors.push(message);
 }
 
 function validateSpecializedImportRow(input: {

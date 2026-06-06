@@ -35,6 +35,7 @@ type VirtualTableProps<TRow> = {
   onRowClick?: (row: TRow) => void;
   pagination?: boolean | TablePaginationConfig;
   resultLabel?: string | undefined;
+  resultTotal?: number | undefined;
   rowHeight?: number;
   rows: TRow[];
   searchValue?: string | undefined;
@@ -61,6 +62,7 @@ export function VirtualTable<TRow>({
   onRowClick,
   pagination = true,
   resultLabel = "Rows",
+  resultTotal,
   rowHeight = 48,
   rows,
   searchValue,
@@ -100,6 +102,11 @@ export function VirtualTable<TRow>({
   const visibleRows = useMemo(() => pagedRows.slice(visibleStart, visibleEnd), [pagedRows, visibleEnd, visibleStart]);
   const topSpacerHeight = visibleStart * rowHeight;
   const bottomSpacerHeight = Math.max(0, (pagedRows.length - visibleEnd) * rowHeight);
+  const summaryTotalRows = resultTotal ?? rows.length;
+  const summaryFilteredRows =
+    resultTotal != null && processedRows.length === rows.length
+      ? resultTotal
+      : processedRows.length;
 
   useEffect(() => {
     const nextPageSize = paginationConfig?.pageSize ?? DEFAULT_PAGE_SIZE;
@@ -147,7 +154,7 @@ export function VirtualTable<TRow>({
     <div className="table-frame">
       <div className="table-toolbar">
         <span className="table-result-summary" aria-live="polite">
-          {formatTableRowSummary(processedRows.length, rows.length, resultLabel)}
+          {formatTableRowSummary(summaryFilteredRows, summaryTotalRows, resultLabel)}
         </span>
         {showSearch ? (
           <label className="table-search-control">

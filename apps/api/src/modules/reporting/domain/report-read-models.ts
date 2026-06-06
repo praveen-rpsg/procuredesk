@@ -36,6 +36,7 @@ export type ReportCaseRow = {
   prDescription: string | null;
   prReceiptDate: string | null;
   prRemarks: string | null;
+  prSchemeNo: string | null;
   prValue: number | null;
   priorityCase: boolean;
   qualifiedBidders: number | null;
@@ -95,6 +96,7 @@ export type StageTimeRow = {
   nitPublishTimeDays: number | null;
   ownerFullName: string | null;
   prId: string;
+  prSchemeNo: string | null;
   prReviewTimeDays: number | null;
   priorityCase: boolean;
   runningAgeDays: number | null;
