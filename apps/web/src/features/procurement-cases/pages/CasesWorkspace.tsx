@@ -67,6 +67,7 @@ type CaseColumnKey =
   | "owner"
   | "percentTimeElapsed"
   | "prId"
+  | "prSchemeNo"
   | "prValue"
   | "runAge"
   | "savingsWrtEstimate"
@@ -153,6 +154,7 @@ const valueSlabOptions = [
 
 const defaultVisibleColumnKeys: CaseColumnKey[] = [
   "prId",
+  "prSchemeNo",
   "description",
   "entity",
   "contractType",
@@ -499,7 +501,8 @@ function CasesWorkspaceList() {
     if (valueSlabs.length) chips.push({ key: "valueSlab", label: `Value: ${labelSelected(valueSlabs, valueSlabOptions.filter((o) => o.value) as Array<{ label: string; value: string }> )}`, onClear: () => setValueSlabs([]) });
     return chips;
   }, [budgetTypeIds, budgetTypes, catalog.data, completionFys, contractTypes, cpcInvolved, dateFrom, dateTo, departmentIds, departments.data, entityIds, entities.data, loiAwarded, natureOfWork, natureOfWorkIds, ownerUserId, ownerOptions, prReceiptMonths, priorityCase, stageCodes, statusValues, tenderTypeIds, trackStatuses, valueSlabs]);
-  const caseRows = cases.data ?? [];
+  const caseRows = cases.data?.items ?? [];
+  const caseTotal = cases.data?.total ?? 0;
   const entityFilterOptions = useMemo(
     () => uniqueFilterOptions(caseRows, (row) => entityNameById.get(row.entityId) ?? row.entityId),
     [caseRows, entityNameById],
@@ -536,6 +539,7 @@ function CasesWorkspaceList() {
   const allColumns = useMemo<Array<VirtualTableColumn<CaseListItem> & { key: CaseColumnKey }>>(
     () => [
       { key: "prId", header: "Case ID", render: (row) => row.prId },
+      { key: "prSchemeNo", header: "PR Scheme No.", render: (row) => row.prSchemeNo ?? "-" },
       {
         key: "description",
         header: "Description",
@@ -917,13 +921,14 @@ function CasesWorkspaceList() {
             onRowClick={(row) => navigateToAppPath(`/cases/${row.id}`)}
             pagination={false}
             resultLabel="Cases"
+            resultTotal={caseTotal}
             rowHeight={76}
-            rows={cases.data ?? []}
+            rows={caseRows}
             showSearch={false}
           />
           <div className="pagination-bar">
             <span className="pagination-info">
-              Current page: {(cases.data ?? []).length} cases
+              Showing {caseRows.length} of {caseTotal} cases
             </span>
             <Button
               variant="secondary"
@@ -935,10 +940,9 @@ function CasesWorkspaceList() {
             <span className="pagination-page-pill">Page {currentPageIndex + 1}</span>
             <Button
               variant="secondary"
-              disabled={(cases.data ?? []).length < 25}
+              disabled={caseRows.length < 25}
               onClick={() => {
-                const rows = cases.data ?? [];
-                const lastRow = rows[rows.length - 1];
+                const lastRow = caseRows[caseRows.length - 1];
                 if (lastRow) {
                   setPageCursors((cursors) => [...cursors, buildCaseCursor(lastRow)]);
                 }

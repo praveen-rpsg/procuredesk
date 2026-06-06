@@ -33,6 +33,7 @@ type CreateCaseFormValues = {
   prDescription: string;
   prId: string;
   prReceiptDate: string;
+  prSchemeNo: string;
   prValue: string;
   priorityCase: boolean;
   tenderTypeId: string;
@@ -62,6 +63,7 @@ const categoryOptions = {
 const createCaseFormSchema = {
   maxMoneyValue: 9999999999999999.99,
   maxPrIdLength: 100,
+  maxPrSchemeNoLength: 100,
   maxTextLength: 5000,
 };
 
@@ -89,6 +91,7 @@ export function CreateCaseForm({
   const [prId, setPrId] = useState("");
   const [prDescription, setPrDescription] = useState("");
   const [prReceiptDate, setPrReceiptDate] = useState("");
+  const [prSchemeNo, setPrSchemeNo] = useState("");
   const [tentativeCompletionDate, setTentativeCompletionDate] = useState("");
   const [prValue, setPrValue] = useState("");
   const [formErrors, setFormErrors] = useState<CreateCaseFormErrors>({});
@@ -108,6 +111,7 @@ export function CreateCaseForm({
     setPrId(initialValues.prId ?? "");
     setPrDescription(initialValues.prDescription ?? "");
     setPrReceiptDate(initialValues.prReceiptDate ?? "");
+    setPrSchemeNo(initialValues.prSchemeNo ?? "");
     setTentativeCompletionDate(initialValues.tentativeCompletionDate ?? "");
     setPrValue(initialValues.prValue ?? "");
     setFormErrors({});
@@ -248,6 +252,7 @@ export function CreateCaseForm({
       prDescription,
       prId,
       prReceiptDate,
+      prSchemeNo,
       prValue,
       priorityCase,
       tenderTypeId,
@@ -270,6 +275,7 @@ export function CreateCaseForm({
       prDescription,
       prId,
       prReceiptDate,
+      prSchemeNo: prSchemeNo.trim() || null,
       priorityCase,
       tenderTypeId,
       tentativeCompletionDate,
@@ -374,6 +380,16 @@ export function CreateCaseForm({
               required
               type="date"
               value={prReceiptDate}
+            />
+          </FormField>
+          <FormField
+            error={formErrors.prSchemeNo ?? ""}
+            label="PR Scheme No."
+          >
+            <TextInput
+              maxLength={createCaseFormSchema.maxPrSchemeNoLength}
+              onChange={(event) => setPrSchemeNo(event.target.value)}
+              value={prSchemeNo}
             />
           </FormField>
           <FormField
@@ -562,6 +578,12 @@ function validateCreateCaseForm(
     errors.prId = "Case ID is required.";
   } else if (values.prId.trim().length > createCaseFormSchema.maxPrIdLength) {
     errors.prId = `Case ID must be ${createCaseFormSchema.maxPrIdLength} characters or less.`;
+  }
+  if (
+    values.prSchemeNo.trim().length >
+    createCaseFormSchema.maxPrSchemeNoLength
+  ) {
+    errors.prSchemeNo = `PR Scheme No. must be ${createCaseFormSchema.maxPrSchemeNoLength} characters or less.`;
   }
   if (!values.prReceiptDate) {
     errors.prReceiptDate = "PR receipt date is required.";

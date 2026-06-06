@@ -258,6 +258,7 @@ async function queryExportRows(input: {
     applyScope(where, values, input.scope, "f.entity_id", "f.owner_user_id");
     applyCaseFactFilters(where, values, input.filters, [
       "c.pr_id",
+      "c.pr_scheme_no",
       "c.tender_name",
       "c.pr_description",
       "e.code",
@@ -274,6 +275,7 @@ async function queryExportRows(input: {
       `
         select
           c.pr_id,
+          c.pr_scheme_no,
           c.tender_no,
           c.tender_name,
           f.contract_type,
@@ -302,6 +304,7 @@ async function queryExportRows(input: {
     );
     return result.rows.map((row) => ({
       "Tender No.": row.tender_no ?? row.pr_id ?? null,
+      "PR Scheme No.": row.pr_scheme_no ?? null,
       "Tender Name": row.tender_name ?? null,
       "Contract Type": row.contract_type ?? null,
       Entity: row.entity ?? null,
@@ -341,6 +344,7 @@ async function queryExportRows(input: {
   applyScope(where, values, input.scope, "f.entity_id", "f.owner_user_id");
   applyCaseFactFilters(where, values, input.filters, [
     "c.pr_id",
+    "c.pr_scheme_no",
     "c.tender_no",
     "c.tender_name",
     "c.pr_description",
@@ -359,6 +363,7 @@ async function queryExportRows(input: {
       select
         c.tender_no,
         c.pr_id,
+        c.pr_scheme_no,
         c.pr_description,
         c.tender_name,
         f.contract_type,
@@ -457,6 +462,7 @@ async function queryExportRows(input: {
       "Tender Owner": row.tender_owner ?? null,
       "User Department": row.department ?? null,
       "PR number": row.pr_id ?? null,
+      "PR Scheme No.": row.pr_scheme_no ?? null,
       "Tender number": row.tender_no ?? null,
       "Tender Description": row.pr_description ?? row.tender_name ?? null,
       "Tender Type": row.tender_type ?? null,
@@ -481,6 +487,7 @@ async function queryExportRows(input: {
       "Tender Owner": row.tender_owner ?? null,
       "User Department": row.department ?? null,
       "PR number": row.pr_id ?? null,
+      "PR Scheme No.": row.pr_scheme_no ?? null,
       "Tender number": row.tender_no ?? null,
       "Tender Description": row.pr_description ?? row.tender_name ?? null,
       "Tender Type": row.tender_type ?? null,
@@ -498,6 +505,7 @@ async function queryExportRows(input: {
   if (input.reportCode === "running") {
     return result.rows.map((row) => ({
       "Tender No.": row.tender_no ?? row.pr_id ?? null,
+      "PR Scheme No.": row.pr_scheme_no ?? null,
       "Tender Name": row.tender_name ?? row.pr_description ?? null,
       "Contract Type": row.contract_type ?? null,
       "PR Receipt Date": formatExportDate(row.pr_receipt_date),
@@ -526,6 +534,7 @@ async function queryExportRows(input: {
   if (input.reportCode === "completed") {
     return result.rows.map((row) => ({
       "Tender No.": row.tender_no ?? row.pr_id ?? null,
+      "PR Scheme No.": row.pr_scheme_no ?? null,
       "Tender Name": row.tender_name ?? row.pr_description ?? null,
       "Contract Type": row.contract_type ?? null,
       "Tender Owner": row.tender_owner ?? null,
@@ -569,6 +578,7 @@ async function queryExportRows(input: {
 
   return result.rows.map((row) => ({
     "Tender No.": row.tender_no ?? row.pr_id ?? null,
+    "PR Scheme No.": row.pr_scheme_no ?? null,
     "Tender Description": row.pr_description ?? row.tender_name ?? null,
     Entity: row.entity ?? null,
     Department: row.department ?? null,
@@ -637,6 +647,7 @@ async function queryStageTimeExport(input: {
   applyScope(where, values, input.scope, "f.entity_id", "f.owner_user_id");
   applyCaseFactFilters(where, values, input.filters, [
     "c.pr_id",
+    "c.pr_scheme_no",
     "c.tender_no",
     "c.tender_name",
     "c.pr_description",
@@ -652,6 +663,7 @@ async function queryStageTimeExport(input: {
       select
         c.id as case_id,
         c.pr_id,
+        c.pr_scheme_no,
         c.tender_no,
         c.tender_name,
         coalesce(e.code, e.name) as entity,
@@ -738,6 +750,7 @@ async function queryStageTimeExport(input: {
   );
   return result.rows.map((row) => ({
     "Case ID": row.pr_id ?? null,
+    "PR Scheme No.": row.pr_scheme_no ?? null,
     "PR No.": row.tender_no ?? null,
     "Tender Name": row.tender_name ?? null,
     Entity: row.entity ?? null,

@@ -9,6 +9,10 @@ type CommitTenderCaseRows = {
     input: { committedBy: string; importJobId: string; tenantId: string },
     client: PoolClient,
   ): Promise<void>;
+  validateTenderCaseAcceptedRowsForCommit(
+    input: { importJobId: string; tenantId: string },
+    client: PoolClient,
+  ): Promise<string[]>;
 };
 
 type CommitRcPoRows = {
@@ -48,6 +52,31 @@ describe("ImportExportRepository tender case commit", () => {
     expect(caseUpsertSql).toContain("r.desired_stage_code");
     expect(caseUpsertSql).toContain("r.stage_code < r.desired_stage_code");
     expect(caseUpsertSql).not.toContain("r.stage_code, null, false");
+  });
+
+  it("guards accepted tender rows against stale invalid normalized payloads", async () => {
+    const db = {
+      query: vi.fn().mockResolvedValue({
+        rows: [{ message: "Row 21: LOI Awarded? must be Yes or No." }],
+      }),
+    };
+    const repository = new ImportExportRepository(
+      db as unknown as DatabaseService,
+    ) as unknown as CommitTenderCaseRows;
+
+    const errors = await repository.validateTenderCaseAcceptedRowsForCommit(
+      {
+        importJobId: "00000000-0000-0000-0000-000000000002",
+        tenantId: "00000000-0000-0000-0000-000000000003",
+      },
+      {} as PoolClient,
+    );
+
+    expect(errors).toEqual(["Row 21: LOI Awarded? must be Yes or No."]);
+    const guardSql = normalizeSql(String(db.query.mock.calls[0]![0]));
+    expect(guardSql).toContain("'LOI Awarded?', 'loiIssued'");
+    expect(guardSql).toContain("jsonb_typeof(payload->key) <> 'boolean'");
+    expect(guardSql).toContain("^\\d{4}-\\d{2}-\\d{2}$");
   });
 });
 

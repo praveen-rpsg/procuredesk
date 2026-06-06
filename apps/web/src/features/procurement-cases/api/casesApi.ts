@@ -21,6 +21,7 @@ export type CaseListItem = {
   prDescription: string | null;
   prId: string;
   prReceiptDate: string | null;
+  prSchemeNo: string | null;
   prValue: number | null;
   priorityCase: boolean;
   runningAgeDays: number | null;
@@ -33,6 +34,11 @@ export type CaseListItem = {
   tentativeCompletionDate: string | null;
   tmRemarks: string | null;
   updatedAt: string;
+};
+
+export type CaseListResponse = {
+  items: CaseListItem[];
+  total: number;
 };
 
 export type DeletedCaseListItem = CaseListItem & {
@@ -82,6 +88,7 @@ export type CaseMilestones = {
 };
 
 export type CaseDetail = {
+  budgetTypeId?: string | null;
   budgetTypeLabel?: string | null;
   contractType?: ContractType | null;
   createdAt: string;
@@ -106,10 +113,12 @@ export type CaseDetail = {
   isDelayed: boolean;
   milestones: CaseMilestones;
   natureOfWorkLabel?: string | null;
+  natureOfWorkId?: string | null;
   ownerFullName?: string | null;
   ownerUserId?: string | null;
   prDescription?: string | null;
   prId: string;
+  prReceivingMediumId?: string | null;
   prReceivingMediumLabel?: string | null;
   prRemarks?: string | null;
   prReceiptDate?: string | null;
@@ -160,7 +169,7 @@ export function listCases(params: {
 }) {
   const search = new URLSearchParams();
   setCaseListSearchParams(search, params);
-  return apiRequest<CaseListItem[]>(`/cases?${search.toString()}`);
+  return apiRequest<CaseListResponse>(`/cases?${search.toString()}`);
 }
 
 function setCaseListSearchParams(
@@ -245,6 +254,7 @@ export function createCase(payload: {
   prDescription: string;
   prId: string;
   prReceiptDate: string;
+  prSchemeNo?: string | null;
   priorityCase: boolean;
   tenderTypeId: string;
   tentativeCompletionDate: string;

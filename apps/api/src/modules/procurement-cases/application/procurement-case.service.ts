@@ -58,9 +58,15 @@ export type CreateCaseCommand = {
 };
 
 export type UpdateCaseCommand = {
+  budgetTypeId?: string | null;
   contractType?: "PO" | "RC" | null;
+  cpcInvolved?: boolean | null;
+  departmentId?: string | null;
+  entityId?: string;
   financials?: CaseFinancials;
+  natureOfWorkId?: string | null;
   prDescription?: string | null;
+  prReceiptDate?: string | null;
   prRemarks?: string | null;
   prSchemeNo?: string | null;
   priorityCase?: boolean;
@@ -239,24 +245,31 @@ export class ProcurementCaseService {
     const tenantId = this.requireTenant(actor);
     await this.assertCanUpdate(actor, caseId);
     const kase =
+      command.prReceiptDate !== undefined ||
       command.tentativeCompletionDate !== undefined
         ? await this.getCase(actor, caseId)
         : null;
     const targetUpdate = kase
-      ? this.buildTentativeCompletionUpdate(
-          actor,
-          kase,
-          command.tentativeCompletionDate ?? null,
-        )
+      ? this.buildScheduleUpdate(actor, kase, {
+          prReceiptDate: command.prReceiptDate,
+          tentativeCompletionDate: command.tentativeCompletionDate,
+        })
       : {};
-    if (command.tenderTypeId !== undefined) {
+    if (
+      command.budgetTypeId !== undefined ||
+      command.natureOfWorkId !== undefined ||
+      command.tenderTypeId !== undefined
+    ) {
       await this.catalog.assertProcurementCaseSelections({
-        budgetTypeId: null,
-        natureOfWorkId: null,
+        budgetTypeId: command.budgetTypeId ?? null,
+        natureOfWorkId: command.natureOfWorkId ?? null,
         prReceivingMediumId: null,
-        tenderTypeId: command.tenderTypeId,
+        tenderTypeId: command.tenderTypeId ?? null,
         tenantId,
       });
+    }
+    if (command.prReceiptDate !== undefined) {
+      this.assertPrReceiptDateNotFuture(command.prReceiptDate ?? null);
     }
     await this.db.transaction(async () => {
       await this.repository.updateCase({
@@ -545,15 +558,26 @@ export class ProcurementCaseService {
     throw new ForbiddenException("Case update denied.");
   }
 
-  private buildTentativeCompletionUpdate(
+  private buildScheduleUpdate(
     actor: AuthenticatedUser,
     kase: Awaited<ReturnType<ProcurementCaseService["getCase"]>>,
-    tentativeCompletionDate: string | null,
+    input: {
+      prReceiptDate?: string | null | undefined;
+      tentativeCompletionDate?: string | null | undefined;
+    },
   ) {
-    this.assertCanUpdateEntityManagedFields(actor, kase.entityId);
+    if (input.tentativeCompletionDate !== undefined) {
+      this.assertCanUpdateEntityManagedFields(actor, kase.entityId);
+    }
+    const prReceiptDate =
+      input.prReceiptDate !== undefined ? input.prReceiptDate : kase.prReceiptDate;
+    const tentativeCompletionDate =
+      input.tentativeCompletionDate !== undefined
+        ? input.tentativeCompletionDate
+        : kase.tentativeCompletionDate;
     const stagePolicy = new CaseStagePolicy();
     const desiredStageCode = stagePolicy.deriveDesiredStageCode({
-      prReceiptDate: kase.prReceiptDate,
+      prReceiptDate,
       status: kase.status,
       tentativeCompletionDate,
     });

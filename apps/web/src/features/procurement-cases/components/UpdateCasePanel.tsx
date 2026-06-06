@@ -8,7 +8,12 @@ import {
   type SetStateAction,
 } from "react";
 
-import { getCatalogSnapshot, listAssignableOwners } from "../../admin/api/adminApi";
+import {
+  getCatalogSnapshot,
+  listAdminDepartments,
+  listAssignableOwners,
+} from "../../admin/api/adminApi";
+import { listEntities } from "../../planning/api/planningApi";
 import {
   assignCaseOwner,
   getCase,
@@ -25,7 +30,11 @@ import {
   canManageCaseDelay,
   canUpdateCase,
 } from "../../../shared/auth/permissions";
-import { isDateOnlyString, toDateOnlyInputValue } from "../../../shared/utils/dateOnly";
+import {
+  isDateOnlyString,
+  toDateOnlyInputValue,
+  todayDateOnlyString,
+} from "../../../shared/utils/dateOnly";
 import { Button } from "../../../shared/ui/button/Button";
 import { FormField, TextInput } from "../../../shared/ui/form/FormField";
 import { Select } from "../../../shared/ui/form/Select";
@@ -60,7 +69,19 @@ type DateMilestoneKey = Exclude<
 type MilestoneErrors = Partial<Record<keyof MilestoneFormState, string>>;
 type CaseFormErrors = Partial<
   Record<
-    "contractType" | "tenderName" | "tenderNo" | "tenderTypeId" | "tmRemarks",
+    | "budgetTypeId"
+    | "contractType"
+    | "departmentId"
+    | "entityId"
+    | "natureOfWorkId"
+    | "ownerUserId"
+    | "prDescription"
+    | "prReceiptDate"
+    | "prSchemeNo"
+    | "tenderName"
+    | "tenderNo"
+    | "tenderTypeId"
+    | "tmRemarks",
     string
   >
 >;
@@ -92,19 +113,31 @@ const contractTypeOptions: Array<{ label: string; value: ContractType }> = [
   { label: "PO", value: "PO" },
   { label: "RC", value: "RC" },
 ];
+const categoryOptions = {
+  budgetType: "budget_type",
+  natureOfWork: "nature_of_work",
+};
 
 export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const toast = useToast();
   const [approvedAmount, setApprovedAmount] = useState("");
+  const [budgetTypeId, setBudgetTypeId] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
+  const [entityId, setEntityId] = useState("");
   const [estimateBenchmark, setEstimateBenchmark] = useState("");
+  const [natureOfWorkId, setNatureOfWorkId] = useState("");
+  const [prDescription, setPrDescription] = useState("");
+  const [prReceiptDate, setPrReceiptDate] = useState("");
+  const [prSchemeNo, setPrSchemeNo] = useState("");
   const [prValue, setPrValue] = useState("");
   const [tenderName, setTenderName] = useState("");
   const [tenderNo, setTenderNo] = useState("");
   const [tenderTypeId, setTenderTypeId] = useState("");
   const [contractType, setContractType] = useState<ContractType | "">("");
   const [tmRemarks, setTmRemarks] = useState("");
+  const [cpcInvolved, setCpcInvolved] = useState(false);
   const [priorityCase, setPriorityCase] = useState(false);
   const [milestones, setMilestones] =
     useState<MilestoneFormState>(emptyMilestones);
@@ -129,10 +162,20 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
   const canEditEntityManagedFields = Boolean(
     detail.data && canEditEntityManagedCaseFields(user, detail.data),
   );
+  const entities = useQuery({
+    enabled: canEditCase,
+    queryFn: listEntities,
+    queryKey: ["entities"],
+  });
+  const departments = useQuery({
+    enabled: canEditCase && Boolean(entityId),
+    queryFn: () => listAdminDepartments(entityId),
+    queryKey: ["case-update-departments", entityId],
+  });
   const assignableOwners = useQuery({
-    enabled: Boolean(detail.data?.entityId) && canEditEntityManagedFields,
-    queryFn: () => listAssignableOwners(detail.data?.entityId as string),
-    queryKey: ["case-update-assignable-owners", detail.data?.entityId],
+    enabled: Boolean(entityId) && canEditEntityManagedFields,
+    queryFn: () => listAssignableOwners(entityId),
+    queryKey: ["case-update-assignable-owners", entityId],
   });
   const catalog = useQuery({
     enabled: canEditCase,
@@ -144,13 +187,21 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
     if (!detail.data) return;
     const kase = detail.data;
     setApprovedAmount(moneyString(kase.financials.approvedAmount));
+    setBudgetTypeId(kase.budgetTypeId ?? "");
+    setDepartmentId(kase.departmentId ?? "");
+    setEntityId(kase.entityId ?? "");
     setEstimateBenchmark(moneyString(kase.financials.estimateBenchmark));
+    setNatureOfWorkId(kase.natureOfWorkId ?? "");
+    setPrDescription(kase.prDescription ?? "");
+    setPrReceiptDate(milestoneString(kase.prReceiptDate));
+    setPrSchemeNo(kase.prSchemeNo ?? "");
     setPrValue(moneyString(kase.financials.prValue));
     setTenderName(kase.tenderName ?? "");
     setTenderNo(kase.tenderNo ?? "");
     setTenderTypeId(kase.tenderTypeId ?? "");
     setContractType(kase.contractType ?? "");
     setTmRemarks(kase.tmRemarks ?? "");
+    setCpcInvolved(Boolean(kase.cpcInvolved));
     setPriorityCase(kase.priorityCase);
     setOwnerUserId(kase.ownerUserId ?? "");
     setTentativeCompletionDate(milestoneString(kase.tentativeCompletionDate));
@@ -196,22 +247,43 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
       validateMilestones({
         estimateBenchmark,
         milestones,
-        prReceiptDate: detail.data?.prReceiptDate ?? null,
+        prReceiptDate: prReceiptDate || null,
         showBidTimelineFields,
       }),
-    [detail.data?.prReceiptDate, estimateBenchmark, milestones, showBidTimelineFields],
+    [estimateBenchmark, milestones, prReceiptDate, showBidTimelineFields],
   );
   const caseErrors = useMemo(
     () =>
       validateCaseForm({
+        budgetTypeId,
         contractType,
-        hasExistingTenderTypeId: Boolean(detail.data?.tenderTypeId),
+        departmentId,
+        entityId,
+        natureOfWorkId,
+        ownerUserId: canEditEntityManagedFields ? ownerUserId : undefined,
+        prDescription,
+        prReceiptDate,
+        prSchemeNo,
         tenderName,
         tenderNo,
         tenderTypeId,
         tmRemarks,
       }),
-    [contractType, detail.data?.tenderTypeId, tenderName, tenderNo, tenderTypeId, tmRemarks],
+    [
+      budgetTypeId,
+      contractType,
+      departmentId,
+      entityId,
+      natureOfWorkId,
+      ownerUserId,
+      prDescription,
+      prReceiptDate,
+      prSchemeNo,
+      tenderName,
+      tenderNo,
+      tenderTypeId,
+      tmRemarks,
+    ],
   );
   const financialErrors = useMemo(
     () =>
@@ -241,12 +313,13 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
     }));
     if (
       ownerUserId &&
+      entityId === detail.data?.entityId &&
       !options.some((option) => option.value === ownerUserId)
     ) {
       options.unshift({ label: "Current Owner", value: ownerUserId });
     }
     return options;
-  }, [assignableOwners.data, ownerUserId]);
+  }, [assignableOwners.data, detail.data?.entityId, entityId, ownerUserId]);
   const tenderTypeOptions = useMemo(() => {
     const options = (catalog.data?.tenderTypes ?? [])
       .filter((tenderType) => tenderType.isActive || tenderType.id === tenderTypeId)
@@ -265,10 +338,93 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
     }
     return options;
   }, [catalog.data?.tenderTypes, detail.data?.tenderTypeName, tenderTypeId]);
+  const entityOptions = useMemo(() => {
+    const options = (entities.data ?? [])
+      .filter((entity) => entity.isActive || entity.id === entityId)
+      .map((entity) => ({
+        label: entity.code,
+        value: entity.id,
+      }));
+    if (entityId && !options.some((option) => option.value === entityId)) {
+      options.unshift({
+        label: detail.data?.entityCode ?? "Current Entity",
+        value: entityId,
+      });
+    }
+    return options;
+  }, [detail.data?.entityCode, entities.data, entityId]);
+  const departmentOptions = useMemo(() => {
+    const options = (departments.data ?? [])
+      .filter((department) => department.isActive || department.id === departmentId)
+      .map((department) => ({
+        label: department.name,
+        value: department.id,
+      }));
+    if (
+      departmentId &&
+      !options.some((option) => option.value === departmentId)
+    ) {
+      options.unshift({
+        label: detail.data?.departmentName ?? "Current Department",
+        value: departmentId,
+      });
+    }
+    return options;
+  }, [departmentId, departments.data, detail.data?.departmentName]);
+  const budgetTypeOptions = useMemo(() => {
+    const options = (catalog.data?.referenceValues ?? [])
+      .filter(
+        (value) =>
+          value.categoryCode === categoryOptions.budgetType &&
+          (value.isActive || value.id === budgetTypeId),
+      )
+      .map((value) => ({ label: value.label, value: value.id }));
+    if (
+      budgetTypeId &&
+      !options.some((option) => option.value === budgetTypeId)
+    ) {
+      options.unshift({
+        label: detail.data?.budgetTypeLabel ?? "Current Budget Type",
+        value: budgetTypeId,
+      });
+    }
+    return options;
+  }, [budgetTypeId, catalog.data?.referenceValues, detail.data?.budgetTypeLabel]);
+  const natureOfWorkOptions = useMemo(() => {
+    const options = (catalog.data?.referenceValues ?? [])
+      .filter(
+        (value) =>
+          value.categoryCode === categoryOptions.natureOfWork &&
+          (value.isActive || value.id === natureOfWorkId),
+      )
+      .map((value) => ({ label: value.label, value: value.id }));
+    if (
+      natureOfWorkId &&
+      !options.some((option) => option.value === natureOfWorkId)
+    ) {
+      options.unshift({
+        label: detail.data?.natureOfWorkLabel ?? "Current Nature Of Work",
+        value: natureOfWorkId,
+      });
+    }
+    return options;
+  }, [
+    catalog.data?.referenceValues,
+    detail.data?.natureOfWorkLabel,
+    natureOfWorkId,
+  ]);
   const caseChangedFields = useMemo(
     () =>
       buildCaseChangedFields(detail.data, {
+        budgetTypeId,
         contractType,
+        cpcInvolved,
+        departmentId,
+        entityId,
+        natureOfWorkId,
+        prDescription,
+        prReceiptDate,
+        prSchemeNo,
         priorityCase,
         tenderName,
         tenderNo,
@@ -277,7 +433,15 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
       }),
     [
       detail.data,
+      budgetTypeId,
       contractType,
+      cpcInvolved,
+      departmentId,
+      entityId,
+      natureOfWorkId,
+      prDescription,
+      prReceiptDate,
+      prSchemeNo,
       priorityCase,
       tenderName,
       tenderNo,
@@ -325,9 +489,26 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
         });
         const tenderTypeChanged = tenderTypeId !== (detail.data?.tenderTypeId ?? "");
         const contractTypeChanged = contractType !== (detail.data?.contractType ?? "");
+        const budgetTypeChanged = budgetTypeId !== (detail.data?.budgetTypeId ?? "");
+        const cpcInvolvedChanged = cpcInvolved !== Boolean(detail.data?.cpcInvolved);
+        const departmentChanged = departmentId !== (detail.data?.departmentId ?? "");
+        const entityChanged = entityId !== (detail.data?.entityId ?? "");
+        const natureOfWorkChanged = natureOfWorkId !== (detail.data?.natureOfWorkId ?? "");
+        const prDescriptionChanged = prDescription !== (detail.data?.prDescription ?? "");
+        const prReceiptDateChanged =
+          prReceiptDate !== milestoneString(detail.data?.prReceiptDate);
+        const prSchemeNoChanged = prSchemeNo !== (detail.data?.prSchemeNo ?? "");
         await updateCase(targetCaseId, {
+          budgetTypeId: budgetTypeChanged ? budgetTypeId : undefined,
           contractType: contractTypeChanged ? contractType : undefined,
+          cpcInvolved: cpcInvolvedChanged ? cpcInvolved : undefined,
+          departmentId: departmentChanged ? departmentId : undefined,
+          entityId: entityChanged ? entityId : undefined,
           financials: financials ?? undefined,
+          natureOfWorkId: natureOfWorkChanged ? natureOfWorkId : undefined,
+          prDescription: prDescriptionChanged ? prDescription || null : undefined,
+          prReceiptDate: prReceiptDateChanged ? prReceiptDate : undefined,
+          prSchemeNo: prSchemeNoChanged ? prSchemeNo.trim() || null : undefined,
           priorityCase,
           tenderName: tenderName || null,
           tenderNo: tenderNo || null,
@@ -341,7 +522,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
           targetCaseId,
           milestonePayload({
             milestones,
-            prReceiptDate: detail.data?.prReceiptDate ?? null,
+            prReceiptDate: prReceiptDate || null,
             showBidTimelineFields,
           }),
         );
@@ -449,6 +630,69 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
             className="stack-form case-edit-card case-edit-card-primary"
           >
             <p className="eyebrow">Basic Details</p>
+            <FormField label="Case ID">
+              <TextInput disabled value={detail.data?.prId ?? ""} />
+            </FormField>
+            <FormField
+              error={visibleCaseErrors.entityId ?? ""}
+              label="Entity"
+            >
+              <Select
+                disabled={entities.isLoading}
+                onChange={(event) => {
+                  setEntityId(event.target.value);
+                  setDepartmentId("");
+                  setOwnerUserId("");
+                }}
+                options={entityOptions}
+                placeholder="Select Entity"
+                value={entityId}
+              />
+            </FormField>
+            <FormField
+              error={visibleCaseErrors.departmentId ?? ""}
+              label="Department"
+            >
+              <Select
+                disabled={!entityId || departments.isLoading}
+                onChange={(event) => setDepartmentId(event.target.value)}
+                options={departmentOptions}
+                placeholder="Select Department"
+                value={departmentId}
+              />
+            </FormField>
+            <FormField
+              error={visibleCaseErrors.prReceiptDate ?? ""}
+              label="PR Receipt Date"
+            >
+              <TextInput
+                max={todayDateOnlyString()}
+                onChange={(event) => setPrReceiptDate(event.target.value)}
+                type="date"
+                value={prReceiptDate}
+              />
+            </FormField>
+            <FormField
+              error={visibleCaseErrors.prSchemeNo ?? ""}
+              label="PR Scheme No."
+            >
+              <TextInput
+                maxLength={100}
+                onChange={(event) => setPrSchemeNo(event.target.value)}
+                value={prSchemeNo}
+              />
+            </FormField>
+            <FormField
+              error={visibleCaseErrors.prDescription ?? ""}
+              label="PR Description"
+            >
+              <textarea
+                className="text-input text-area"
+                maxLength={5000}
+                onChange={(event) => setPrDescription(event.target.value)}
+                value={prDescription}
+              />
+            </FormField>
             <FormField
               error={visibleCaseErrors.tenderName ?? ""}
               label="Tender Name"
@@ -495,6 +739,30 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
               />
             </FormField>
             <FormField
+              error={visibleCaseErrors.budgetTypeId ?? ""}
+              label="Budget Type"
+            >
+              <Select
+                disabled={catalog.isLoading}
+                onChange={(event) => setBudgetTypeId(event.target.value)}
+                options={budgetTypeOptions}
+                placeholder="Select Budget Type"
+                value={budgetTypeId}
+              />
+            </FormField>
+            <FormField
+              error={visibleCaseErrors.natureOfWorkId ?? ""}
+              label="Nature Of Work"
+            >
+              <Select
+                disabled={catalog.isLoading}
+                onChange={(event) => setNatureOfWorkId(event.target.value)}
+                options={natureOfWorkOptions}
+                placeholder="Select Nature Of Work"
+                value={natureOfWorkId}
+              />
+            </FormField>
+            <FormField
               error={visibleCaseErrors.tmRemarks ?? ""}
               label="Tender Owner's Remarks"
             >
@@ -513,77 +781,88 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
               />
               Priority Case
             </label>
+            <label className="checkbox-row">
+              <input
+                checked={cpcInvolved}
+                onChange={(event) => setCpcInvolved(event.target.checked)}
+                type="checkbox"
+              />
+              CPC Involved?
+            </label>
             <ChangedFields fields={caseChangedFields} />
           </section>
         ) : null}
 
-        {canEditEntityManagedFields ? (
-          <section
-            className="stack-form case-edit-card"
-          >
-            <p className="eyebrow">Ownership And Target</p>
-            <FormField
-              helperText="Editable only by entity-level users. Only users mapped to the case entity are available."
-              label="Tender Owner"
+        <div className="case-edit-side-stack">
+          {canEditEntityManagedFields ? (
+            <section
+              className="stack-form case-edit-card"
             >
-              <Select
-                disabled={!canEditEntityManagedFields || assignableOwners.isLoading}
-                onChange={(event) => setOwnerUserId(event.target.value)}
-                options={ownerOptions}
-                placeholder="No Owner"
-                value={ownerUserId}
+              <p className="eyebrow">Ownership And Target</p>
+              <FormField
+                error={visibleCaseErrors.ownerUserId ?? ""}
+                helperText="Editable only by entity-level users. Only users mapped to the case entity are available."
+                label="Tender Owner"
+              >
+                <Select
+                  disabled={!canEditEntityManagedFields || assignableOwners.isLoading}
+                  onChange={(event) => setOwnerUserId(event.target.value)}
+                  options={ownerOptions}
+                  placeholder="No Owner"
+                  value={ownerUserId}
+                />
+              </FormField>
+              <FormField
+                helperText="Editable only by entity-level users mapped to this case entity."
+                label="Tentative Completion Date"
+              >
+                <TextInput
+                  disabled={!canEditEntityManagedFields}
+                  onChange={(event) => setTentativeCompletionDate(event.target.value)}
+                  type="date"
+                  value={tentativeCompletionDate}
+                />
+              </FormField>
+              <ChangedFields
+                fields={[
+                  ...(ownerChanged ? ["Tender Owner"] : []),
+                  ...(tentativeCompletionChanged ? ["Tentative Completion Date"] : []),
+                ]}
               />
-            </FormField>
-            <FormField
-              helperText="Editable only by entity-level users mapped to this case entity."
-              label="Tentative Completion Date"
-            >
-              <TextInput
-                disabled={!canEditEntityManagedFields}
-                onChange={(event) => setTentativeCompletionDate(event.target.value)}
-                type="date"
-                value={tentativeCompletionDate}
-              />
-            </FormField>
-            <ChangedFields
-              fields={[
-                ...(ownerChanged ? ["Tender Owner"] : []),
-                ...(tentativeCompletionChanged ? ["Tentative Completion Date"] : []),
-              ]}
-            />
-          </section>
-        ) : null}
+            </section>
+          ) : null}
 
-        {canEditDelay ? (
-          <section
-            className="stack-form case-edit-card"
-          >
-            <p className="eyebrow">Delay</p>
-            <FormField
-              error={visibleDelayErrors.delayExternalDays ?? ""}
-              label="External Delay Days"
+          {canEditDelay ? (
+            <section
+              className="stack-form case-edit-card"
             >
-              <TextInput
-                min={0}
-                onChange={(event) => setDelayExternalDays(event.target.value)}
-                type="number"
-                value={delayExternalDays}
-              />
-            </FormField>
-            <FormField
-              error={visibleDelayErrors.delayReason ?? ""}
-              label="Delay Reason"
-            >
-              <textarea
-                className="text-input text-area"
-                maxLength={5000}
-                onChange={(event) => setDelayReason(event.target.value)}
-                value={delayReason}
-              />
-            </FormField>
-            <ChangedFields fields={delayChangedFields} />
-          </section>
-        ) : null}
+              <p className="eyebrow">Delay</p>
+              <FormField
+                error={visibleDelayErrors.delayExternalDays ?? ""}
+                label="External Delay Days"
+              >
+                <TextInput
+                  min={0}
+                  onChange={(event) => setDelayExternalDays(event.target.value)}
+                  type="number"
+                  value={delayExternalDays}
+                />
+              </FormField>
+              <FormField
+                error={visibleDelayErrors.delayReason ?? ""}
+                label="Delay Reason"
+              >
+                <textarea
+                  className="text-input text-area"
+                  maxLength={5000}
+                  onChange={(event) => setDelayReason(event.target.value)}
+                  value={delayReason}
+                />
+              </FormField>
+              <ChangedFields fields={delayChangedFields} />
+            </section>
+          ) : null}
+        </div>
       </div>
 
       {canEditCase ? (
@@ -604,7 +883,7 @@ export function UpdateCasePanel({ caseId }: UpdateCasePanelProps) {
               <TextInput
                 disabled
                 type="date"
-                value={milestoneString(detail.data?.prReceiptDate)}
+                value={prReceiptDate}
               />
             </FormField>
             {showBidTimelineFields ? (
@@ -853,7 +1132,15 @@ function ChangedFields({ fields }: { fields: string[] }) {
 function buildCaseChangedFields(
   kase: CaseDetail | undefined,
   value: {
+    budgetTypeId: string;
     contractType: ContractType | "";
+    cpcInvolved: boolean;
+    departmentId: string;
+    entityId: string;
+    natureOfWorkId: string;
+    prDescription: string;
+    prReceiptDate: string;
+    prSchemeNo: string;
     priorityCase: boolean;
     tenderName: string;
     tenderNo: string;
@@ -863,15 +1150,28 @@ function buildCaseChangedFields(
 ) {
   if (!kase) return [];
   const fields: string[] = [];
+  if (value.entityId !== kase.entityId) fields.push("Entity");
+  if (value.departmentId !== (kase.departmentId ?? "")) fields.push("Department");
+  if (value.prReceiptDate !== milestoneString(kase.prReceiptDate))
+    fields.push("PR Receipt Date");
+  if (value.prDescription !== (kase.prDescription ?? ""))
+    fields.push("PR Description");
+  if (value.prSchemeNo !== (kase.prSchemeNo ?? ""))
+    fields.push("PR Scheme No.");
   if (value.tenderName !== (kase.tenderName ?? "")) fields.push("Tender Name");
   if (value.tenderNo !== (kase.tenderNo ?? "")) fields.push("Tender No");
   if (value.tenderTypeId !== (kase.tenderTypeId ?? ""))
     fields.push("Tender Type");
   if (value.contractType !== (kase.contractType ?? ""))
     fields.push("Contract Type");
+  if (value.budgetTypeId !== (kase.budgetTypeId ?? ""))
+    fields.push("Budget Type");
+  if (value.natureOfWorkId !== (kase.natureOfWorkId ?? ""))
+    fields.push("Nature Of Work");
   if (value.tmRemarks !== (kase.tmRemarks ?? ""))
     fields.push("Tender Owner's Remarks");
   if (value.priorityCase !== kase.priorityCase) fields.push("Priority Case");
+  if (value.cpcInvolved !== Boolean(kase.cpcInvolved)) fields.push("CPC Involved");
   return fields;
 }
 
@@ -971,19 +1271,56 @@ const milestoneLabels: Record<DateMilestoneKey, string> = {
 };
 
 function validateCaseForm(input: {
+  budgetTypeId: string;
   contractType: ContractType | "";
-  hasExistingTenderTypeId: boolean;
+  departmentId: string;
+  entityId: string;
+  natureOfWorkId: string;
+  ownerUserId?: string | undefined;
+  prDescription: string;
+  prReceiptDate: string;
+  prSchemeNo: string;
   tenderName: string;
   tenderNo: string;
   tenderTypeId: string;
   tmRemarks: string;
 }): CaseFormErrors {
   const errors: CaseFormErrors = {};
-  if (input.hasExistingTenderTypeId && !input.tenderTypeId) {
+  if (!input.entityId) {
+    errors.entityId = "Entity is required.";
+  }
+  if (!input.departmentId) {
+    errors.departmentId = "Department is required.";
+  }
+  if (!input.prReceiptDate) {
+    errors.prReceiptDate = "PR receipt date is required.";
+  } else if (!isDateOnlyString(input.prReceiptDate)) {
+    errors.prReceiptDate = "Use a valid PR receipt date.";
+  } else if (input.prReceiptDate > todayDateOnlyString()) {
+    errors.prReceiptDate = "PR receipt date cannot be in the future.";
+  }
+  if (!input.prDescription.trim()) {
+    errors.prDescription = "PR description is required.";
+  } else if (input.prDescription.length > 5000) {
+    errors.prDescription = "PR description cannot exceed 5000 characters.";
+  }
+  if (input.prSchemeNo.trim().length > 100) {
+    errors.prSchemeNo = "PR Scheme No. must be 100 characters or less.";
+  }
+  if (!input.tenderTypeId) {
     errors.tenderTypeId = "Tender Type is required.";
   }
   if (!input.contractType) {
     errors.contractType = "Contract Type is required.";
+  }
+  if (!input.budgetTypeId) {
+    errors.budgetTypeId = "Budget Type is required.";
+  }
+  if (!input.natureOfWorkId) {
+    errors.natureOfWorkId = "Nature Of Work is required.";
+  }
+  if (input.ownerUserId !== undefined && !input.ownerUserId) {
+    errors.ownerUserId = "Tender Owner is required.";
   }
   if (input.tenderName.length > 500) {
     errors.tenderName = "Tender name cannot exceed 500 characters.";

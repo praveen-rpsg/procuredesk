@@ -505,6 +505,7 @@ export class ReportingRepository {
     this.applyScope(where, values, input.scope, "f.entity_id", "f.owner_user_id");
     this.applyReportFilters(where, values, input.filters, [
       "c.pr_id",
+      "c.pr_scheme_no",
       "c.tender_no",
       "c.tender_name",
       "c.pr_description",
@@ -572,6 +573,7 @@ export class ReportingRepository {
         select
           c.id as case_id,
           c.pr_id,
+          c.pr_scheme_no,
           c.pr_description,
           c.tender_no,
           c.tender_name,
@@ -721,6 +723,7 @@ export class ReportingRepository {
       prDescription: row.pr_description,
       prReceiptDate: this.dateOnly(row.pr_receipt_date),
       prRemarks: row.pr_remarks,
+      prSchemeNo: row.pr_scheme_no,
       prValue: this.numberOrNull(row.pr_value),
       priorityCase: row.priority_case,
       qualifiedBidders: row.qualified_bidders,
@@ -785,6 +788,7 @@ export class ReportingRepository {
     this.applyScope(where, values, input.scope, "f.entity_id", "f.owner_user_id");
     this.applyReportFilters(where, values, input.filters, [
       "c.pr_id",
+      "c.pr_scheme_no",
       "c.tender_no",
       "c.tender_name",
       "c.pr_description",
@@ -808,6 +812,7 @@ export class ReportingRepository {
           a.id as award_id,
           c.id as case_id,
           c.pr_id,
+          c.pr_scheme_no,
           c.tender_no,
           c.tender_name,
           f.contract_type,
@@ -1017,6 +1022,7 @@ export class ReportingRepository {
       nitPublishTimeDays: row.nit_publish_time_days,
       ownerFullName: row.owner_full_name,
       prId: row.pr_id,
+      prSchemeNo: row.pr_scheme_no,
       prReviewTimeDays: row.pr_review_time_days,
       priorityCase: row.priority_case,
       runningAgeDays: row.running_age_days,
@@ -2244,6 +2250,7 @@ type CaseReportRow = {
   pr_id: string;
   pr_remarks: string | null;
   pr_receipt_date: Date | null;
+  pr_scheme_no: string | null;
   pr_value: string | null;
   priority_case: boolean;
   qualified_bidders: number | null;
@@ -2301,6 +2308,7 @@ type StageTimeSqlRow = {
   nit_publish_time_days: number | null;
   owner_full_name: string | null;
   pr_id: string;
+  pr_scheme_no: string | null;
   pr_review_time_days: number | null;
   priority_case: boolean;
   running_age_days: number | null;

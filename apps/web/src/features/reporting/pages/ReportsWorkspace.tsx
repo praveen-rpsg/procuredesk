@@ -583,6 +583,11 @@ export function ReportsWorkspace() {
         render: (row) => row.tenderNo ?? row.prId,
       },
       {
+        key: "prSchemeNo",
+        header: "PR Scheme No.",
+        render: (row) => row.prSchemeNo ?? "-",
+      },
+      {
         key: "description",
         header: "Tender Description",
         render: (row) => row.prDescription ?? row.tenderName ?? "-",
@@ -771,6 +776,11 @@ export function ReportsWorkspace() {
         render: (row) => row.tenderNo ?? row.prId,
       },
       {
+        key: "prSchemeNo",
+        header: "PR Scheme No.",
+        render: (row) => row.prSchemeNo ?? "-",
+      },
+      {
         key: "tenderName",
         header: "Tender Name",
         render: (row) => row.tenderName ?? row.prDescription ?? "-",
@@ -891,6 +901,11 @@ export function ReportsWorkspace() {
         key: "tenderNo",
         header: "Tender No.",
         render: (row) => row.tenderNo ?? row.prId,
+      },
+      {
+        key: "prSchemeNo",
+        header: "PR Scheme No.",
+        render: (row) => row.prSchemeNo ?? "-",
       },
       {
         key: "tenderName",
@@ -1026,6 +1041,11 @@ export function ReportsWorkspace() {
         render: (row) => row.prId,
       },
       {
+        key: "prSchemeNo",
+        header: "PR Scheme No.",
+        render: (row) => row.prSchemeNo ?? "-",
+      },
+      {
         key: "tenderNumber",
         header: "Tender number",
         render: (row) => row.tenderNo ?? "-",
@@ -1145,6 +1165,11 @@ export function ReportsWorkspace() {
         key: "prNumber",
         header: "PR number",
         render: (row) => row.prId,
+      },
+      {
+        key: "prSchemeNo",
+        header: "PR Scheme No.",
+        render: (row) => row.prSchemeNo ?? "-",
       },
       {
         key: "tenderNumber",
@@ -1365,6 +1390,7 @@ export function ReportsWorkspace() {
     ];
     return [
       { key: "caseId", header: "Case ID", render: (row) => row.prId },
+      { key: "prSchemeNo", header: "PR Scheme No.", render: (row) => row.prSchemeNo ?? "-" },
       { key: "prNo", header: "PR No.", render: (row) => row.tenderNo ?? "-" },
       {
         key: "tenderName",
