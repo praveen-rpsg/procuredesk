@@ -288,11 +288,18 @@ export function ReportsWorkspace() {
   const metrics = data.analytics.data;
   const openAnalyticsDrilldown = useCallback(
     (overrides: ReportQueryParams = {}) => {
+      if (filters.analyticsParams.deletedOnly) {
+        notify({
+          message: "Deleted-only analytics cannot be drilled into the active cases grid.",
+          tone: "warning",
+        });
+        return;
+      }
       navigateToAppPath(
         buildCaseDrilldownPath(filters.analyticsParams, overrides),
       );
     },
-    [filters.analyticsParams],
+    [filters.analyticsParams, notify],
   );
   const rcPoExpiryRows = data.rcPoExpiry.data ?? [];
   const rcPoVisibleRows = rcPoExpiryRows.slice(0, rcPoPageSize);
@@ -3258,15 +3265,14 @@ function buildCaseDrilldownPath(
 
   setDrilldownCsvParam(params, "budgetTypeIds", mergedParams.budgetTypeIds);
   setDrilldownCsvParam(params, "completionFys", mergedParams.completionFys);
+  setDrilldownCsvParam(params, "completionMonths", mergedParams.completionMonths);
   setDrilldownCsvParam(params, "contractTypes", mergedParams.contractTypes);
   setDrilldownBooleanParam(params, "cpcInvolved", mergedParams.cpcInvolved);
   setDrilldownCsvParam(params, "departmentIds", mergedParams.departmentIds);
   setDrilldownCsvParam(params, "entityIds", mergedParams.entityIds);
   setDrilldownBooleanParam(params, "loiAwarded", mergedParams.loiAwarded);
   setDrilldownCsvParam(params, "natureOfWorkIds", mergedParams.natureOfWorkIds);
-  if (mergedParams.ownerUserIds?.length) {
-    params.set("ownerUserId", mergedParams.ownerUserIds[0] ?? "");
-  }
+  setDrilldownCsvParam(params, "ownerUserIds", mergedParams.ownerUserIds);
   setDrilldownCsvParam(params, "prReceiptMonths", mergedParams.prReceiptMonths);
   setDrilldownBooleanParam(params, "priorityCase", mergedParams.priorityCase);
   if (mergedParams.q) params.set("q", mergedParams.q);
