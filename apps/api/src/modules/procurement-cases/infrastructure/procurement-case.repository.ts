@@ -23,8 +23,10 @@ export type CaseListFilters = {
   loiAwarded?: boolean;
   natureOfWorkIds?: string[];
   ownerUserId?: string;
+  ownerUserIds?: string[];
   priorityCase?: boolean;
   prReceiptMonths?: string[];
+  completionMonths?: string[];
   q?: string;
   stageCodes?: number[];
   status?: "running" | "completed";
@@ -1254,7 +1256,6 @@ function applyCaseScope(
 function applyCaseListFilters(where: string[], values: unknown[], filters: CaseListFilters): void {
   const scalarFilters: Array<{ column: string; operator: "=" | ">=" | "<="; value: string | undefined }> = [
     { column: "c.status", operator: "=", value: filters.status },
-    { column: "c.owner_user_id", operator: "=", value: filters.ownerUserId },
     { column: "c.pr_receipt_date", operator: ">=", value: filters.dateFrom },
     { column: "c.pr_receipt_date", operator: "<=", value: filters.dateTo },
   ];
@@ -1274,6 +1275,11 @@ function applyCaseListFilters(where: string[], values: unknown[], filters: CaseL
 
   for (const filter of scalarFilters) {
     appendOptionalScalarFilter(where, values, filter);
+  }
+  if (filters.ownerUserIds?.length) {
+    appendOptionalArrayFilter(where, values, { cast: "uuid", column: "c.owner_user_id", value: filters.ownerUserIds });
+  } else {
+    appendOptionalScalarFilter(where, values, { column: "c.owner_user_id", operator: "=", value: filters.ownerUserId });
   }
   for (const filter of booleanFilters) {
     appendOptionalBooleanFilter(where, values, filter);
@@ -1301,6 +1307,10 @@ function applyCaseListFilters(where: string[], values: unknown[], filters: CaseL
         else (extract(year from m.rc_po_award_date)::int - 1) || '-' || extract(year from m.rc_po_award_date)::int
       end
     ) = any($${values.length}::text[])`);
+  }
+  if (filters.completionMonths?.length) {
+    values.push(filters.completionMonths);
+    where.push(`to_char(m.rc_po_award_date, 'YYYY-MM') = any($${values.length}::text[])`);
   }
 }
 

@@ -144,6 +144,7 @@ export function getCaseSummary() {
 export function listCases(params: {
   budgetTypeIds?: string[] | undefined;
   completionFys?: string[] | undefined;
+  completionMonths?: string[] | undefined;
   contractTypes?: ContractType[] | undefined;
   cpcInvolved?: boolean | undefined;
   cursor?: string | undefined;
@@ -156,6 +157,7 @@ export function listCases(params: {
   loiAwarded?: boolean | undefined;
   natureOfWorkIds?: string[] | undefined;
   ownerUserId?: string | undefined;
+  ownerUserIds?: string[] | undefined;
   priorityCase?: boolean | undefined;
   prReceiptMonths?: string[] | undefined;
   q?: string | undefined;
@@ -178,6 +180,7 @@ function setCaseListSearchParams(
 ): void {
   setArrayParam(search, "budgetTypeIds", params.budgetTypeIds);
   setArrayParam(search, "completionFys", params.completionFys);
+  setArrayParam(search, "completionMonths", params.completionMonths);
   setArrayParam(search, "contractTypes", params.contractTypes);
   setBooleanParam(search, "cpcInvolved", params.cpcInvolved);
   setStringParam(search, "cursor", params.cursor);
@@ -190,6 +193,7 @@ function setCaseListSearchParams(
   setNumberParam(search, "limit", params.limit);
   setArrayParam(search, "natureOfWorkIds", params.natureOfWorkIds);
   setStringParam(search, "ownerUserId", params.ownerUserId);
+  setArrayParam(search, "ownerUserIds", params.ownerUserIds);
   setBooleanParam(search, "priorityCase", params.priorityCase);
   setArrayParam(search, "prReceiptMonths", params.prReceiptMonths);
   setStringParam(search, "q", params.q);

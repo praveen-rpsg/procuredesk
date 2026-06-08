@@ -19,6 +19,7 @@ import {
   listAdminEntities,
   listAssignableOwners,
 } from "../../admin/api/adminApi";
+import { getReportFilterMetadata } from "../../reporting/api/reportingApi";
 import { CaseDetailPanel } from "../components/CaseDetailPanel";
 import { CreateCaseForm } from "../components/CreateCaseForm";
 import { UpdateCasePanel } from "../components/UpdateCasePanel";
@@ -121,9 +122,11 @@ type CaseViewState = {
   isDelayed: BooleanFilter;
   loiAwarded: BooleanFilter;
   natureOfWorkIds: string[];
-  ownerUserId: string;
+  ownerUserId?: string;
+  ownerUserIds?: string[];
   priorityCase: BooleanFilter;
   prReceiptMonths: string[];
+  completionMonths?: string[];
   q: string;
   stageCodes: string[];
   statusValues: StatusFilter[];
@@ -216,9 +219,10 @@ function CasesWorkspaceList() {
   const [loiAwarded, setLoiAwarded] = useState<BooleanFilter>("");
   const [natureOfWorkIds, setNatureOfWorkIds] = useState<string[]>([]);
   const [pageCursors, setPageCursors] = useState<string[]>([""]);
-  const [ownerUserId, setOwnerUserId] = useState("");
+  const [ownerUserIds, setOwnerUserIds] = useState<string[]>([]);
   const [priorityCase, setPriorityCase] = useState<BooleanFilter>("");
   const [prReceiptMonths, setPrReceiptMonths] = useState<string[]>([]);
+  const [completionMonths, setCompletionMonths] = useState<string[]>([]);
   const [previewCaseId, setPreviewCaseId] = useState<string | null>(null);
   const [editCaseId, setEditCaseId] = useState<string | null>(null);
   const [q, setQ] = useState("");
@@ -243,6 +247,10 @@ function CasesWorkspaceList() {
 
   const entities = useQuery({ queryFn: listAdminEntities, queryKey: ["case-filter-entities"] });
   const catalog = useQuery({ queryFn: getCatalogSnapshot, queryKey: ["case-filter-catalog"] });
+  const reportFilterMetadata = useQuery({
+    queryFn: getReportFilterMetadata,
+    queryKey: ["report-filter-metadata"],
+  });
   const departments = useQuery({
     enabled: entityIds.length === 1,
     queryFn: () => listAdminDepartments(entityIds[0] ?? ""),
@@ -269,9 +277,10 @@ function CasesWorkspaceList() {
       limit: 25,
       loiAwarded: booleanFilter(loiAwarded),
       natureOfWorkIds: natureOfWorkIds.length ? natureOfWorkIds : undefined,
-      ownerUserId: ownerUserId || undefined,
+      ownerUserIds: ownerUserIds.length ? ownerUserIds : undefined,
       priorityCase: booleanFilter(priorityCase),
       prReceiptMonths: prReceiptMonths.length ? prReceiptMonths : undefined,
+      completionMonths: completionMonths.length ? completionMonths : undefined,
       q: debouncedQ || undefined,
       stageCodes: numericStageCodes.length ? numericStageCodes : undefined,
       status: selectedStatus || undefined,
@@ -293,9 +302,10 @@ function CasesWorkspaceList() {
       loiAwarded,
       natureOfWorkIds,
       numericStageCodes,
-      ownerUserId,
+      ownerUserIds,
       priorityCase,
       prReceiptMonths,
+      completionMonths,
       selectedStatus,
       tenderTypeIds,
       trackStatuses,
@@ -308,6 +318,7 @@ function CasesWorkspaceList() {
   }, [
     budgetTypeIds,
     completionFys,
+    completionMonths,
     contractTypes,
     cpcInvolved,
     dateFrom,
@@ -318,7 +329,7 @@ function CasesWorkspaceList() {
     loiAwarded,
     natureOfWorkIds,
     numericStageCodes,
-    ownerUserId,
+    ownerUserIds,
     priorityCase,
     prReceiptMonths,
     selectedStatus,
@@ -343,7 +354,7 @@ function CasesWorkspaceList() {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get("view") === "assigned" && user?.id) {
-      setOwnerUserId(user.id);
+      setOwnerUserIds([user.id]);
       setPageCursors([""]);
     }
   }, [location.search, user?.id]);
@@ -361,8 +372,11 @@ function CasesWorkspaceList() {
     const nextEntityIds = csvParam(params.get("entityIds"));
     const nextLoiAwarded = toBooleanFilter(params.get("loiAwarded") ?? "");
     const nextNatureOfWorkIds = csvParam(params.get("natureOfWorkIds"));
-    const nextOwnerUserId = params.get("ownerUserId") ?? csvParam(params.get("ownerUserIds"))[0] ?? "";
+    const nextOwnerUserIds = csvParam(params.get("ownerUserIds"));
+    const nextOwnerUserId = params.get("ownerUserId") ?? "";
+    const nextOwnerIds = nextOwnerUserIds.length ? nextOwnerUserIds : nextOwnerUserId ? [nextOwnerUserId] : [];
     const nextPrReceiptMonths = csvParam(params.get("prReceiptMonths"));
+    const nextCompletionMonths = csvParam(params.get("completionMonths"));
     const nextQ = params.get("q") ?? "";
     const nextStageCodes = csvParam(params.get("stageCodes")).filter((value) => Number.isInteger(Number(value)));
     const nextTenderTypeIds = csvParam(params.get("tenderTypeIds"));
@@ -383,10 +397,11 @@ function CasesWorkspaceList() {
     setIsDelayed(nextIsDelayed);
     setLoiAwarded(nextLoiAwarded);
     setNatureOfWorkIds(nextNatureOfWorkIds);
-    setOwnerUserId(nextOwnerUserId);
+    setOwnerUserIds(nextOwnerIds);
     setPriorityCase(nextPriorityCase);
     setEntityIds(nextEntityIds);
     setPrReceiptMonths(nextPrReceiptMonths);
+    setCompletionMonths(nextCompletionMonths);
     setQ(nextQ);
     setStageCodes(nextStageCodes);
     setTenderTypeIds(nextTenderTypeIds);
@@ -431,18 +446,29 @@ function CasesWorkspaceList() {
   const budgetTypes = catalog.data?.referenceValues.filter((value) => value.categoryCode === "budget_type") ?? [];
   const natureOfWork = catalog.data?.referenceValues.filter((value) => value.categoryCode === "nature_of_work") ?? [];
   const ownerOptions = useMemo(() => {
-    const options = (assignableOwners.data ?? []).map((owner) => ({
-      label: owner.fullName,
-      value: owner.id,
-    }));
-    if (ownerUserId && !options.some((option) => option.value === ownerUserId)) {
-      options.unshift({
-        label: ownerUserId === user?.id ? "Assigned To Me" : "Selected Owner",
-        value: ownerUserId,
+    const options = new Map<string, FilterOption>();
+    for (const owner of reportFilterMetadata.data?.owners ?? []) {
+      options.set(owner.id, {
+        label: owner.fullName ?? owner.username ?? owner.id,
+        value: owner.id,
       });
     }
-    return options;
-  }, [assignableOwners.data, ownerUserId, user?.id]);
+    for (const owner of assignableOwners.data ?? []) {
+      options.set(owner.id, {
+        label: owner.fullName,
+        value: owner.id,
+      });
+    }
+    for (const ownerUserId of ownerUserIds) {
+      if (!options.has(ownerUserId)) {
+        options.set(ownerUserId, {
+          label: ownerUserId,
+          value: ownerUserId,
+        });
+      }
+    }
+    return [...options.values()].sort((left, right) => left.label.localeCompare(right.label));
+  }, [assignableOwners.data, ownerUserIds, reportFilterMetadata.data?.owners]);
   const activeFilterCount = countActiveFilters([
     ...budgetTypeIds,
     ...completionFys,
@@ -454,9 +480,10 @@ function CasesWorkspaceList() {
     ...entityIds,
     loiAwarded,
     ...natureOfWorkIds,
-    ownerUserId,
+    ...ownerUserIds,
     priorityCase,
     ...prReceiptMonths,
+    ...completionMonths,
     ...stageCodes,
     ...statusValues,
     ...tenderTypeIds,
@@ -468,14 +495,13 @@ function CasesWorkspaceList() {
     const chips: Array<{ key: string; label: string; onClear: () => void }> = [];
     if (statusValues.length) chips.push({ key: "status", label: `Status: ${statusValues.join(", ")}`, onClear: () => setStatusValues([]) });
     if (entityIds.length) {
-      chips.push({ key: "entity", label: `Entity: ${labelSelected(entityIds, entities.data?.map((e) => ({ label: e.code, value: e.id })) ?? [])}`, onClear: () => { setEntityIds([]); setDepartmentIds([]); setOwnerUserId(""); } });
+      chips.push({ key: "entity", label: `Entity: ${labelSelected(entityIds, entities.data?.map((e) => ({ label: e.code, value: e.id })) ?? [])}`, onClear: () => { setEntityIds([]); setDepartmentIds([]); setOwnerUserIds([]); } });
     }
     if (departmentIds.length) {
       chips.push({ key: "dept", label: `Dept: ${labelSelected(departmentIds, departments.data?.map((d) => ({ label: d.name, value: d.id })) ?? [])}`, onClear: () => setDepartmentIds([]) });
     }
-    if (ownerUserId) {
-      const owner = ownerOptions.find((o) => o.value === ownerUserId);
-      chips.push({ key: "owner", label: `Owner: ${owner?.label ?? ownerUserId}`, onClear: () => setOwnerUserId("") });
+    if (ownerUserIds.length) {
+      chips.push({ key: "owner", label: `Owner: ${labelSelected(ownerUserIds, ownerOptions, { allWhenEverythingSelected: false })}`, onClear: () => setOwnerUserIds([]) });
     }
     if (tenderTypeIds.length) {
       chips.push({ key: "tenderType", label: `Type: ${labelSelected(tenderTypeIds, catalog.data?.tenderTypes.map((t) => ({ label: t.name, value: t.id })) ?? [])}`, onClear: () => setTenderTypeIds([]) });
@@ -496,11 +522,12 @@ function CasesWorkspaceList() {
     if (dateFrom) chips.push({ key: "dateFrom", label: `From: ${dateFrom}`, onClear: () => setDateFrom("") });
     if (dateTo) chips.push({ key: "dateTo", label: `To: ${dateTo}`, onClear: () => setDateTo("") });
     if (prReceiptMonths.length) chips.push({ key: "prMonths", label: `PR Month: ${prReceiptMonths.join(", ")}`, onClear: () => setPrReceiptMonths([]) });
+    if (completionMonths.length) chips.push({ key: "completionMonths", label: `Completion Month: ${completionMonths.join(", ")}`, onClear: () => setCompletionMonths([]) });
     if (completionFys.length) chips.push({ key: "completionFy", label: `Comp. FY: ${completionFys.join(", ")}`, onClear: () => setCompletionFys([]) });
     if (stageCodes.length) chips.push({ key: "stage", label: `Stage: ${stageCodes.map((stageCode) => formatCaseStage(Number(stageCode))).join(", ")}`, onClear: () => setStageCodes([]) });
     if (valueSlabs.length) chips.push({ key: "valueSlab", label: `Value: ${labelSelected(valueSlabs, valueSlabOptions.filter((o) => o.value) as Array<{ label: string; value: string }> )}`, onClear: () => setValueSlabs([]) });
     return chips;
-  }, [budgetTypeIds, budgetTypes, catalog.data, completionFys, contractTypes, cpcInvolved, dateFrom, dateTo, departmentIds, departments.data, entityIds, entities.data, loiAwarded, natureOfWork, natureOfWorkIds, ownerUserId, ownerOptions, prReceiptMonths, priorityCase, stageCodes, statusValues, tenderTypeIds, trackStatuses, valueSlabs]);
+  }, [budgetTypeIds, budgetTypes, catalog.data, completionFys, completionMonths, contractTypes, cpcInvolved, dateFrom, dateTo, departmentIds, departments.data, entityIds, entities.data, loiAwarded, natureOfWork, natureOfWorkIds, ownerUserIds, ownerOptions, prReceiptMonths, priorityCase, stageCodes, statusValues, tenderTypeIds, trackStatuses, valueSlabs]);
   const caseRows = cases.data?.items ?? [];
   const caseTotal = cases.data?.total ?? 0;
   const entityFilterOptions = useMemo(
@@ -722,7 +749,7 @@ function CasesWorkspaceList() {
               onChange={(values) => {
                 setEntityIds(values);
                 setDepartmentIds([]);
-                setOwnerUserId("");
+                setOwnerUserIds([]);
               }}
               options={(entities.data ?? []).map((entity) => ({ label: `${entity.code} - ${entity.name}`, value: entity.id }))}
               value={entityIds}
@@ -734,21 +761,13 @@ function CasesWorkspaceList() {
               options={(departments.data ?? []).map((department) => ({ label: department.name, value: department.id }))}
               value={departmentIds}
             />
-            <FormField label="Tender Owner">
-              <Select
-                disabled={entityIds.length !== 1 || assignableOwners.isLoading}
-                onChange={(event) => setOwnerUserId(event.target.value)}
-                options={ownerOptions}
-                placeholder={
-                  entityIds.length === 1
-                    ? assignableOwners.isLoading
-                      ? "Loading owners"
-                      : "All owners"
-                    : "Select one entity first"
-                }
-                value={ownerUserId}
-              />
-            </FormField>
+            <MultiSelectFilter
+              disabled={entityIds.length !== 1 || assignableOwners.isLoading}
+              label="Tender Owner"
+              onChange={setOwnerUserIds}
+              options={ownerOptions}
+              value={ownerUserIds}
+            />
             <MultiSelectFilter
               disabled={catalog.isLoading}
               label="Tender Type"
@@ -787,6 +806,12 @@ function CasesWorkspaceList() {
               onChange={setCompletionFys}
               options={completionFyOptions}
               value={completionFys}
+            />
+            <MultiSelectFilter
+              label="Completion Month"
+              onChange={setCompletionMonths}
+              options={prReceiptMonthOptions}
+              value={completionMonths}
             />
             <MultiSelectFilter
               label="Value Slab"
@@ -840,7 +865,7 @@ function CasesWorkspaceList() {
               <Checkbox checked={priorityCase === "true"} label="Priority cases only" onChange={(event) => setPriorityCase(event.target.checked ? "true" : "")} />
             </FormField>
             <FormField label="Assigned to me">
-              <Checkbox checked={ownerUserId === user?.id} label="Assigned to me" onChange={(event) => setOwnerUserId(event.target.checked && user?.id ? user.id : "")} />
+              <Checkbox checked={!!user?.id && ownerUserIds.length === 1 && ownerUserIds[0] === user.id} label="Assigned to me" onChange={(event) => setOwnerUserIds(event.target.checked && user?.id ? [user.id] : [])} />
             </FormField>
             <FormField label="PR Date From">
               <TextInput onChange={(event) => setDateFrom(event.target.value)} type="date" value={dateFrom} />
@@ -1023,9 +1048,10 @@ function CasesWorkspaceList() {
     setIsDelayed("");
     setLoiAwarded("");
     setNatureOfWorkIds([]);
-    setOwnerUserId("");
+    setOwnerUserIds([]);
     setPriorityCase("");
     setPrReceiptMonths([]);
+    setCompletionMonths([]);
     setQ("");
     setStageCodes([]);
     setStatusValues([]);
@@ -1047,9 +1073,10 @@ function CasesWorkspaceList() {
       isDelayed,
       loiAwarded,
       natureOfWorkIds,
-      ownerUserId,
+      ownerUserIds,
       priorityCase,
       prReceiptMonths,
+      completionMonths,
       q,
       stageCodes,
       statusValues,
@@ -1082,9 +1109,10 @@ function CasesWorkspaceList() {
     setIsDelayed(view.state.isDelayed);
     setLoiAwarded(view.state.loiAwarded ?? "");
     setNatureOfWorkIds(view.state.natureOfWorkIds ?? []);
-    setOwnerUserId(view.state.ownerUserId);
+    setOwnerUserIds(view.state.ownerUserIds ?? (view.state.ownerUserId ? [view.state.ownerUserId] : []));
     setPriorityCase(view.state.priorityCase);
     setPrReceiptMonths(view.state.prReceiptMonths ?? []);
+    setCompletionMonths(view.state.completionMonths ?? []);
     setQ(view.state.q);
     setStageCodes(view.state.stageCodes ?? []);
     setStatusValues(view.state.statusValues ?? []);
@@ -1248,6 +1276,7 @@ function hasCaseUrlFilters(params: URLSearchParams): boolean {
   return [
     "budgetTypeIds",
     "completionFys",
+    "completionMonths",
     "contractTypes",
     "cpcInvolved",
     "departmentIds",
@@ -1319,9 +1348,13 @@ function toggleArrayValue<T extends string>(values: T[], value: T, checked: bool
   return checked ? [...new Set([...values, value])] : values.filter((item) => item !== value);
 }
 
-function labelSelected(values: string[], options: FilterOption[]): string {
+function labelSelected(
+  values: string[],
+  options: FilterOption[],
+  config: { allWhenEverythingSelected?: boolean } = {},
+): string {
   if (values.length === 0) return "All";
-  if (values.length === options.length && options.length > 0) return "All";
+  if (config.allWhenEverythingSelected !== false && values.length === options.length && options.length > 0) return "All";
   const labels = values.map((value) => options.find((option) => option.value === value)?.label ?? value);
   return labels.length > 2 ? `${labels.slice(0, 2).join(", ")} +${labels.length - 2}` : labels.join(", ");
 }
