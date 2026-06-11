@@ -1,4 +1,10 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 
 import { AuditWriterService } from "../../audit/application/audit-writer.service.js";
 import type { AuthenticatedUser } from "../domain/authenticated-user.js";
@@ -26,10 +32,17 @@ export class AdminRolesService {
 
   async createRole(
     actor: AuthenticatedUser,
-    input: { code: string; description: string | null | undefined; name: string; permissionCodes: string[] },
+    input: {
+      code: string;
+      description: string | null | undefined;
+      name: string;
+      permissionCodes: string[];
+    },
   ) {
     const tenantId = this.requireTenant(actor);
-    const permissionCodes = this.normalizePermissionCodes(input.permissionCodes);
+    const permissionCodes = this.normalizePermissionCodes(
+      input.permissionCodes,
+    );
     await this.assertPermissionsExist(permissionCodes);
     const result = await this.roles.createTenantRole({
       code: input.code,
@@ -52,18 +65,26 @@ export class AdminRolesService {
 
   async updateRole(
     actor: AuthenticatedUser,
-    input: { description: string | null | undefined; name: string; permissionCodes: string[]; roleId: string },
+    input: {
+      description: string | null | undefined;
+      name: string;
+      permissionCodes: string[];
+      roleId: string;
+    },
   ) {
     const tenantId = this.requireTenant(actor);
     const role = await this.roles.findRoleForTenant(input.roleId, tenantId);
     if (!role) throw new NotFoundException("Role not found.");
-    if (role.isSystemRole) {
-      throw new ForbiddenException("System roles cannot be edited. Clone the role to customize permissions.");
+    if (role.isSystemRole && !actor.isPlatformSuperAdmin) {
+      throw new ForbiddenException("Only super admins can edit system roles.");
     }
-    const permissionCodes = this.normalizePermissionCodes(input.permissionCodes);
+    const permissionCodes = this.normalizePermissionCodes(
+      input.permissionCodes,
+    );
     await this.assertPermissionsExist(permissionCodes);
     const beforePermissionCodes = role.permissionCodes;
     const saved = await this.roles.updateRoleForTenant({
+      allowSystemRole: actor.isPlatformSuperAdmin,
       description: input.description?.trim() || null,
       name: input.name,
       permissionCodes,
@@ -94,7 +115,9 @@ export class AdminRolesService {
       throw new ForbiddenException("System roles cannot be deleted.");
     }
     if (role.userCount > 0) {
-      throw new ConflictException("Remove this role from users before deleting it.");
+      throw new ConflictException(
+        "Remove this role from users before deleting it.",
+      );
     }
     const deleted = await this.roles.deleteTenantRole({ roleId, tenantId });
     if (!deleted) throw new ConflictException("Role could not be deleted.");
@@ -117,11 +140,14 @@ export class AdminRolesService {
   }
 
   private normalizePermissionCodes(permissionCodes: string[]) {
-    return Array.from(new Set(permissionCodes.map((code) => code.trim()).filter(Boolean)));
+    return Array.from(
+      new Set(permissionCodes.map((code) => code.trim()).filter(Boolean)),
+    );
   }
 
   private async assertPermissionsExist(permissionCodes: string[]) {
-    const knownCount = await this.permissions.countKnownPermissions(permissionCodes);
+    const knownCount =
+      await this.permissions.countKnownPermissions(permissionCodes);
     if (knownCount !== permissionCodes.length) {
       throw new BadRequestException("One or more permissions are invalid.");
     }

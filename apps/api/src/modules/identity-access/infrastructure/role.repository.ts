@@ -144,6 +144,7 @@ export class RoleRepository {
   }
 
   async updateRoleForTenant(input: {
+    allowSystemRole?: boolean;
     description: string | null;
     name: string;
     permissionCodes: string[];
@@ -158,11 +159,19 @@ export class RoleRepository {
               description = $4,
               updated_at = now()
           where id = $1
-            and tenant_id = $2
-            and is_system_role = false
+            and (
+              (tenant_id = $2 and is_system_role = false)
+              or ($5::boolean = true and tenant_id is null and is_system_role = true)
+            )
             and deleted_at is null
         `,
-        [input.roleId, input.tenantId, input.name, input.description],
+        [
+          input.roleId,
+          input.tenantId,
+          input.name,
+          input.description,
+          input.allowSystemRole === true,
+        ],
         client,
       );
       if ((result.rowCount ?? 0) === 0) return false;

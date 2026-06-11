@@ -11,6 +11,7 @@ import {
   type AdminPermission,
   type AdminRole,
 } from "../api/adminApi";
+import { useAuth } from "../../../shared/auth/AuthProvider";
 import { Button } from "../../../shared/ui/button/Button";
 import { ConfirmationDialog } from "../../../shared/ui/confirmation-dialog/ConfirmationDialog";
 import { FormField, TextInput } from "../../../shared/ui/form/FormField";
@@ -38,6 +39,7 @@ const emptyDraft: RoleDraft = {
 
 export function RolesAdminPage() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const { notify } = useToast();
   const roles = useQuery({
     queryFn: listAdminRoles,
@@ -55,6 +57,7 @@ export function RolesAdminPage() {
     () => groupPermissions(permissions.data ?? []),
     [permissions.data],
   );
+  const canEditSystemRoles = Boolean(user?.isPlatformSuperAdmin);
 
   const createMutation = useMutation({
     mutationFn: () => createAdminRole(toRolePayload(draft)),
@@ -160,72 +163,75 @@ export function RolesAdminPage() {
             <p className="inline-error">{roles.error.message}</p>
           ) : (
             <div className="role-card-grid">
-              {(roles.data ?? []).map((role) => (
-                <article className="role-card" key={role.id}>
-                  <div className="role-card-header">
-                    <div>
-                      <div className="role-card-title-row">
-                        <h3>{formatRoleName(role)}</h3>
-                        <StatusBadge
-                          tone={role.isSystemRole ? "neutral" : "success"}
-                        >
-                          {role.isSystemRole ? "System" : "Tenant"}
-                        </StatusBadge>
+              {(roles.data ?? []).map((role) => {
+                const canEditRole = !role.isSystemRole || canEditSystemRoles;
+                return (
+                  <article className="role-card" key={role.id}>
+                    <div className="role-card-header">
+                      <div>
+                        <div className="role-card-title-row">
+                          <h3>{formatRoleName(role)}</h3>
+                          <StatusBadge
+                            tone={role.isSystemRole ? "neutral" : "success"}
+                          >
+                            {role.isSystemRole ? "System" : "Tenant"}
+                          </StatusBadge>
+                        </div>
+                        <code>{role.code}</code>
                       </div>
-                      <code>{role.code}</code>
+                      <div className="row-actions">
+                        <IconButton
+                          aria-label={`Clone ${formatRoleName(role)}`}
+                          onClick={() => openClone(role)}
+                          tooltip="Clone role"
+                        >
+                          <Copy size={16} />
+                        </IconButton>
+                        <IconButton
+                          aria-label={`Edit ${formatRoleName(role)}`}
+                          disabled={!canEditRole}
+                          onClick={() => openEdit(role)}
+                          tooltip={
+                            !canEditRole
+                              ? "Only super admins can edit system roles"
+                              : "Edit role"
+                          }
+                        >
+                          <Pencil size={16} />
+                        </IconButton>
+                        <IconButton
+                          aria-label={`Delete ${formatRoleName(role)}`}
+                          disabled={role.isSystemRole || role.userCount > 0}
+                          onClick={() => setDeleteRole(role)}
+                          tooltip={
+                            role.isSystemRole
+                              ? "System roles cannot be deleted"
+                              : role.userCount > 0
+                                ? "Remove this role from users before deleting"
+                                : "Delete role"
+                          }
+                          variant="danger"
+                        >
+                          <Trash2 size={16} />
+                        </IconButton>
+                      </div>
                     </div>
-                    <div className="row-actions">
-                      <IconButton
-                        aria-label={`Clone ${formatRoleName(role)}`}
-                        onClick={() => openClone(role)}
-                        tooltip="Clone role"
-                      >
-                        <Copy size={16} />
-                      </IconButton>
-                      <IconButton
-                        aria-label={`Edit ${formatRoleName(role)}`}
-                        disabled={role.isSystemRole}
-                        onClick={() => openEdit(role)}
-                        tooltip={
-                          role.isSystemRole
-                            ? "Clone system roles to customize permissions"
-                            : "Edit role"
-                        }
-                      >
-                        <Pencil size={16} />
-                      </IconButton>
-                      <IconButton
-                        aria-label={`Delete ${formatRoleName(role)}`}
-                        disabled={role.isSystemRole || role.userCount > 0}
-                        onClick={() => setDeleteRole(role)}
-                        tooltip={
-                          role.isSystemRole
-                            ? "System roles cannot be deleted"
-                            : role.userCount > 0
-                              ? "Remove this role from users before deleting"
-                              : "Delete role"
-                        }
-                        variant="danger"
-                      >
-                        <Trash2 size={16} />
-                      </IconButton>
+                    <p>{role.description ?? "No description provided."}</p>
+                    <div className="role-card-meta">
+                      <span>{role.permissionCodes.length} permissions</span>
+                      <span>{role.userCount} users</span>
                     </div>
-                  </div>
-                  <p>{role.description ?? "No description provided."}</p>
-                  <div className="role-card-meta">
-                    <span>{role.permissionCodes.length} permissions</span>
-                    <span>{role.userCount} users</span>
-                  </div>
-                  <div className="role-permission-preview">
-                    {role.permissionCodes.slice(0, 8).map((permission) => (
-                      <span key={permission}>{permission}</span>
-                    ))}
-                    {role.permissionCodes.length > 8 ? (
-                      <span>+{role.permissionCodes.length - 8}</span>
-                    ) : null}
-                  </div>
-                </article>
-              ))}
+                    <div className="role-permission-preview">
+                      {role.permissionCodes.slice(0, 8).map((permission) => (
+                        <span key={permission}>{permission}</span>
+                      ))}
+                      {role.permissionCodes.length > 8 ? (
+                        <span>+{role.permissionCodes.length - 8}</span>
+                      ) : null}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>
