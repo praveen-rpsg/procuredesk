@@ -79,6 +79,53 @@ export type CaseListItem = {
   updatedAt: string;
 };
 
+export type CaseCleanupMode = "case_ids" | "import_job" | "pr_ids";
+
+export type CaseCleanupCandidate = {
+  awardCount: number;
+  createdAt: string;
+  delayCount: number;
+  entityCode: string | null;
+  entityName: string | null;
+  id: string;
+  importAction: string | null;
+  importCommittedAt: string | null;
+  importJobId: string | null;
+  importJobStatus: string | null;
+  importType: string | null;
+  ownerFullName: string | null;
+  ownerUserId: string | null;
+  prId: string;
+  prSchemeNo: string | null;
+  rowNumber: number | null;
+  status: string;
+  tenderName: string | null;
+  tenderNo: string | null;
+  updatedAt: string;
+};
+
+export type CaseCleanupOwnerOption = {
+  caseCount: number;
+  email: string | null;
+  fullName: string | null;
+  ownerUserId: string | null;
+  username: string | null;
+};
+
+export type CaseCleanupImportJobOption = {
+  acceptedRows: number;
+  committedAt: string | null;
+  createdAt: string;
+  id: string;
+  rejectedRows: number;
+  totalRows: number;
+};
+
+export type SoftDeletedCase = {
+  id: string;
+  prId: string;
+};
+
 export type DeletedCaseListItem = CaseListItem & {
   deletedAt: string;
   deleteReason: string | null;
@@ -365,6 +412,283 @@ export class ProcurementCaseRepository {
       `,
       [input.caseId, input.tenantId, input.deletedBy, input.deleteReason ?? null],
     );
+  }
+
+  async listCleanupCandidates(input: {
+    caseIds?: string[];
+    importJobId?: string;
+    mode: CaseCleanupMode;
+    ownerUserId?: string;
+    prIds?: string[];
+    tenantId: string;
+  }): Promise<CaseCleanupCandidate[]> {
+    const values: unknown[] = [input.tenantId];
+    const ownerPredicate = input.ownerUserId
+      ? (() => {
+          values.push(input.ownerUserId);
+          return `and c.owner_user_id = $${values.length}`;
+        })()
+      : "";
+
+    if (input.mode === "import_job") {
+      values.push(input.importJobId);
+      const importJobPosition = values.length;
+      const result = await this.db.query<QueryResultRow & CaseCleanupCandidateRow>(
+        `
+          select
+            c.id,
+            c.pr_id,
+            c.pr_scheme_no,
+            c.tender_no,
+            c.tender_name,
+            c.owner_user_id,
+            owner.full_name as owner_full_name,
+            ent.code as entity_code,
+            ent.name as entity_name,
+            c.status,
+            c.created_at,
+            c.updated_at,
+            j.id as import_job_id,
+            j.import_type,
+            j.status as import_job_status,
+            j.committed_at as import_committed_at,
+            r.row_number,
+            r.normalized_payload->>'importAction' as import_action,
+            coalesce(awards.award_count, 0)::int as award_count,
+            coalesce(delays.delay_count, 0)::int as delay_count
+          from ops.import_jobs j
+          join ops.import_job_rows r on r.import_job_id = j.id
+          join procurement.cases c
+            on c.tenant_id = j.tenant_id
+           and c.pr_id = r.normalized_payload->>'prId'
+           and c.deleted_at is null
+          left join iam.users owner on owner.id = c.owner_user_id and owner.tenant_id = c.tenant_id
+          left join org.entities ent on ent.id = c.entity_id and ent.tenant_id = c.tenant_id
+          left join lateral (
+            select count(*)::int as award_count
+            from procurement.case_awards a
+            where a.tenant_id = c.tenant_id
+              and a.case_id = c.id
+              and a.deleted_at is null
+          ) awards on true
+          left join lateral (
+            select count(*)::int as delay_count
+            from procurement.case_delays d
+            where d.tenant_id = c.tenant_id
+              and d.case_id = c.id
+          ) delays on true
+          where j.tenant_id = $1
+            and j.id = $${importJobPosition}
+            and r.status = 'accepted'
+            ${ownerPredicate}
+          order by r.row_number asc, c.pr_id asc
+        `,
+        values,
+      );
+      return result.rows.map((row) => this.mapCleanupCandidate(row));
+    }
+
+    if (input.mode === "case_ids") {
+      values.push(input.caseIds ?? []);
+      const caseIdsPosition = values.length;
+      const result = await this.db.query<QueryResultRow & CaseCleanupCandidateRow>(
+        `
+          select
+            c.id,
+            c.pr_id,
+            c.pr_scheme_no,
+            c.tender_no,
+            c.tender_name,
+            c.owner_user_id,
+            owner.full_name as owner_full_name,
+            ent.code as entity_code,
+            ent.name as entity_name,
+            c.status,
+            c.created_at,
+            c.updated_at,
+            null::uuid as import_job_id,
+            null::text as import_type,
+            null::text as import_job_status,
+            null::timestamptz as import_committed_at,
+            null::integer as row_number,
+            null::text as import_action,
+            coalesce(awards.award_count, 0)::int as award_count,
+            coalesce(delays.delay_count, 0)::int as delay_count
+          from procurement.cases c
+          left join iam.users owner on owner.id = c.owner_user_id and owner.tenant_id = c.tenant_id
+          left join org.entities ent on ent.id = c.entity_id and ent.tenant_id = c.tenant_id
+          left join lateral (
+            select count(*)::int as award_count
+            from procurement.case_awards a
+            where a.tenant_id = c.tenant_id
+              and a.case_id = c.id
+              and a.deleted_at is null
+          ) awards on true
+          left join lateral (
+            select count(*)::int as delay_count
+            from procurement.case_delays d
+            where d.tenant_id = c.tenant_id
+              and d.case_id = c.id
+          ) delays on true
+          where c.tenant_id = $1
+            and c.id = any($${caseIdsPosition}::uuid[])
+            and c.deleted_at is null
+            ${ownerPredicate}
+          order by c.updated_at desc, c.pr_id asc
+        `,
+        values,
+      );
+      return result.rows.map((row) => this.mapCleanupCandidate(row));
+    }
+
+    values.push(input.prIds ?? []);
+    const prIdsPosition = values.length;
+    const result = await this.db.query<QueryResultRow & CaseCleanupCandidateRow>(
+      `
+        select
+          c.id,
+          c.pr_id,
+          c.pr_scheme_no,
+          c.tender_no,
+          c.tender_name,
+          c.owner_user_id,
+          owner.full_name as owner_full_name,
+          ent.code as entity_code,
+          ent.name as entity_name,
+          c.status,
+          c.created_at,
+          c.updated_at,
+          null::uuid as import_job_id,
+          null::text as import_type,
+          null::text as import_job_status,
+          null::timestamptz as import_committed_at,
+          null::integer as row_number,
+          null::text as import_action,
+          coalesce(awards.award_count, 0)::int as award_count,
+          coalesce(delays.delay_count, 0)::int as delay_count
+        from procurement.cases c
+        left join iam.users owner on owner.id = c.owner_user_id and owner.tenant_id = c.tenant_id
+        left join org.entities ent on ent.id = c.entity_id and ent.tenant_id = c.tenant_id
+        left join lateral (
+          select count(*)::int as award_count
+          from procurement.case_awards a
+          where a.tenant_id = c.tenant_id
+            and a.case_id = c.id
+            and a.deleted_at is null
+        ) awards on true
+        left join lateral (
+          select count(*)::int as delay_count
+          from procurement.case_delays d
+          where d.tenant_id = c.tenant_id
+            and d.case_id = c.id
+        ) delays on true
+        where c.tenant_id = $1
+          and (
+            c.pr_id = any($${prIdsPosition}::text[])
+            or c.pr_scheme_no = any($${prIdsPosition}::text[])
+          )
+          and c.deleted_at is null
+          ${ownerPredicate}
+        order by c.pr_id asc
+      `,
+      values,
+    );
+    return result.rows.map((row) => this.mapCleanupCandidate(row));
+  }
+
+  async listCleanupOwnerOptions(input: {
+    caseIds?: string[];
+    importJobId?: string;
+    mode: CaseCleanupMode;
+    prIds?: string[];
+    tenantId: string;
+  }): Promise<CaseCleanupOwnerOption[]> {
+    const candidates = await this.listCleanupCandidates(input);
+    const owners = new Map<string, CaseCleanupOwnerOption>();
+    for (const candidate of candidates) {
+      const key = candidate.ownerUserId ?? "__unassigned__";
+      const existing = owners.get(key);
+      if (existing) {
+        existing.caseCount += 1;
+        continue;
+      }
+      owners.set(key, {
+        caseCount: 1,
+        email: null,
+        fullName: candidate.ownerFullName,
+        ownerUserId: candidate.ownerUserId,
+        username: null,
+      });
+    }
+    return [...owners.values()].sort((left, right) => {
+      if (right.caseCount !== left.caseCount) return right.caseCount - left.caseCount;
+      return (left.fullName ?? "").localeCompare(right.fullName ?? "");
+    });
+  }
+
+  async listCleanupImportJobs(tenantId: string): Promise<CaseCleanupImportJobOption[]> {
+    const result = await this.db.query<QueryResultRow & CaseCleanupImportJobRow>(
+      `
+        select
+          id,
+          accepted_rows,
+          committed_at,
+          created_at,
+          rejected_rows,
+          total_rows
+        from ops.import_jobs
+        where tenant_id = $1
+          and import_type = 'tender_cases'
+          and status = 'committed'
+        order by coalesce(committed_at, created_at) desc
+        limit 100
+      `,
+      [tenantId],
+    );
+    return result.rows.map((row) => ({
+      acceptedRows: Number(row.accepted_rows ?? 0),
+      committedAt: row.committed_at?.toISOString() ?? null,
+      createdAt: row.created_at.toISOString(),
+      id: row.id,
+      rejectedRows: Number(row.rejected_rows ?? 0),
+      totalRows: Number(row.total_rows ?? 0),
+    }));
+  }
+
+  async softDeleteCasesByPreview(input: {
+    cases: Array<{ id: string; updatedAt: string }>;
+    deletedBy: string;
+    deleteReason: string;
+    tenantId: string;
+  }): Promise<SoftDeletedCase[]> {
+    if (!input.cases.length) return [];
+    const result = await this.db.query<QueryResultRow & { id: string; pr_id: string }>(
+      `
+        with expected as (
+          select id, updated_at
+          from jsonb_to_recordset($4::jsonb) as x(id uuid, updated_at timestamptz)
+        )
+        update procurement.cases c
+        set deleted_at = now(),
+            deleted_by = $2,
+            delete_reason = $3,
+            updated_at = now(),
+            updated_by = $2
+        from expected e
+        where c.tenant_id = $1
+          and c.id = e.id
+          and c.updated_at = e.updated_at
+          and c.deleted_at is null
+        returning c.id, c.pr_id
+      `,
+      [
+        input.tenantId,
+        input.deletedBy,
+        input.deleteReason,
+        JSON.stringify(input.cases.map((item) => ({ id: item.id, updated_at: item.updatedAt }))),
+      ],
+    );
+    return result.rows.map((row) => ({ id: row.id, prId: row.pr_id }));
   }
 
   async restore(input: {
@@ -1188,6 +1512,31 @@ export class ProcurementCaseRepository {
     };
   }
 
+  private mapCleanupCandidate(row: CaseCleanupCandidateRow): CaseCleanupCandidate {
+    return {
+      awardCount: Number(row.award_count ?? 0),
+      createdAt: row.created_at.toISOString(),
+      delayCount: Number(row.delay_count ?? 0),
+      entityCode: row.entity_code,
+      entityName: row.entity_name,
+      id: row.id,
+      importAction: row.import_action,
+      importCommittedAt: row.import_committed_at?.toISOString() ?? null,
+      importJobId: row.import_job_id,
+      importJobStatus: row.import_job_status,
+      importType: row.import_type,
+      ownerFullName: row.owner_full_name,
+      ownerUserId: row.owner_user_id,
+      prId: row.pr_id,
+      prSchemeNo: row.pr_scheme_no,
+      rowNumber: row.row_number,
+      status: row.status,
+      tenderName: row.tender_name,
+      tenderNo: row.tender_no,
+      updatedAt: row.updated_at.toISOString(),
+    };
+  }
+
   private dateOnly(value: Date | string | null): string | null {
     return toDateOnlyString(value);
   }
@@ -1485,6 +1834,38 @@ type CaseListRow = {
 type DeletedCaseListRow = {
   deleted_at: Date;
   delete_reason: string | null;
+};
+
+type CaseCleanupCandidateRow = {
+  award_count: number;
+  created_at: Date;
+  delay_count: number;
+  entity_code: string | null;
+  entity_name: string | null;
+  id: string;
+  import_action: string | null;
+  import_committed_at: Date | null;
+  import_job_id: string | null;
+  import_job_status: string | null;
+  import_type: string | null;
+  owner_full_name: string | null;
+  owner_user_id: string | null;
+  pr_id: string;
+  pr_scheme_no: string | null;
+  row_number: number | null;
+  status: string;
+  tender_name: string | null;
+  tender_no: string | null;
+  updated_at: Date;
+};
+
+type CaseCleanupImportJobRow = {
+  accepted_rows: number;
+  committed_at: Date | null;
+  created_at: Date;
+  id: string;
+  rejected_rows: number;
+  total_rows: number;
 };
 
 type CaseAggregateRow = {
