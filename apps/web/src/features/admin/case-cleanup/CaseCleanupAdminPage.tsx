@@ -25,6 +25,8 @@ import {
 } from "../../../shared/ui/table/DataTable";
 import { useToast } from "../../../shared/ui/toast/ToastProvider";
 
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const columns: DataTableColumn<CaseCleanupPreviewRow>[] = [
   { key: "risk", header: "Risk", render: (row) => <RiskBadge risk={row.risk} /> },
   { key: "case", header: "Case ID", render: (row) => row.id },
@@ -69,6 +71,14 @@ export function CaseCleanupAdminPage() {
         .filter(Boolean),
     [caseText],
   );
+  const invalidCaseIds = useMemo(
+    () => caseIds.filter((caseId) => !uuidPattern.test(caseId)),
+    [caseIds],
+  );
+  const caseIdError =
+    mode === "case_ids" && invalidCaseIds.length
+      ? "Case ID List accepts internal UUIDs only. Use PR/Scheme No. List for PR values like RPSG_CESC..."
+      : undefined;
 
   const cleanupCriteria = useMemo(() => {
     const payload: {
@@ -84,7 +94,7 @@ export function CaseCleanupAdminPage() {
   }, [caseIds, importJobId, mode, prIds]);
 
   const hasCleanupCriteria =
-    (mode === "case_ids" && caseIds.length > 0) ||
+    (mode === "case_ids" && caseIds.length > 0 && invalidCaseIds.length === 0) ||
     (mode === "import_job" && Boolean(importJobId.trim())) ||
     (mode === "pr_ids" && prIds.length > 0);
 
@@ -223,7 +233,7 @@ export function CaseCleanupAdminPage() {
               options={[
                 { label: "Import Job", value: "import_job" },
                 { label: "PR/Scheme No. List", value: "pr_ids" },
-                { label: "Case ID List", value: "case_ids" },
+                { label: "Case UUID List", value: "case_ids" },
               ]}
               value={mode}
             />
@@ -267,14 +277,19 @@ export function CaseCleanupAdminPage() {
               />
             </FormField>
           ) : mode === "case_ids" ? (
-            <FormField label="Case ID List" required>
+            <FormField
+              error={caseIdError}
+              helperText="Use the internal UUID shown in the Case ID column. For RPSG_CESC... values, select PR/Scheme No. List."
+              label="Case UUID List"
+              required
+            >
               <TextArea
                 onChange={(event) => {
                   setCaseText(event.target.value);
                   setOwnerUserId("");
                   setPreview(null);
                 }}
-                placeholder="One Case ID per line"
+                placeholder="One case UUID per line"
                 rows={5}
                 value={caseText}
               />
