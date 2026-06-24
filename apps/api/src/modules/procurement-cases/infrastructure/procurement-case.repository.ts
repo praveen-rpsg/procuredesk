@@ -447,7 +447,7 @@ export class ProcurementCaseRepository {
             ent.name as entity_name,
             c.status,
             c.created_at,
-            c.updated_at,
+            to_char(c.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at,
             j.id as import_job_id,
             j.import_type,
             j.status as import_job_status,
@@ -505,7 +505,7 @@ export class ProcurementCaseRepository {
             ent.name as entity_name,
             c.status,
             c.created_at,
-            c.updated_at,
+            to_char(c.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at,
             null::uuid as import_job_id,
             null::text as import_type,
             null::text as import_job_status,
@@ -557,7 +557,7 @@ export class ProcurementCaseRepository {
           ent.name as entity_name,
           c.status,
           c.created_at,
-          c.updated_at,
+          to_char(c.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at,
           null::uuid as import_job_id,
           null::text as import_type,
           null::text as import_job_status,
@@ -937,7 +937,7 @@ export class ProcurementCaseRepository {
       tenderTypeName: row.tender_type_name,
       tentativeCompletionDate: this.dateOnly(row.tentative_completion_date),
       tmRemarks: row.tm_remarks,
-      updatedAt: row.updated_at.toISOString(),
+      updatedAt: row.updated_at,
       })),
       total,
     };
@@ -1036,7 +1036,7 @@ export class ProcurementCaseRepository {
       tenderTypeName: null,
       tentativeCompletionDate: this.dateOnly(row.tentative_completion_date),
       tmRemarks: null,
-      updatedAt: row.updated_at.toISOString(),
+      updatedAt: row.updated_at,
       deletedAt: row.deleted_at.toISOString(),
       deleteReason: row.delete_reason,
     }));
@@ -1533,7 +1533,7 @@ export class ProcurementCaseRepository {
       status: row.status,
       tenderName: row.tender_name,
       tenderNo: row.tender_no,
-      updatedAt: row.updated_at.toISOString(),
+      updatedAt: row.updated_at,
     };
   }
 
@@ -1828,7 +1828,7 @@ type CaseListRow = {
   tender_name: string | null;
   tender_type_name: string | null;
   tentative_completion_date: Date | null;
-  updated_at: Date;
+  updated_at: string;
 };
 
 type DeletedCaseListRow = {
@@ -1856,7 +1856,7 @@ type CaseCleanupCandidateRow = {
   status: string;
   tender_name: string | null;
   tender_no: string | null;
-  updated_at: Date;
+  updated_at: string;
 };
 
 type CaseCleanupImportJobRow = {

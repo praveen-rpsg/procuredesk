@@ -327,6 +327,11 @@ export class ProcurementCaseService {
         deleteReason: command.reason,
         tenantId,
       });
+      if (deleted.length === 0) {
+        throw new BadRequestException(
+          "No cases were deleted. Run preview again because the selected cases may have changed.",
+        );
+      }
       await this.audit.write({
         action: "case.bulk_cleanup",
         actorUserId: actor.id,

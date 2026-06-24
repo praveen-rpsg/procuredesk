@@ -4,6 +4,7 @@ import {
   ExceptionFilter,
   HttpException,
   HttpStatus,
+  Logger,
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -20,6 +21,8 @@ type ProblemDetails = {
 
 @Catch()
 export class ProblemDetailsFilter implements ExceptionFilter {
+  private readonly logger = new Logger(ProblemDetailsFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost): void {
     const context = host.switchToHttp();
     const response = context.getResponse<FastifyReply>();
@@ -51,6 +54,12 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       instance: request.url,
       timestamp: new Date().toISOString(),
     };
+
+    if (status === HttpStatus.INTERNAL_SERVER_ERROR) {
+      const message = exception instanceof Error ? exception.message : String(exception);
+      const stack = exception instanceof Error ? exception.stack : undefined;
+      this.logger.error(`Unhandled request error for ${request.method} ${request.url}: ${message}`, stack);
+    }
 
     const chronologyErrors = responseBody?.chronologyErrors;
     if (Array.isArray(chronologyErrors)) {

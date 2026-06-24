@@ -169,6 +169,29 @@ describe("ProcurementCaseService admin cleanup", () => {
     ]);
   });
 
+  it("fails cleanup when no safe preview cases are actually deleted", async () => {
+    const { audit, outbox, repository, service } = createService();
+    repository.listCleanupCandidates.mockResolvedValue([
+      cleanupCandidate({ id: "case-safe", importAction: "create", prId: "PR-1" }),
+    ]);
+    repository.softDeleteCasesByPreview.mockResolvedValue([]);
+    const preview = await service.previewCaseCleanup(cleanupActor, {
+      importJobId: "00000000-0000-0000-0000-000000000001",
+      mode: "import_job",
+    });
+
+    await expect(
+      service.executeCaseCleanup(cleanupActor, {
+        confirmationText: "DELETE 1 CASES",
+        previewToken: preview.previewToken,
+        reason: "Wrong committed bulk upload cleanup",
+      }),
+    ).rejects.toThrow("No cases were deleted");
+
+    expect(audit.write).not.toHaveBeenCalled();
+    expect(outbox.writeMany).not.toHaveBeenCalled();
+  });
+
   it("normalizes case id cleanup criteria before preview", async () => {
     const { repository, service } = createService();
     repository.listCleanupCandidates.mockResolvedValue([
