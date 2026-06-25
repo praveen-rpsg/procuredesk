@@ -6,12 +6,14 @@ import {
   LayoutDashboard,
   ShieldCheck,
   Tags,
+  Trash2,
   UsersRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo } from "react";
 
 import { AdminAuditPage } from "./audit/AdminAuditPage";
+import { CaseCleanupAdminPage } from "./case-cleanup/CaseCleanupAdminPage";
 import { CatalogAdminPage } from "./catalog/CatalogAdminPage";
 import { EntitiesAdminPage } from "./entities/EntitiesAdminPage";
 import {
@@ -25,6 +27,7 @@ import { OperationsWorkspace } from "../operations/pages/OperationsWorkspace";
 import { useAuth } from "../../shared/auth/AuthProvider";
 import {
   canAccessAdminWorkspace,
+  canDeleteCase,
   canManageNotifications,
   canManageRoles,
   canManageUsers,
@@ -47,6 +50,7 @@ import { SecondaryNav } from "../../shared/ui/secondary-nav/SecondaryNav";
 type AdminSectionKey =
   | "audit"
   | "catalog"
+  | "case-cleanup"
   | "entities"
   | "operations"
   | "overview"
@@ -63,6 +67,7 @@ type AdminSectionDefinition = AdminOverviewItem & {
 const adminSectionPaths: Record<AdminSectionKey, string> = {
   audit: "/admin/audit-logs",
   catalog: "/admin/choice-lists",
+  "case-cleanup": "/admin/case-cleanup",
   entities: "/admin/entities",
   operations: "/admin/operations",
   overview: "/admin/overview",
@@ -81,9 +86,10 @@ export function AdminFoundation() {
   const hasEntityAccess = canReadEntities(user);
   const hasCatalogAccess = canReadCatalog(user);
   const hasAuditAccess = canReadAudit(user);
+  const hasAdminAccess = canAccessAdminWorkspace(user);
+  const hasCaseCleanupAccess = hasAdminAccess && canDeleteCase(user);
   const hasOperationsAccess =
     canReadAudit(user) || canManageNotifications(user);
-  const hasAdminAccess = canAccessAdminWorkspace(user);
   const sections = useMemo<AdminSectionDefinition[]>(() => {
     const items: AdminSectionDefinition[] = [
       {
@@ -157,6 +163,16 @@ export function AdminFoundation() {
         path: adminSectionPaths.audit,
       });
     }
+    if (hasCaseCleanupAccess) {
+      items.push({
+        group: "Governance",
+        description: "Preview and soft-delete confirmed procurement cases.",
+        icon: Trash2,
+        key: "case-cleanup",
+        label: "Case Cleanup",
+        path: adminSectionPaths["case-cleanup"],
+      });
+    }
     if (hasOperationsAccess) {
       items.push({
         group: "Governance",
@@ -171,6 +187,7 @@ export function AdminFoundation() {
     return items;
   }, [
     hasAuditAccess,
+    hasCaseCleanupAccess,
     hasCatalogAccess,
     hasEntityAccess,
     hasOperationsAccess,
@@ -212,6 +229,7 @@ export function AdminFoundation() {
       !hasEntityAccess &&
       !hasCatalogAccess &&
       !hasAuditAccess &&
+      !hasCaseCleanupAccess &&
       !hasOperationsAccess)
   ) {
     return <AccessDeniedState />;
@@ -289,6 +307,7 @@ function renderAdminSection(
   }
   if (section === "catalog") return <CatalogAdminPage />;
   if (section === "tender-rules") return <TenderTypeDaysAdminPage />;
+  if (section === "case-cleanup") return <CaseCleanupAdminPage />;
   if (section === "operations") return <OperationsWorkspace />;
   return <AdminAuditPage />;
 }

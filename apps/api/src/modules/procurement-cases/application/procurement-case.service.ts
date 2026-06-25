@@ -5,6 +5,8 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { hasExpandedPermission } from "../../../common/auth/permission-utils.js";
 import {
@@ -12,6 +14,7 @@ import {
   todayDateOnlyString,
 } from "../../../common/utils/date-only.js";
 import { DatabaseService } from "../../../database/database.service.js";
+import type { EnvConfig } from "../../../config/env.schema.js";
 import { AuditWriterService } from "../../audit/application/audit-writer.service.js";
 import { CatalogService } from "../../catalog/application/catalog.service.js";
 import type { AuthenticatedUser } from "../../identity-access/domain/authenticated-user.js";
@@ -29,6 +32,7 @@ import type {
 } from "../domain/case-aggregate.js";
 import {
   ProcurementCaseRepository,
+  type CaseCleanupCandidate,
   type CaseListFilters,
 } from "../infrastructure/procurement-case.repository.js";
 
@@ -77,6 +81,31 @@ export type UpdateCaseCommand = {
   tmRemarks?: string | null;
 };
 
+export type CaseCleanupPreviewCommand = {
+  caseIds?: string[];
+  importJobId?: string;
+  mode: "case_ids" | "import_job" | "pr_ids";
+  ownerUserId?: string;
+  prIds?: string[];
+};
+
+export type CaseCleanupExecuteCommand = {
+  confirmationText: string;
+  previewToken: string;
+  reason: string;
+};
+
+type CaseCleanupPreviewToken = {
+  actorUserId: string;
+  cases: Array<{ id: string; updatedAt: string }>;
+  criteria: CaseCleanupPreviewCommand;
+  expiresAt: string;
+  safeCount: number;
+  tenantId: string;
+};
+
+type CleanupRisk = "blocked" | "safe" | "warning";
+
 @Injectable()
 export class ProcurementCaseService {
   constructor(
@@ -85,6 +114,7 @@ export class ProcurementCaseService {
     private readonly db: DatabaseService,
     private readonly outbox: OutboxWriterService,
     private readonly catalog: CatalogService,
+    private readonly config: ConfigService<EnvConfig, true>,
   ) {}
 
   async createCase(actor: AuthenticatedUser, command: CreateCaseCommand) {
@@ -223,6 +253,121 @@ export class ProcurementCaseService {
       limit: Math.min(filters.limit ?? 25, 100),
       tenantId,
     });
+  }
+
+  async previewCaseCleanup(actor: AuthenticatedUser, command: CaseCleanupPreviewCommand) {
+    const tenantId = this.requireTenant(actor);
+    this.requireAdminCleanupPermission(actor);
+    const criteria = this.normalizeCleanupCriteria(command);
+    const candidates = await this.repository.listCleanupCandidates({
+      ...criteria,
+      tenantId,
+    });
+    const rows = candidates.map((candidate) => this.classifyCleanupCandidate(criteria, candidate));
+    const safeRows = rows.filter((row) => row.risk === "safe");
+    const token = this.signCleanupPreview({
+      actorUserId: actor.id,
+      cases: safeRows.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
+      criteria,
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      safeCount: safeRows.length,
+      tenantId,
+    });
+    return {
+      blockedCount: rows.filter((row) => row.risk === "blocked").length,
+      expiresAt: this.verifyCleanupPreview(token).expiresAt,
+      previewToken: token,
+      rows,
+      safeCount: safeRows.length,
+      totalCount: rows.length,
+      warningCount: rows.filter((row) => row.risk === "warning").length,
+    };
+  }
+
+  async listCaseCleanupImportJobs(actor: AuthenticatedUser) {
+    const tenantId = this.requireTenant(actor);
+    this.requireAdminCleanupPermission(actor);
+    return this.repository.listCleanupImportJobs(tenantId);
+  }
+
+  async listCaseCleanupOwnerOptions(actor: AuthenticatedUser, command: CaseCleanupPreviewCommand) {
+    const tenantId = this.requireTenant(actor);
+    this.requireAdminCleanupPermission(actor);
+    const { ownerUserId: _ownerUserId, ...criteriaInput } = command;
+    const criteria = this.normalizeCleanupCriteria(criteriaInput);
+    const owners = await this.repository.listCleanupOwnerOptions({
+      ...criteria,
+      tenantId,
+    });
+    return owners;
+  }
+
+  async executeCaseCleanup(actor: AuthenticatedUser, command: CaseCleanupExecuteCommand) {
+    const tenantId = this.requireTenant(actor);
+    this.requireAdminCleanupPermission(actor);
+    const preview = this.verifyCleanupPreview(command.previewToken);
+    if (preview.tenantId !== tenantId || preview.actorUserId !== actor.id) {
+      throw new ForbiddenException("Cleanup preview does not belong to this session.");
+    }
+    if (new Date(preview.expiresAt).getTime() <= Date.now()) {
+      throw new BadRequestException("Cleanup preview expired. Run preview again.");
+    }
+    if (!preview.cases.length) {
+      throw new BadRequestException("Cleanup preview has no safe cases to delete.");
+    }
+    const expectedConfirmation = `DELETE ${preview.safeCount} CASES`;
+    if (command.confirmationText !== expectedConfirmation) {
+      throw new BadRequestException(`Type ${expectedConfirmation} to confirm cleanup.`);
+    }
+
+    const deletedCases = await this.db.transaction(async () => {
+      const deleted = await this.repository.softDeleteCasesByPreview({
+        cases: preview.cases,
+        deletedBy: actor.id,
+        deleteReason: command.reason,
+        tenantId,
+      });
+      if (deleted.length === 0) {
+        throw new BadRequestException(
+          "No cases were deleted. Run preview again because the selected cases may have changed.",
+        );
+      }
+      await this.audit.write({
+        action: "case.bulk_cleanup",
+        actorUserId: actor.id,
+        details: {
+          criteria: preview.criteria,
+          deletedCount: deleted.length,
+          requestedSafeCount: preview.safeCount,
+          skippedCount: preview.safeCount - deleted.length,
+        },
+        summary: `Soft deleted ${deleted.length} cases through admin cleanup`,
+        targetId: null,
+        targetType: "bulk_case_cleanup",
+        tenantId,
+      });
+      await this.outbox.writeMany(
+        deleted.map((kase) => ({
+          aggregateId: kase.id,
+          aggregateType: "procurement_case",
+          eventType: "procurement_case.deleted",
+          payload: {
+            actorUserId: actor.id,
+            bulkCleanup: true,
+            deleteReason: command.reason,
+          },
+          tenantId,
+        })),
+      );
+      return deleted;
+    });
+
+    return {
+      deletedCount: deletedCases.length,
+      deletedCaseIds: deletedCases.map((kase) => kase.id),
+      requestedSafeCount: preview.safeCount,
+      skippedCount: preview.safeCount - deletedCases.length,
+    };
   }
 
   async getCase(actor: AuthenticatedUser, caseId: string) {
@@ -652,6 +797,123 @@ export class ProcurementCaseService {
     if (!hasExpandedPermission(actor, permission)) {
       throw new ForbiddenException("Missing required permission.");
     }
+  }
+
+  private requireAdminCleanupPermission(actor: AuthenticatedUser) {
+    this.requirePermission(actor, "case.delete");
+    this.requirePermission(actor, "admin.console.access");
+  }
+
+  private normalizeCleanupCriteria(command: CaseCleanupPreviewCommand): CaseCleanupPreviewCommand {
+    if (command.mode === "import_job") {
+      if (!command.importJobId) {
+        throw new BadRequestException("Import job is required for cleanup preview.");
+      }
+      return {
+        importJobId: command.importJobId,
+        mode: "import_job",
+        ...(command.ownerUserId ? { ownerUserId: command.ownerUserId } : {}),
+      };
+    }
+    if (command.mode === "case_ids") {
+      const caseIds = [...new Set((command.caseIds ?? []).map((item) => item.trim()).filter(Boolean))];
+      if (!caseIds.length) {
+        throw new BadRequestException("At least one Case ID is required.");
+      }
+      return {
+        caseIds,
+        mode: "case_ids",
+        ...(command.ownerUserId ? { ownerUserId: command.ownerUserId } : {}),
+      };
+    }
+    const prIds = [...new Set((command.prIds ?? []).map((item) => item.trim()).filter(Boolean))];
+    if (!prIds.length) {
+      throw new BadRequestException("At least one PR/Scheme No. is required.");
+    }
+    return {
+      mode: "pr_ids",
+      ...(command.ownerUserId ? { ownerUserId: command.ownerUserId } : {}),
+      prIds,
+    };
+  }
+
+  private classifyCleanupCandidate(
+    criteria: CaseCleanupPreviewCommand,
+    candidate: CaseCleanupCandidate,
+  ) {
+    const reasons: string[] = [];
+    let risk: CleanupRisk = "safe";
+    if (criteria.mode === "import_job") {
+      if (candidate.importType !== "tender_cases") {
+        reasons.push("Import job is not a tender case import.");
+        risk = "blocked";
+      }
+      if (candidate.importJobStatus !== "committed") {
+        reasons.push("Import job is not committed.");
+        risk = "blocked";
+      }
+      if (candidate.importAction !== "create") {
+        reasons.push("Import row updated an existing case and needs manual review.");
+        risk = "blocked";
+      }
+      if (
+        candidate.importCommittedAt &&
+        new Date(candidate.updatedAt).getTime() > new Date(candidate.importCommittedAt).getTime()
+      ) {
+        reasons.push("Case changed after import commit.");
+        if (risk !== "blocked") risk = "warning";
+      }
+    }
+    if (candidate.awardCount > 0) {
+      reasons.push("Case has award records.");
+      if (risk !== "blocked") risk = "warning";
+    }
+    if (candidate.delayCount > 0) {
+      reasons.push("Case has delay records.");
+      if (risk !== "blocked") risk = "warning";
+    }
+    return {
+      ...candidate,
+      reasons,
+      risk,
+    };
+  }
+
+  private signCleanupPreview(payload: CaseCleanupPreviewToken): string {
+    const body = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+    const signature = this.cleanupSignature(body);
+    return `${body}.${signature}`;
+  }
+
+  private verifyCleanupPreview(token: string): CaseCleanupPreviewToken {
+    const [body, signature] = token.split(".");
+    if (!body || !signature) {
+      throw new BadRequestException("Cleanup preview token is invalid.");
+    }
+    const expected = this.cleanupSignature(body);
+    const providedBuffer = Buffer.from(signature);
+    const expectedBuffer = Buffer.from(expected);
+    if (
+      providedBuffer.length !== expectedBuffer.length ||
+      !timingSafeEqual(providedBuffer, expectedBuffer)
+    ) {
+      throw new BadRequestException("Cleanup preview token is invalid.");
+    }
+    try {
+      const parsed = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as CaseCleanupPreviewToken;
+      if (!parsed.tenantId || !parsed.actorUserId || !Array.isArray(parsed.cases)) {
+        throw new Error("Invalid token payload.");
+      }
+      return parsed;
+    } catch {
+      throw new BadRequestException("Cleanup preview token is invalid.");
+    }
+  }
+
+  private cleanupSignature(body: string): string {
+    return createHmac("sha256", this.config.getOrThrow("SESSION_SECRET"))
+      .update(body)
+      .digest("base64url");
   }
 
   private canManageDelay(actor: AuthenticatedUser, _kase: { entityId: string }) {

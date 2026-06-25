@@ -136,6 +136,44 @@ export const DeleteCaseRequestSchema = z
   })
   .default({});
 
+export const CaseCleanupPreviewRequestSchema = z
+  .object({
+    caseIds: z.array(z.string().uuid()).max(2000).optional(),
+    importJobId: z.string().uuid().optional(),
+    mode: z.enum(["case_ids", "import_job", "pr_ids"]),
+    ownerUserId: z.string().uuid().optional(),
+    prIds: z.array(z.string().trim().min(1).max(100)).max(2000).optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.mode === "import_job" && !value.importJobId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Import job is required for import job cleanup.",
+        path: ["importJobId"],
+      });
+    }
+    if (value.mode === "pr_ids" && !value.prIds?.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "At least one PR/Scheme No. is required.",
+        path: ["prIds"],
+      });
+    }
+    if (value.mode === "case_ids" && !value.caseIds?.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "At least one Case ID is required.",
+        path: ["caseIds"],
+      });
+    }
+  });
+
+export const CaseCleanupExecuteRequestSchema = z.object({
+  confirmationText: z.string().trim().min(1).max(100),
+  previewToken: z.string().trim().min(1),
+  reason: z.string().trim().min(10).max(1000),
+});
+
 export const ListCasesQuerySchema = z.object({
   budgetTypeIds: csvUuidList,
   completionFys: csvTextList,
@@ -172,6 +210,8 @@ export const ListCasesQuerySchema = z.object({
 });
 
 export type AssignOwnerRequest = z.infer<typeof AssignOwnerRequestSchema>;
+export type CaseCleanupExecuteRequest = z.infer<typeof CaseCleanupExecuteRequestSchema>;
+export type CaseCleanupPreviewRequest = z.infer<typeof CaseCleanupPreviewRequestSchema>;
 export type CreateCaseRequest = z.infer<typeof CreateCaseRequestSchema>;
 export type DeleteCaseRequest = z.infer<typeof DeleteCaseRequestSchema>;
 export type ListCasesQuery = z.infer<typeof ListCasesQuerySchema>;

@@ -87,6 +87,67 @@ export type TenderTypeRule = {
   usageCount: number;
 };
 
+export type CaseCleanupMode = "case_ids" | "import_job" | "pr_ids";
+
+export type CaseCleanupOwnerOption = {
+  caseCount: number;
+  email: string | null;
+  fullName: string | null;
+  ownerUserId: string | null;
+  username: string | null;
+};
+
+export type CaseCleanupImportJobOption = {
+  acceptedRows: number;
+  committedAt: string | null;
+  createdAt: string;
+  id: string;
+  rejectedRows: number;
+  totalRows: number;
+};
+
+export type CaseCleanupPreviewRow = {
+  awardCount: number;
+  createdAt: string;
+  delayCount: number;
+  entityCode: string | null;
+  entityName: string | null;
+  id: string;
+  importAction: string | null;
+  importCommittedAt: string | null;
+  importJobId: string | null;
+  importJobStatus: string | null;
+  importType: string | null;
+  ownerFullName: string | null;
+  ownerUserId: string | null;
+  prId: string;
+  prSchemeNo: string | null;
+  reasons: string[];
+  risk: "blocked" | "safe" | "warning";
+  rowNumber: number | null;
+  status: string;
+  tenderName: string | null;
+  tenderNo: string | null;
+  updatedAt: string;
+};
+
+export type CaseCleanupPreview = {
+  blockedCount: number;
+  expiresAt: string;
+  previewToken: string;
+  rows: CaseCleanupPreviewRow[];
+  safeCount: number;
+  totalCount: number;
+  warningCount: number;
+};
+
+export type CaseCleanupExecuteResult = {
+  deletedCaseIds: string[];
+  deletedCount: number;
+  requestedSafeCount: number;
+  skippedCount: number;
+};
+
 export type CatalogSnapshot = {
   referenceCategories: CatalogReferenceCategory[];
   referenceValues: CatalogReferenceValue[];
@@ -109,6 +170,46 @@ export type PasswordPolicy = {
 
 export function listAdminUsers() {
   return apiRequest<AdminUser[]>("/admin/users");
+}
+
+export function previewCaseCleanup(payload: {
+  caseIds?: string[];
+  importJobId?: string;
+  mode: CaseCleanupMode;
+  ownerUserId?: string;
+  prIds?: string[];
+}) {
+  return apiRequest<CaseCleanupPreview>("/admin/cases/cleanup-preview", {
+    body: JSON.stringify(payload),
+    method: "POST",
+  });
+}
+
+export function listCaseCleanupImportJobs() {
+  return apiRequest<CaseCleanupImportJobOption[]>("/admin/cases/cleanup-import-jobs");
+}
+
+export function listCaseCleanupOwnerOptions(payload: {
+  caseIds?: string[];
+  importJobId?: string;
+  mode: CaseCleanupMode;
+  prIds?: string[];
+}) {
+  return apiRequest<CaseCleanupOwnerOption[]>("/admin/cases/cleanup-options", {
+    body: JSON.stringify(payload),
+    method: "POST",
+  });
+}
+
+export function executeCaseCleanup(payload: {
+  confirmationText: string;
+  previewToken: string;
+  reason: string;
+}) {
+  return apiRequest<CaseCleanupExecuteResult>("/admin/cases/cleanup-execute", {
+    body: JSON.stringify(payload),
+    method: "POST",
+  });
 }
 
 export function createAdminUser(payload: {

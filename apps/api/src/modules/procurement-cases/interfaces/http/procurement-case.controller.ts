@@ -21,6 +21,8 @@ import type { AuthenticatedUser } from "../../../identity-access/domain/authenti
 import { ProcurementCaseService } from "../../application/procurement-case.service.js";
 import {
   AssignOwnerRequestSchema,
+  CaseCleanupExecuteRequestSchema,
+  CaseCleanupPreviewRequestSchema,
   CaseMilestonesSchema,
   CreateCaseRequestSchema,
   DeleteCaseRequestSchema,
@@ -28,6 +30,8 @@ import {
   UpdateCaseRequestSchema,
   UpdateDelayRequestSchema,
   type AssignOwnerRequest,
+  type CaseCleanupExecuteRequest,
+  type CaseCleanupPreviewRequest,
   type CreateCaseRequest,
   type DeleteCaseRequest,
   type ListCasesQuery,
@@ -63,6 +67,39 @@ export class ProcurementCaseController {
     @Query(new ZodValidationPipe(ListCasesQuerySchema)) query: ListCasesQuery,
   ) {
     return this.cases.listDeletedCases(user, stripUndefined(query));
+  }
+
+  @Post("admin/cases/cleanup-preview")
+  @RequirePermissions("admin.console.access", "case.delete")
+  previewCaseCleanup(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(new ZodValidationPipe(CaseCleanupPreviewRequestSchema)) body: CaseCleanupPreviewRequest,
+  ) {
+    return this.cases.previewCaseCleanup(user, stripUndefined(body));
+  }
+
+  @Get("admin/cases/cleanup-import-jobs")
+  @RequirePermissions("admin.console.access", "case.delete")
+  listCaseCleanupImportJobs(@CurrentUser() user: AuthenticatedUser) {
+    return this.cases.listCaseCleanupImportJobs(user);
+  }
+
+  @Post("admin/cases/cleanup-options")
+  @RequirePermissions("admin.console.access", "case.delete")
+  listCaseCleanupOwnerOptions(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(new ZodValidationPipe(CaseCleanupPreviewRequestSchema)) body: CaseCleanupPreviewRequest,
+  ) {
+    return this.cases.listCaseCleanupOwnerOptions(user, stripUndefined(body));
+  }
+
+  @Post("admin/cases/cleanup-execute")
+  @RequirePermissions("admin.console.access", "case.delete")
+  executeCaseCleanup(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(new ZodValidationPipe(CaseCleanupExecuteRequestSchema)) body: CaseCleanupExecuteRequest,
+  ) {
+    return this.cases.executeCaseCleanup(user, body);
   }
 
   @Post("cases")
