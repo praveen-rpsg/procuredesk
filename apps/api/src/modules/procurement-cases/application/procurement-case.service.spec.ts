@@ -169,6 +169,84 @@ describe("ProcurementCaseService admin cleanup", () => {
     ]);
   });
 
+  it("executes cleanup for all matched preview rows when override is confirmed", async () => {
+    const { audit, repository, service } = createService();
+    repository.listCleanupCandidates.mockResolvedValue([
+      cleanupCandidate({ id: "case-safe", importAction: "create", prId: "PR-1" }),
+      cleanupCandidate({ id: "case-update", importAction: "update", prId: "PR-2" }),
+      cleanupCandidate({ awardCount: 1, id: "case-award", importAction: "create", prId: "PR-3" }),
+    ]);
+    repository.softDeleteCasesByPreview.mockResolvedValue([
+      { id: "case-safe", prId: "PR-1" },
+      { id: "case-update", prId: "PR-2" },
+      { id: "case-award", prId: "PR-3" },
+    ]);
+    const preview = await service.previewCaseCleanup(cleanupActor, {
+      importJobId: "00000000-0000-0000-0000-000000000001",
+      mode: "import_job",
+    });
+
+    const result = await service.executeCaseCleanup(cleanupActor, {
+      confirmationText: "DELETE ALL 3 CASES",
+      includeAllMatchedRows: true,
+      previewToken: preview.previewToken,
+      reason: "Wrong committed bulk upload cleanup",
+    });
+
+    expect(result).toMatchObject({
+      cleanupScope: "all_matched",
+      deletedCount: 3,
+      requestedCount: 3,
+      requestedSafeCount: 1,
+      requestedTotalCount: 3,
+      skippedCount: 0,
+    });
+    expect(repository.softDeleteCasesByPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cases: [
+          { id: "case-safe", updatedAt: "2026-06-01T10:00:00.000Z" },
+          { id: "case-update", updatedAt: "2026-06-01T10:00:00.000Z" },
+          { id: "case-award", updatedAt: "2026-06-01T10:00:00.000Z" },
+        ],
+      }),
+    );
+    expect(audit.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        details: expect.objectContaining({
+          cleanupScope: "all_matched",
+          riskSummary: { blocked: 1, safe: 1, warning: 1 },
+          unsafeRequestedCases: [
+            expect.objectContaining({ id: "case-update", risk: "blocked" }),
+            expect.objectContaining({ id: "case-award", risk: "warning" }),
+          ],
+        }),
+      }),
+    );
+  });
+
+  it("requires all-matched confirmation text for override cleanup", async () => {
+    const { repository, service } = createService();
+    repository.listCleanupCandidates.mockResolvedValue([
+      cleanupCandidate({ id: "case-safe", importAction: "create", prId: "PR-1" }),
+      cleanupCandidate({ id: "case-update", importAction: "update", prId: "PR-2" }),
+    ]);
+    const preview = await service.previewCaseCleanup(cleanupActor, {
+      importJobId: "00000000-0000-0000-0000-000000000001",
+      mode: "import_job",
+    });
+
+    await expect(
+      service.executeCaseCleanup(cleanupActor, {
+        confirmationText: "DELETE 1 CASES",
+        includeAllMatchedRows: true,
+        previewToken: preview.previewToken,
+        reason: "Wrong committed bulk upload cleanup",
+      }),
+    ).rejects.toThrow("Type DELETE ALL 2 CASES to confirm cleanup.");
+
+    expect(repository.softDeleteCasesByPreview).not.toHaveBeenCalled();
+  });
+
   it("fails cleanup when no safe preview cases are actually deleted", async () => {
     const { audit, outbox, repository, service } = createService();
     repository.listCleanupCandidates.mockResolvedValue([

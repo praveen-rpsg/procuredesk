@@ -170,6 +170,7 @@ export const CaseCleanupPreviewRequestSchema = z
 
 export const CaseCleanupExecuteRequestSchema = z.object({
   confirmationText: z.string().trim().min(1).max(100),
+  includeAllMatchedRows: z.boolean().optional(),
   previewToken: z.string().trim().min(1),
   reason: z.string().trim().min(10).max(1000),
 });

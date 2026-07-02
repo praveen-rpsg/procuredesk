@@ -91,15 +91,23 @@ export type CaseCleanupPreviewCommand = {
 
 export type CaseCleanupExecuteCommand = {
   confirmationText: string;
+  includeAllMatchedRows?: boolean | undefined;
   previewToken: string;
   reason: string;
 };
 
 type CaseCleanupPreviewToken = {
+  allCases: Array<{
+    id: string;
+    reasons: string[];
+    risk: CleanupRisk;
+    updatedAt: string;
+  }>;
   actorUserId: string;
   cases: Array<{ id: string; updatedAt: string }>;
   criteria: CaseCleanupPreviewCommand;
   expiresAt: string;
+  totalCount: number;
   safeCount: number;
   tenantId: string;
 };
@@ -267,11 +275,18 @@ export class ProcurementCaseService {
     const safeRows = rows.filter((row) => row.risk === "safe");
     const token = this.signCleanupPreview({
       actorUserId: actor.id,
+      allCases: rows.map((row) => ({
+        id: row.id,
+        reasons: row.reasons,
+        risk: row.risk,
+        updatedAt: row.updatedAt,
+      })),
       cases: safeRows.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
       criteria,
       expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
       safeCount: safeRows.length,
       tenantId,
+      totalCount: rows.length,
     });
     return {
       blockedCount: rows.filter((row) => row.risk === "blocked").length,
@@ -312,17 +327,28 @@ export class ProcurementCaseService {
     if (new Date(preview.expiresAt).getTime() <= Date.now()) {
       throw new BadRequestException("Cleanup preview expired. Run preview again.");
     }
-    if (!preview.cases.length) {
-      throw new BadRequestException("Cleanup preview has no safe cases to delete.");
+    const includeAllMatchedRows = command.includeAllMatchedRows === true;
+    const requestedCases = includeAllMatchedRows
+      ? preview.allCases.map((kase) => ({ id: kase.id, updatedAt: kase.updatedAt }))
+      : preview.cases;
+    const requestedCount = includeAllMatchedRows ? preview.totalCount : preview.safeCount;
+    if (!requestedCases.length) {
+      throw new BadRequestException(
+        includeAllMatchedRows
+          ? "Cleanup preview has no matched cases to delete."
+          : "Cleanup preview has no safe cases to delete.",
+      );
     }
-    const expectedConfirmation = `DELETE ${preview.safeCount} CASES`;
+    const expectedConfirmation = includeAllMatchedRows
+      ? `DELETE ALL ${requestedCount} CASES`
+      : `DELETE ${requestedCount} CASES`;
     if (command.confirmationText !== expectedConfirmation) {
       throw new BadRequestException(`Type ${expectedConfirmation} to confirm cleanup.`);
     }
 
     const deletedCases = await this.db.transaction(async () => {
       const deleted = await this.repository.softDeleteCasesByPreview({
-        cases: preview.cases,
+        cases: requestedCases,
         deletedBy: actor.id,
         deleteReason: command.reason,
         tenantId,
@@ -337,9 +363,18 @@ export class ProcurementCaseService {
         actorUserId: actor.id,
         details: {
           criteria: preview.criteria,
+          cleanupScope: includeAllMatchedRows ? "all_matched" : "safe_only",
           deletedCount: deleted.length,
+          riskSummary: this.cleanupRiskSummary(preview.allCases),
+          requestedCount,
           requestedSafeCount: preview.safeCount,
-          skippedCount: preview.safeCount - deleted.length,
+          requestedTotalCount: preview.totalCount,
+          skippedCount: requestedCount - deleted.length,
+          unsafeRequestedCases: includeAllMatchedRows
+            ? preview.allCases
+                .filter((kase) => kase.risk !== "safe")
+                .map((kase) => ({ id: kase.id, reasons: kase.reasons, risk: kase.risk }))
+            : [],
         },
         summary: `Soft deleted ${deleted.length} cases through admin cleanup`,
         targetId: null,
@@ -365,8 +400,11 @@ export class ProcurementCaseService {
     return {
       deletedCount: deletedCases.length,
       deletedCaseIds: deletedCases.map((kase) => kase.id),
+      requestedCount,
       requestedSafeCount: preview.safeCount,
-      skippedCount: preview.safeCount - deletedCases.length,
+      requestedTotalCount: preview.totalCount,
+      cleanupScope: includeAllMatchedRows ? "all_matched" : "safe_only",
+      skippedCount: requestedCount - deletedCases.length,
     };
   }
 
@@ -904,10 +942,26 @@ export class ProcurementCaseService {
       if (!parsed.tenantId || !parsed.actorUserId || !Array.isArray(parsed.cases)) {
         throw new Error("Invalid token payload.");
       }
+      if (!Array.isArray(parsed.allCases)) {
+        parsed.allCases = parsed.cases.map((kase) => ({
+          ...kase,
+          reasons: [],
+          risk: "safe",
+        }));
+      }
+      parsed.totalCount = parsed.totalCount ?? parsed.allCases.length;
       return parsed;
     } catch {
       throw new BadRequestException("Cleanup preview token is invalid.");
     }
+  }
+
+  private cleanupRiskSummary(cases: Array<{ risk: CleanupRisk }>) {
+    return {
+      blocked: cases.filter((kase) => kase.risk === "blocked").length,
+      safe: cases.filter((kase) => kase.risk === "safe").length,
+      warning: cases.filter((kase) => kase.risk === "warning").length,
+    };
   }
 
   private cleanupSignature(body: string): string {
