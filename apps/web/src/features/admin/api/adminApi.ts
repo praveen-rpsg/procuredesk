@@ -142,9 +142,12 @@ export type CaseCleanupPreview = {
 };
 
 export type CaseCleanupExecuteResult = {
+  cleanupScope: "all_matched" | "safe_only";
   deletedCaseIds: string[];
   deletedCount: number;
+  requestedCount: number;
   requestedSafeCount: number;
+  requestedTotalCount: number;
   skippedCount: number;
 };
 
@@ -203,6 +206,7 @@ export function listCaseCleanupOwnerOptions(payload: {
 
 export function executeCaseCleanup(payload: {
   confirmationText: string;
+  includeAllMatchedRows?: boolean;
   previewToken: string;
   reason: string;
 }) {

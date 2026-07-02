@@ -14,6 +14,7 @@ import {
 } from "../api/adminApi";
 import { Button } from "../../../shared/ui/button/Button";
 import { ComboboxSelect } from "../../../shared/ui/form/ComboboxSelect";
+import { Checkbox } from "../../../shared/ui/form/Checkbox";
 import { FormField, TextInput } from "../../../shared/ui/form/FormField";
 import { Select } from "../../../shared/ui/form/Select";
 import { TextArea } from "../../../shared/ui/form/TextArea";
@@ -52,6 +53,7 @@ export function CaseCleanupAdminPage() {
   const [ownerUserId, setOwnerUserId] = useState("");
   const [prText, setPrText] = useState("");
   const [reason, setReason] = useState("");
+  const [includeAllMatchedRows, setIncludeAllMatchedRows] = useState(false);
   const [confirmationText, setConfirmationText] = useState("");
   const [preview, setPreview] = useState<CaseCleanupPreview | null>(null);
 
@@ -175,6 +177,7 @@ export function CaseCleanupAdminPage() {
       if (!preview) throw new Error("Run preview before cleanup.");
       return executeCaseCleanup({
         confirmationText,
+        includeAllMatchedRows,
         previewToken: preview.previewToken,
         reason,
       });
@@ -195,16 +198,26 @@ export function CaseCleanupAdminPage() {
         tone: "success",
       });
       setPreview(null);
+      setIncludeAllMatchedRows(false);
       setConfirmationText("");
     },
   });
 
-  const expectedConfirmation = preview ? `DELETE ${preview.safeCount} CASES` : "";
+  const requestedCleanupCount = preview
+    ? includeAllMatchedRows
+      ? preview.totalCount
+      : preview.safeCount
+    : 0;
+  const expectedConfirmation = preview
+    ? includeAllMatchedRows
+      ? `DELETE ALL ${requestedCleanupCount} CASES`
+      : `DELETE ${requestedCleanupCount} CASES`
+    : "";
   const canPreview =
     hasCleanupCriteria &&
     !previewMutation.isPending;
   const canExecute =
-    Boolean(preview?.safeCount) &&
+    requestedCleanupCount > 0 &&
     reason.trim().length >= 10 &&
     confirmationText === expectedConfirmation &&
     !executeMutation.isPending;
@@ -212,6 +225,7 @@ export function CaseCleanupAdminPage() {
   const onPreview = (event: FormEvent) => {
     event.preventDefault();
     setPreview(null);
+    setIncludeAllMatchedRows(false);
     previewMutation.mutate();
   };
 
@@ -322,7 +336,9 @@ export function CaseCleanupAdminPage() {
           {preview.warningCount || preview.blockedCount ? (
             <p className="inline-warning">
               <AlertTriangle size={14} />
-              Only safe rows are eligible for cleanup. Warning and blocked rows are skipped.
+              {includeAllMatchedRows
+                ? "Override enabled. Warning and blocked rows will also be soft deleted."
+                : "Only safe rows are eligible for cleanup. Warning and blocked rows are skipped."}
             </p>
           ) : null}
           <DataTable
@@ -333,6 +349,19 @@ export function CaseCleanupAdminPage() {
             rows={preview.rows}
           />
           <div className="admin-form-grid">
+            <FormField
+              helperText="Use only when the business has confirmed every matched case for the selected import/user must be soft deleted."
+              label="Cleanup Scope"
+            >
+              <Checkbox
+                checked={includeAllMatchedRows}
+                label="Delete all matched cases including warning and blocked rows"
+                onChange={(event) => {
+                  setIncludeAllMatchedRows(event.target.checked);
+                  setConfirmationText("");
+                }}
+              />
+            </FormField>
             <FormField label="Delete Reason" required>
               <TextArea
                 onChange={(event) => setReason(event.target.value)}
@@ -354,7 +383,7 @@ export function CaseCleanupAdminPage() {
                 variant="danger"
               >
                 <Trash2 size={16} />
-                Soft Delete Safe Cases
+                {includeAllMatchedRows ? "Soft Delete All Matched Cases" : "Soft Delete Safe Cases"}
               </Button>
             </div>
           </div>
